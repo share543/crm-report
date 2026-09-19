@@ -1,0 +1,5 @@
+customer.xlsx
+customer*.xlsx
+docs/superpowers/sdd/
+graphify-out/
+.DS_Store

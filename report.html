@@ -1,0 +1,2765 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM 報表工具</title>
+<style>
+  :root{
+    --bg:#0e1013;
+    --card:#16191f;
+    --card-2:#1c212b;
+    --border:#262b33;
+    --text:#e8eaef;
+    --muted:#9aa3b2;
+    --accent:#4f8eff;
+    --error:#ff6b6b;
+    --warning:#ffc94d;
+    --ok:#5ad98b;
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f6f8;
+    --card:#ffffff;
+    --card-2:#eef0f4;
+    --border:#d5dae2;
+    --text:#1a1d23;
+    --muted:#5d6875;
+    --accent:#2f6fe0;
+    --error:#c03434;
+    --warning:#8a6111;
+    --ok:#157a3a;
+  }
+  :root[data-theme="light"] svg text{ fill:#1a1d23; }
+  :root[data-theme="light"] #dropzone{ background:#fff; }
+  :root[data-theme="light"] tbody tr:hover td,
+  :root[data-theme="light"] .do-node:hover,
+  :root[data-theme="light"] .list-row:hover td{ background:#e2e7ee; }
+  :root[data-theme="light"] .list-row-open td,
+  :root[data-theme="light"] .list-detail td,
+  :root[data-theme="light"] .do-cust{ background:#eef0f4; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
+    font-size:15px; line-height:1.5; }
+  .topbar{ background:var(--card); border-bottom:1px solid var(--border); padding:18px 24px; }
+  .topbar h1{ font-size:20px; font-weight:650; }
+  .topbar p{ color:var(--muted); font-size:13px; margin-top:2px; }
+  main{ max-width:1120px; margin:0 auto; padding:24px; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:20px; }
+  #dropzone{ border:2px dashed var(--border); border-radius:12px; padding:44px 20px; text-align:center;
+    cursor:pointer; transition:border-color .15s ease, background .15s ease; outline:none; }
+  #dropzone:hover, #dropzone:focus-visible{ border-color:var(--accent); }
+  #dropzone.drag-over{ border-color:var(--accent); background:rgba(79,142,255,.08); }
+  #dropzone .dz-title{ font-size:17px; font-weight:600; }
+  #dropzone .dz-hint{ color:var(--muted); margin:8px 0; font-size:13px; }
+  #dropzone button{ background:var(--accent); color:#fff; border:0; border-radius:8px;
+    padding:9px 18px; font-size:14px; cursor:pointer; }
+  #dropzone button:hover{ filter:brightness(1.1); }
+  #fileName{ margin-top:14px; color:var(--ok); font-weight:600; font-size:14px; }
+  #errorBox{ margin-top:14px; color:var(--error); font-size:14px; white-space:pre-wrap; }
+  #errorBox.warning{ color:var(--warning); }
+  section h2{ font-size:16px; margin-bottom:12px; color:var(--text); }
+  section h2 .muted{ color:var(--muted); font-weight:400; font-size:13px; }
+  .table-wrap{ overflow:auto; max-height:480px; border:1px solid var(--border); border-radius:8px; }
+  table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
+  thead th{ position:sticky; top:0; background:var(--card-2); color:var(--muted);
+    font-weight:600; text-align:left; padding:8px 12px; border-bottom:1px solid var(--border);
+    white-space:nowrap; z-index:1; }
+  tbody td{ padding:7px 12px; border-bottom:1px solid #20242c; white-space:nowrap; }
+  tbody tr:last-child td{ border-bottom:0; }
+  tbody tr:hover{ background:#1b202a; }
+  .ok{ color:var(--ok); }
+  .subtitle{ font-size:14px; margin:4px 0 10px; color:var(--text); }
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px; }
+  .stat-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .stat-value{ font-size:26px; font-weight:700; }
+  .stat-value.ok{ color:var(--ok); }
+  .stat-label{ color:var(--muted); font-size:13px; margin-top:2px; }
+  .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; display:flex; justify-content:space-between; align-items:baseline; }
+  .ke-card .ke-val{ font-size:20px; font-weight:650; color:var(--text); }
+  .ke-card .ke-name{ color:var(--muted); font-size:13px; }
+  .note{ color:var(--muted); font-size:12px; margin-top:10px; line-height:1.6; }
+  .pending{ color:var(--muted); font-size:13px; }
+  .type-analysis{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
+  .type-pie{ flex:0 0 auto; }
+  .type-right{ flex:1 1 340px; min-width:300px; }
+  .type-row{ margin-bottom:14px; }
+  .type-row-head{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .type-swatch{ width:12px; height:12px; border-radius:3px; flex:0 0 auto; }
+  .type-cat{ font-weight:650; }
+  .type-count{ color:var(--muted); margin-left:auto; white-space:nowrap; }
+  .type-bars-title{ font-size:13px; color:var(--muted); margin:0 0 10px; }
+  .type-bar-track{ background:var(--card-2); border:1px solid var(--border);
+    border-radius:6px; height:14px; margin-top:6px; max-width:340px; }
+  .type-bar-fill{ height:14px; border-radius:6px;
+    background:linear-gradient(90deg,var(--accent),#8fb6ff); }
+  .do-cat-block{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px; }
+  .do-cat-head{ display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:6px; }
+  .do-cat-total{ color:var(--muted); margin-left:auto; font-size:13px; white-space:nowrap; }
+  .do-node{ display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent;
+    font-family:inherit; color:inherit; font-size:13px; padding:7px 8px; border-radius:8px;
+    cursor:pointer; text-align:left; }
+  .do-node:hover{ background:#1b202a; }
+  .do-caret{ width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent;
+    border-left:7px solid var(--muted); flex:0 0 auto; transition:transform .15s ease; }
+  .do-node.open .do-caret{ transform:rotate(90deg); }
+  .do-node-label{ flex:0 0 150px; white-space:nowrap; }
+  .do-node-track{ flex:1 1 auto; max-width:260px; background:var(--card); border:1px solid var(--border);
+    border-radius:5px; height:10px; overflow:hidden; }
+  .do-node-fill{ display:block; width:0; height:10px; border-radius:5px; min-width:0;
+    background:linear-gradient(90deg,var(--accent),#8fb6ff); }
+  .do-node-count{ color:var(--muted); font-weight:600; min-width:44px; text-align:right; white-space:nowrap; }
+  .do-list{ border-top:1px dashed var(--border); padding:4px 6px 2px 12px; margin-top:2px; }
+  .do-cust{ padding:8px 10px; border:1px solid var(--border); border-radius:8px;
+    background:#14171d; margin:6px 2px; }
+  .do-cust-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; margin-bottom:4px; }
+  .do-cust-name{ font-weight:650; color:var(--text); }
+  .do-chip{ color:var(--muted); font-size:12px; border:1px solid var(--border); border-radius:20px;
+    padding:1px 8px; background:var(--card); white-space:nowrap; }
+  .do-jiean{ font-size:13px; margin:2px 0; }
+  .do-content{ font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.6; margin-top:2px; }
+  .do-field-label{ color:var(--accent); font-weight:600; }
+  .do-empty{ color:var(--muted); font-style:italic; }
+  .charts-grid{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
+  .chart-col{ flex:1 1 320px; min-width:300px; }
+  .chart-col h3{ font-size:14px; margin:0 0 10px; color:var(--text); }
+  .state-pie-row{ display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
+  .state-legend{ display:flex; flex-direction:column; gap:9px; }
+  .state-legend-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .state-legend-count{ color:var(--muted); margin-left:auto; white-space:nowrap; }
+  .rank-block{ margin-bottom:8px; }
+  .rank-block h3{ font-size:14px; margin:0 0 8px; color:var(--text); }
+  .rank-control{ margin:0 0 10px; font-size:13px; color:var(--muted); }
+  .rank-control select{ background:var(--card-2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:4px 8px;
+    font-size:13px; margin-left:6px; }
+  .rank-table td:first-child{ color:var(--muted); white-space:nowrap; }
+  .rank-bar-track{ display:inline-block; width:150px; height:10px;
+    background:var(--card); border:1px solid var(--border); border-radius:5px;
+    overflow:hidden; vertical-align:middle; }
+  .rank-bar-fill{ display:block; height:10px; border-radius:5px;
+    background:linear-gradient(90deg,var(--accent),#8fb6ff); }
+  /* Task 7：篩選列 + 明細表 */
+  .list-toolbar{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 16px; margin-bottom:14px; }
+  .list-field{ display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  .list-field select, .list-field input{ background:var(--card-2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px; min-width:120px; }
+  .list-field input{ min-width:230px; }
+  .list-field select:focus, .list-field input:focus{ outline:none; border-color:var(--accent); }
+  #resetFilters{ background:var(--card-2); color:var(--muted); border:1px solid var(--border);
+    border-radius:6px; padding:7px 14px; font-size:13px; cursor:pointer; align-self:center; }
+  #resetFilters:hover{ border-color:var(--accent); color:var(--text); }
+  .list-summary{ margin:0 0 10px; font-size:13px; color:var(--muted); }
+  table.list-table th.sortable{ cursor:pointer; }
+  table.list-table th.sortable:hover{ color:var(--text); }
+  .sort-arrow{ color:var(--accent); margin-left:4px; font-size:11px; }
+  .list-caret{ display:inline-block; width:12px; color:var(--muted); }
+  .list-row{ cursor:pointer; }
+  .list-row:hover td{ background:#1b202a; }
+  .list-row-open td{ background:#1c2230; }
+  .list-detail td{ background:#14171d; white-space:normal; }
+  .list-detail-inner{ padding:2px 4px; }
+  .list-detail-inner p{ font-size:13px; line-height:1.7; margin:0 0 6px;
+    color:var(--muted); white-space:pre-wrap; }
+  .list-detail-inner p:last-child{ margin-bottom:0; }
+  .list-detail-inner .do-field-label{ color:var(--accent); font-weight:600; }
+  .list-pager{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:12px; }
+  .list-pager button{ background:var(--card-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:5px 12px; font-size:13px; cursor:pointer; }
+  .list-pager button:hover:not(:disabled){ border-color:var(--accent); color:var(--text); }
+  .list-pager button:disabled{ opacity:.45; cursor:default; }
+  .list-pager button.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .list-pager .pg-gap{ color:var(--muted); padding:0 2px; }
+  .list-pager .pg-info{ color:var(--muted); font-size:13px; margin-left:8px; }
+  /* Task 8：頂列動作按鈕 */
+  .top-actions{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .top-actions button{ background:var(--card-2); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:7px 18px; font-size:13px; cursor:pointer; }
+  .top-actions button:hover:not(:disabled){ border-color:var(--accent); color:var(--text); }
+  .top-actions button:disabled{ opacity:.4; cursor:default; }
+  /* Task 8：列印樣式（深色主題→白底黑字，隱藏操作型 UI，表格避免分頁切欄） */
+  @media print{
+    @page{ size:A4; margin:12mm; }
+    html, body{ background:#fff; color:#000; }
+    .topbar{ background:#fff; border-bottom:1px solid #999; padding:10px 14px; }
+    .topbar h1{ color:#000; font-size:18px; }
+    .topbar p{ color:#444; }
+    .top-actions, .no-print{ display:none !important; }
+    #dropzone, #fileInput, #errorBox, #pickBtn, button,
+    .list-toolbar, .list-pager, .rank-control{ display:none !important; }
+    main{ max-width:none; padding:8px; }
+    .card, section.card{ background:#fff; color:#000; border:1px solid #ccc; box-shadow:none;
+      break-inside:avoid; page-break-inside:avoid; }
+    section h2, h3.subtitle, .type-cat, .stat-value, .do-cust-name{ color:#000; }
+    .muted, .pending, .note, .list-summary, .pg-info, .subtitle,
+    .type-bars-title, .type-count, .do-cat-total, .do-node-count,
+    .stat-label, .ke-name, .rank-control, .do-node-label, .do-chip{ color:#333; }
+    .ok, .stat-value.ok{ color:#157a3a; }
+    .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
+    .do-content, .list-detail-inner p{ color:#222; }
+    .do-field-label{ color:#173d85; }
+    .do-list{ border-top:1px dashed #999; }
+    .list-row-open td, .list-detail td, .list-row:hover td{ background:#fff; }
+    .table-wrap{ overflow:visible; max-height:none; border:1px solid #ccc; }
+    table{ width:100% !important; font-size:11px; }
+    thead th{ position:static; background:#e8e8e8; color:#000; z-index:auto;
+      white-space:normal !important; page-break-inside:avoid; break-inside:avoid; }
+    tbody td{ border-bottom:1px solid #ddd; white-space:normal !important; }
+    tr{ page-break-inside:avoid; break-inside:avoid; }
+    .do-node-track, .type-bar-track, .rank-bar-track{ background:#eee; }
+    .do-node-fill, .type-bar-fill, .rank-bar-fill{
+      print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+    svg text{ fill:#000 !important; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>CRM 報表工具</h1>
+  <p>載入 <code>customer.xlsx</code> 離線產生報表（零依賴、可經 file:// 開啟）</p>
+  <div class="top-actions no-print">
+    <button type="button" id="themeBtn" aria-pressed="false">切換到淺色</button>
+    <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
+    <button type="button" id="printBtn" disabled>列印</button>
+  </div>
+</header>
+<main id="app">
+  <section class="card" id="loadCard">
+    <div id="dropzone" tabindex="0" aria-label="拖曳或選擇檔案">
+      <p class="dz-title">把 <code>customer.xlsx</code> 拖到這裡</p>
+      <p class="dz-hint">或</p>
+      <button type="button" id="pickBtn">選擇檔案</button>
+      <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
+    </div>
+    <p id="fileName" hidden></p>
+    <p id="errorBox" hidden></p>
+  </section>
+  <section class="card" id="rawSection" hidden>
+    <h2 id="rawTitle">原始資料預覽</h2>
+    <div id="rawTable"></div>
+  </section>
+  <section class="card" id="statSection" hidden>
+    <h2 id="statTitle">案件狀態統計</h2>
+    <div id="statCards"></div>
+    <h3 class="subtitle">各課別客戶數</h3>
+    <div id="keCards"></div>
+  </section>
+  <section class="card" id="funnelSection" hidden>
+    <h2>漏斗分析</h2>
+    <div id="funnel" class="pending">待產生</div>
+  </section>
+  <section class="card" id="typeSection" hidden>
+    <h2>案件類型分析</h2>
+    <div id="typeAnalysis" class="pending">待產生</div>
+  </section>
+  <section class="card" id="timingSection" hidden>
+    <h2>開發時間分析</h2>
+    <div id="timing" class="pending">待產生</div>
+  </section>
+  <section class="card" id="dropoffSection" hidden>
+    <h2>轉換流失分析</h2>
+    <div id="dropoff" class="pending">待產生</div>
+  </section>
+  <section class="card" id="chartsSection" hidden>
+    <h2>圖表</h2>
+    <div id="charts" class="pending">待產生</div>
+  </section>
+  <section class="card" id="rankSection" hidden>
+    <h2>排行分析 <span class="muted">開發者・課別・站所</span></h2>
+    <div id="rank" class="pending">待產生</div>
+  </section>
+  <section class="card" id="listSection" hidden>
+    <h2>案件清單</h2>
+    <div id="list" class="pending">待產生</div>
+  </section>
+</main>
+<script>
+'use strict';
+
+// -----------------------------------------------------------------------------
+// 全域狀態（後續 Task 讀取 state.model）
+// -----------------------------------------------------------------------------
+var state = {
+    model: null,      // { headers:[], rows:[], sheetName:string }
+    fileName: null
+  };
+
+  // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
+  var DATE_COLS = new Set(['填單日期','初步接洽','需求確認','報價','簽約','導入']);
+
+  // ---------------------------------------------------------------------------
+  // 純函式：日期轉換（無 DOM 依賴，可於 Node 測試）
+  // ---------------------------------------------------------------------------
+  function excelSerialToDate(n){
+    if(typeof n === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(n)) return n;
+    var num = (typeof n === 'number') ? n : Number(String(n).trim());
+    if(!isFinite(num) || num < 1) return '';
+    var d = new Date(Date.UTC(1899,11,30) + num * 86400000);
+    if(isNaN(d.getTime())) return '';
+    var iso = d.toISOString();
+    var y = iso.slice(0,4);
+    if(y < '1900' || y > '9999') return '';
+    return iso.slice(0,10);
+  }
+
+  // 純函式：欄位代號（如 "AC12"）→ 0 起算欄 index
+  function colIndexFromRef(ref){
+    if(!ref) return -1;
+    var m = String(ref).match(/[A-Za-z]+/);
+    if(!m) return -1;
+    var n = 0;
+    for(var i=0;i<m[0].length;i++){
+      n = n * 26 + (m[0].charCodeAt(i) - (m[0].charCodeAt(i) >= 97 ? 96 : 64));
+    }
+    return n - 1;
+  }
+
+  // 純函式：模板列判定——除「序號」外無任何非空白值（含整列空白）視為樣板列
+  function isTemplateRow(row){
+    for(var k in row){
+      if(k === '_raw' || k === '序號') continue;
+      if(row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return false;
+    }
+    return true;
+  }
+
+  // 純函式：過濾樣板列
+  function filterTemplateRows(rows){
+    return rows.filter(function(r){ return !isTemplateRow(r); });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 純函式：案件狀態分類（無 DOM 依賴，可於 Node 測試）
+  // ---------------------------------------------------------------------------
+  // 依 結案（空白時退回 說明）欄文字順序匹配關鍵字；
+  // 其他含「結案」→ 其他結案；結案/說明皆空但 洽談內容 非空 → 進行中；否則 未啟動
+  function classifyStatus(r){
+    var jiean = (r && r['結案'] !== undefined && r['結案'] !== null) ? String(r['結案']).trim() : '';
+    var shuoming = (r && r['說明'] !== undefined && r['說明'] !== null) ? String(r['說明']).trim() : '';
+    var qiantan = (r && r['洽談內容'] !== undefined && r['洽談內容'] !== null) ? String(r['洽談內容']).trim() : '';
+    var primary = jiean || shuoming;
+    var keywords = [
+      ['導入完成', '合作成功'],
+      ['婉拒', '客戶婉拒'],
+      ['三聯皆失敗', '聯繫失敗'],
+      ['考慮中', '考慮中/暫緩'],
+      ['需求無法滿足', '需求無法滿足(暫緩)']
+    ];
+    for(var i = 0; i < keywords.length; i++){
+      if(primary.indexOf(keywords[i][0]) !== -1) return keywords[i][1];
+    }
+    if((jiean && jiean.indexOf('結案') !== -1) || (shuoming && shuoming.indexOf('結案') !== -1)) return '其他結案';
+    if(qiantan) return '進行中';
+    return '未啟動';
+  }
+
+  // 純函式：統計（依課別 / 狀態 / 類別分組，合作、不合作與成案率）
+  function computeStats(rows){
+    var byKe = {}, byStatus = {}, byCategory = {};
+    var coop = 0, nonCoop = 0;
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var s = classifyStatus(r);
+      byStatus[s] = (byStatus[s] || 0) + 1;
+      var ke = r['課別'] || '(空白)';
+      byKe[ke] = (byKe[ke] || 0) + 1;
+      var cat = r['類別'] || '(空白)';
+      byCategory[cat] = (byCategory[cat] || 0) + 1;
+      if(s === '合作成功') coop++;
+      else if(s !== '進行中' && s !== '未啟動') nonCoop++;
+    }
+    return { total: rows.length, byKe: byKe, byStatus: byStatus, byCategory: byCategory,
+             coop: coop, nonCoop: nonCoop,
+             rate: rows.length ? (coop / rows.length * 100).toFixed(1) : '0.0' };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 純函式：里程碑漏斗（無 DOM 依賴，可於 Node 測試）
+  // ---------------------------------------------------------------------------
+  // 各里程碑計「該日期欄非空」的列數，順序固定（不重算累計）。
+  // 漏斗可能非嚴格遞減：1P/3P 客戶「簽約」空白但「導入」有值。
+  var MILESTONES = ['填單日期','初步接洽','需求確認','報價','簽約','導入'];
+
+  function computeMilestones(rows){
+    var counts = [];
+    var funnel = [];
+    for(var m = 0; m < MILESTONES.length; m++){
+      var key = MILESTONES[m];
+      var c = 0;
+      for(var i = 0; i < rows.length; i++){
+        var v = rows[i][key];
+        if(v !== undefined && v !== null && String(v).trim() !== '') c++;
+      }
+      counts.push(c);
+      funnel.push({ label: key, count: c });
+    }
+    return { counts: counts, funnel: funnel, total: rows.length };
+  }
+
+  // 別名（Task 編號口語亦稱 computeFunnel）
+  function computeFunnel(rows){ return computeMilestones(rows); }
+
+  // 純函式：最後到達里程碑（無 DOM 依賴，可於 Node 測試）
+  // 由 MILESTONES 由後往前找第一個日期欄非空的 index；全部空白 → -1
+  function lastMilestone(row){
+    for(var i = MILESTONES.length - 1; i >= 0; i--){
+      var v = row[MILESTONES[i]];
+      if(v !== undefined && v !== null && String(v).trim() !== '') return i;
+    }
+    return -1;
+  }
+
+  // 純函式：流失節點分析（僅納入「非合作成功」客戶，無 DOM 依賴）
+  // 依 類別 分組 → 依 lastMilestone 分桶；節點label = MILESTONES[i]＋「之後停止」。
+  function computeDropOff(rows){
+    var byCat = {};
+    var nodeLabels = [];
+    for(var m = 0; m < MILESTONES.length; m++) nodeLabels.push(MILESTONES[m] + '之後停止');
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(classifyStatus(r) === '合作成功') continue;
+      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+        ? String(r['類別']).trim() : '(空白)';
+      var idx = lastMilestone(r);
+      if(idx < 0) continue;
+      var bucket = nodeLabels[idx];
+      if(!byCat[cat]) byCat[cat] = {};
+      if(!byCat[cat][bucket]) byCat[cat][bucket] = [];
+      byCat[cat][bucket].push(r);
+    }
+    return { byCat: byCat, nodeLabels: nodeLabels };
+  }
+
+  // 純函式：類別分析（占比 + 導入成功率）
+  // 導入成功率 = classifyStatus==='合作成功' 數 / 類別總數；類別空白標 (空白)。
+  // 回傳陣列 [{cat, total, coop, rate}]，順序：零擔 → 1P(SCM) → 3P(MO+) → 其餘排序。
+  function computeCategoryAnalysis(rows){
+    var byCat = {};
+    var order = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+        ? String(r['類別']).trim() : '(空白)';
+      if(!byCat[cat]){
+        byCat[cat] = { cat: cat, total: 0, coop: 0 };
+        order.push(cat);
+      }
+      byCat[cat].total++;
+      if(classifyStatus(r) === '合作成功') byCat[cat].coop++;
+    }
+    var out = order.map(function(c){
+      var o = byCat[c];
+      var rate = o.total ? Math.round(o.coop / o.total * 100) : 0;
+      return { cat: o.cat, total: o.total, coop: o.coop, rate: rate };
+    });
+    var fixed = ['零擔','1P(SCM)','3P(MO+)'];
+    var byName = {};
+    for(var j = 0; j < out.length; j++) byName[out[j].cat] = out[j];
+    var sorted = [];
+    for(var f = 0; f < fixed.length; f++){
+      if(byName[fixed[f]]){ sorted.push(byName[fixed[f]]); delete byName[fixed[f]]; }
+    }
+    var rest = Object.keys(byName).sort();
+    for(var s = 0; s < rest.length; s++) sorted.push(byName[rest[s]]);
+    return sorted;
+  }
+
+  // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
+  // 規則：導入 有值且 簽約 空白 → 類別應為 1P/3P；零擔/甲配 → 簽約＋導入皆有日期。
+  // 僅簽約無導入（如已簽約未導入客戶）列為備註，不算不一致。
+  function validateCategoryRule(rows){
+    function catOf(r){
+      return (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+        ? String(r['類別']).trim() : '(空白)';
+    }
+    function has(r, key){
+      var v = r[key];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    }
+    function group(arr){
+      var m = {};
+      for(var i = 0; i < arr.length; i++){ var c = catOf(arr[i]); m[c] = (m[c] || 0) + 1; }
+      return m;
+    }
+    var importOnly = [], both = [], signOnly = [], mismatches = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var cat = catOf(r);
+      var hasSign = has(r, '簽約');
+      var hasImp = has(r, '導入');
+      var is13 = (cat === '1P(SCM)' || cat === '3P(MO+)');
+      var isZD = (cat === '零擔' || cat === '甲配');
+      var name = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']) : '';
+      if(hasImp && !hasSign){
+        importOnly.push(r);
+        if(!is13) mismatches.push({ name: name, cat: cat, note: '導入有日期但簽約空白，類別應為 1P/3P' });
+      } else if(hasImp && hasSign){
+        both.push(r);
+        if(!isZD) mismatches.push({ name: name, cat: cat, note: '簽約＋導入皆有日期，類別應為 零擔/甲配' });
+      } else if(!hasImp && hasSign){
+        signOnly.push(r);
+        if(is13) mismatches.push({ name: name, cat: cat, note: '1P/3P 卻有簽約日期' });
+      }
+    }
+    return {
+      importOnly: importOnly.length, importOnlyByCat: group(importOnly),
+      both: both.length, bothByCat: group(both),
+      signOnly: signOnly.length, signOnlyByCat: group(signOnly),
+      signOnlyNames: signOnly.map(function(r){
+        return (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']) : '';
+      }),
+      mismatches: mismatches
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 純函式：解碼 utf-8
+  // ---------------------------------------------------------------------------
+  function decodeUtf8(buf){
+    return new TextDecoder('utf-8').decode(buf);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Zip 解析（EOCD + 中央目錄 + local header）
+  // ---------------------------------------------------------------------------
+  function parseZipEntries(buf){
+    var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    var eocd = -1;
+    var startScan = Math.max(0, buf.byteLength - 22 - 65535);
+    for(var i = buf.byteLength - 22; i >= startScan; i--){
+      if(buf[i] === 0x50 && buf[i+1] === 0x4b && buf[i+2] === 0x05 && buf[i+3] === 0x06){ eocd = i; break; }
+    }
+    if(eocd < 0) throw new Error('無法找到 zip EOCD（檔案可能損毀或非 xlsx）');
+    var total = dv.getUint16(eocd + 10, true);
+    var cdSize = dv.getUint32(eocd + 12, true);
+    var cdOffset = dv.getUint32(eocd + 16, true);
+    if(cdOffset + cdSize > buf.byteLength) throw new Error('zip 中央目錄超出檔案範圍');
+
+    var entries = [];
+    var p = cdOffset;
+    for(var e = 0; e < total; e++){
+      if(dv.getUint32(p, true) !== 0x02014b50) throw new Error('中央目錄項目損毀（位置 '+p+'）');
+      var method = dv.getUint16(p + 10, true);
+      var compSize = dv.getUint32(p + 20, true);
+      var uncompSize = dv.getUint32(p + 24, true);
+      var nameLen = dv.getUint16(p + 28, true);
+      var extraLen = dv.getUint16(p + 30, true);
+      var commentLen = dv.getUint16(p + 32, true);
+      var localOffset = dv.getUint32(p + 42, true);
+      var name = decodeUtf8(buf.subarray(p + 46, p + 46 + nameLen));
+      entries.push({ name:name, method:method, compSize:compSize, uncompSize:uncompSize, localOffset:localOffset });
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+
+  // 依 local header 讀取單一 entry 解壓後資料
+  async function readZipEntry(buf, entry){
+    var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    var p = entry.localOffset;
+    if(dv.getUint32(p, true) !== 0x04034b50) throw new Error('local header 損毀：'+entry.name);
+    var nameLen = dv.getUint16(p + 26, true);
+    var extraLen = dv.getUint16(p + 28, true);
+    var dataStart = p + 30 + nameLen + extraLen;
+    var compressed = buf.subarray(dataStart, dataStart + entry.compSize);
+    if(entry.method === 0) return compressed;                      // stored
+    if(entry.method === 8) return await inflateDeflate(compressed); // deflate
+    throw new Error('不支援的壓縮方法 ' + entry.method + '：' + entry.name);
+  }
+
+  // DEFLATE(Raw) 解壓
+  async function inflateDeflate(compressed){
+    if(typeof DecompressionStream === 'undefined'){
+      throw new Error('需要較新瀏覽器（請改用支援 DecompressionStream 的 Chrome / Edge / Safari / Firefox）');
+    }
+    var ds = new DecompressionStream('deflate-raw');
+    var stream = new Response(compressed).body.pipeThrough(ds);
+    var reader = stream.getReader();
+    var chunks = [];
+    var total = 0;
+    while(true){
+      var r = await reader.read();
+      if(r.done) break;
+      chunks.push(r.value);
+      total += r.value.byteLength;
+    }
+    var out = new Uint8Array(total);
+    var off = 0;
+    for(var i = 0; i < chunks.length; i++){ out.set(chunks[i], off); off += chunks[i].byteLength; }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // XML 解析
+  // ---------------------------------------------------------------------------
+  function parseXml(buf){
+    if(typeof DOMParser === 'undefined') throw new Error('需要較新瀏覽器（缺少 DOMParser）');
+    var text = decodeUtf8(buf);
+    var doc = new DOMParser().parseFromString(text, 'text/xml');
+    if(doc.querySelector('parsererror')) throw new Error('XML 解析失敗');
+    return doc;
+  }
+
+  function parseSharedStrings(doc){
+    var out = [];
+    var sis = doc.getElementsByTagName('si');
+    for(var i = 0; i < sis.length; i++){
+      var s = '';
+      var ts = sis[i].getElementsByTagName('t');
+      for(var j = 0; j < ts.length; j++) s += ts[j].textContent || '';
+      out.push(s);
+    }
+    return out;
+  }
+
+  // sheet XML → 每列「欄 index → 字串值」的稀疏陣列（cells 為 undefined 表示空白）
+  function readSheetMatrix(sheetDoc, strings){
+    var rows = sheetDoc.getElementsByTagName('row');
+    var matrix = [];
+    for(var i = 0; i < rows.length; i++){
+      var cells = [];
+      var cels = rows[i].getElementsByTagName('c');
+      for(var j = 0; j < cels.length; j++){
+        var c = cels[j];
+        var idx = colIndexFromRef(c.getAttribute('r'));
+        if(idx < 0) continue;
+        var t = c.getAttribute('t');
+        var val = '';
+        if(t === 's'){
+          var v1 = c.getElementsByTagName('v')[0];
+          if(v1 && v1.textContent !== null){
+            var si = parseInt(v1.textContent, 10);
+            if(!isNaN(si) && strings && strings[si] !== undefined) val = strings[si];
+          }
+        } else if(t === 'inlineStr'){
+          var is = c.getElementsByTagName('is')[0];
+          if(is){
+            var ts = is.getElementsByTagName('t');
+            for(var k = 0; k < ts.length; k++) val += ts[k].textContent || '';
+          }
+        } else {
+          var v2 = c.getElementsByTagName('v')[0];
+          if(v2 && v2.textContent !== null) val = v2.textContent;
+        }
+        cells[idx] = val;
+      }
+      matrix.push(cells);
+    }
+    return matrix;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 統一資料模型
+  // ---------------------------------------------------------------------------
+  function splitHeader(matrix){
+    var idx = 0;
+    while(idx < matrix.length){
+      var cells = matrix[idx];
+      var has = false;
+      for(var i = 0; i < cells.length; i++){
+        if(cells[i] !== undefined && cells[i] !== null && String(cells[i]) !== ''){ has = true; break; }
+      }
+      if(has) break;
+      idx++;
+    }
+    if(idx >= matrix.length) throw new Error('找不到表頭列');
+    var headerRow = matrix[idx];
+    var headers = [];
+    for(var j = 0; j < headerRow.length; j++){
+      headers.push((headerRow[j] === undefined || headerRow[j] === null) ? '' : String(headerRow[j]));
+    }
+    return { headers: headers, dataMatrix: matrix.slice(idx + 1) };
+  }
+
+  // headers：欄名陣列；matrix：資料列（每列為 欄 index→字串）
+  function buildModel(headers, matrix, sheetName){
+    var hlen = headers.length;
+    var rows = [];
+    for(var r = 0; r < matrix.length; r++){
+      var cells = matrix[r];
+      var row = {};
+      var raw = {};
+      for(var i = 0; i < hlen; i++){
+        var h = headers[i];
+        if(h === '') continue;
+        var v = (cells && cells[i] !== undefined && cells[i] !== null) ? String(cells[i]) : '';
+        raw[h] = v;
+        row[h] = DATE_COLS.has(h) ? excelSerialToDate(v) : v;
+      }
+      row._raw = raw;
+      rows.push(row);
+    }
+    return { headers: headers, rows: filterTemplateRows(rows), sheetName: sheetName };
+  }
+
+  // ---------------------------------------------------------------------------
+  // XLSX 解析（workbook / rels / sharedStrings / sheet）
+  // ---------------------------------------------------------------------------
+  async function parseXlsx(arrayBuffer){
+    var buf = new Uint8Array(arrayBuffer);
+    var entries = parseZipEntries(buf);
+    var entryMap = {};
+    for(var i = 0; i < entries.length; i++){
+      var nm = entries[i].name.replace(/^\/+/, '');
+      entryMap[nm] = entries[i];
+    }
+    function getEntry(name){
+      if(!entryMap[name]) throw new Error('xlsx 缺少必要檔案：' + name);
+      return readZipEntry(buf, entryMap[name]);
+    }
+
+    if(typeof DOMParser === 'undefined') throw new Error('需要較新瀏覽器（缺少 DOMParser）');
+    var strings = null;
+    if(entryMap['xl/sharedStrings.xml']) strings = parseSharedStrings(parseXml(await getEntry('xl/sharedStrings.xml')));
+
+    var wbDoc = parseXml(await getEntry('xl/workbook.xml'));
+    var relsDoc = parseXml(await getEntry('xl/_rels/workbook.xml.rels'));
+    var sheets = parseSheets(wbDoc, relsDoc);
+    var chosen = null;
+    for(var s = 0; s < sheets.length; s++){
+      if(sheets[s].name === '2026總表'){ chosen = sheets[s]; break; }
+    }
+    if(!chosen) chosen = sheets[0];
+    if(!chosen) throw new Error('workbook 沒有 sheet');
+
+    var sheetDoc = parseXml(await getEntry(chosen.path));
+    var matrix = readSheetMatrix(sheetDoc, strings);
+    var sh = splitHeader(matrix);
+    return buildModel(sh.headers, sh.dataMatrix, chosen.name);
+  }
+
+  function parseSheets(wbDoc, relsDoc){
+    var relMap = {};
+    var rels = relsDoc.getElementsByTagName('Relationship');
+    for(var i = 0; i < rels.length; i++){
+      var id = rels[i].getAttribute('Id');
+      var target = rels[i].getAttribute('Target') || '';
+      if(target.charAt(0) === '/') target = target.replace(/^\/+/, '');
+      else target = 'xl/' + target;
+      relMap[id] = target;
+    }
+    var out = [];
+    var sheets = wbDoc.getElementsByTagName('sheet');
+    for(var j = 0; j < sheets.length; j++){
+      var name = sheets[j].getAttribute('name') || '';
+      var rid = sheets[j].getAttribute('r:id') || sheets[j].getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || '';
+      var path = relMap[rid] || '';
+      out.push({ name: name, path: path });
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // CSV 解析（純逗號分欄；含引號時警告）
+  // ---------------------------------------------------------------------------
+  var csvWarning = null;
+
+  function parseCsv(text){
+    if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    csvWarning = null;
+    if(text.indexOf('"') !== -1){
+      csvWarning = 'CSV 內容含引號欄位，目前以純逗號分欄，含逗號／引號的欄位可能解析不正確。';
+    }
+    var lines = text.split(/\r\n|\n|\r/);
+    while(lines.length && lines[lines.length-1].trim() === '') lines.pop();
+    if(!lines.length) throw new Error('CSV 檔案為空');
+    var matrix = [];
+    for(var i = 0; i < lines.length; i++) matrix.push(lines[i].split(','));
+    var sh = splitHeader(matrix);
+    return buildModel(sh.headers, sh.dataMatrix, 'CSV');
+  }
+
+  // ---------------------------------------------------------------------------
+  // DOM 綁定與顯示
+  // ---------------------------------------------------------------------------
+  function showError(msg, isWarning){
+    var el = document.getElementById('errorBox');
+    if(!el) return;
+    el.textContent = msg;
+    el.classList.toggle('warning', !!isWarning);
+    el.hidden = false;
+  }
+
+  function clearError(){
+    var el = document.getElementById('errorBox');
+    if(!el) return;
+    el.hidden = true;
+  }
+
+  function renderRawTable(model){
+    var box = document.getElementById('rawTable');
+    var title = document.getElementById('rawTitle');
+    var section = document.getElementById('rawSection');
+    box.textContent = '';
+    title.textContent = '原始資料預覽（前 ' + Math.min(model.rows.length, 20) + ' 列，共 ' + model.rows.length + ' 筆・' + model.sheetName + '）';
+
+    var wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    for(var i = 0; i < model.headers.length; i++){
+      var th = document.createElement('th');
+      th.textContent = model.headers[i];
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    var limit = Math.min(model.rows.length, 20);
+    for(var r = 0; r < limit; r++){
+      var tr = document.createElement('tr');
+      for(var c = 0; c < model.headers.length; c++){
+        var td = document.createElement('td');
+        var v = model.rows[r][model.headers[c]];
+        td.textContent = (v === undefined || v === null) ? '' : v;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    section.hidden = false;
+  }
+
+  function keCard(name, val){
+    var c = document.createElement('div');
+    c.className = 'ke-card';
+    var n = document.createElement('span');
+    n.className = 'ke-name';
+    n.textContent = name;
+    var v = document.createElement('span');
+    v.className = 'ke-val';
+    v.textContent = String(val);
+    c.appendChild(n);
+    c.appendChild(v);
+    return c;
+  }
+
+  // 渲染：案件狀態統計卡（4 大卡 + 各課別小卡）
+  function renderStats(model){
+    var sec = document.getElementById('statSection');
+    var box = document.getElementById('statCards');
+    var keBox = document.getElementById('keCards');
+    if(!sec || !box || !keBox || !model || !model.rows) return;
+    var stats = computeStats(model.rows);
+
+    box.textContent = '';
+    var big = [
+      { label: '總客戶數', value: String(stats.total), cls: '' },
+      { label: '合作結案', value: String(stats.coop), cls: 'ok' },
+      { label: '不合作結案', value: String(stats.nonCoop), cls: '' },
+      { label: '成案率', value: stats.rate + '%', cls: '' }
+    ];
+    var grid = document.createElement('div');
+    grid.className = 'stat-grid';
+    for(var i = 0; i < big.length; i++){
+      var c = document.createElement('div');
+      c.className = 'stat-card';
+      var v = document.createElement('div');
+      v.className = 'stat-value' + (big[i].cls ? ' ' + big[i].cls : '');
+      v.textContent = big[i].value;
+      var l = document.createElement('div');
+      l.className = 'stat-label';
+      l.textContent = big[i].label;
+      c.appendChild(v);
+      c.appendChild(l);
+      grid.appendChild(c);
+    }
+    box.appendChild(grid);
+
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = '不合作結案 ' + stats.nonCoop + '（聯繫失敗 ' + (stats.byStatus['聯繫失敗'] || 0) +
+      '・婉拒 ' + (stats.byStatus['客戶婉拒'] || 0) +
+      '・考慮中 ' + (stats.byStatus['考慮中/暫緩'] || 0) +
+      '・需求無法滿足 ' + (stats.byStatus['需求無法滿足(暫緩)'] || 0) +
+      '・其他結案 ' + (stats.byStatus['其他結案'] || 0) + '）' +
+      '・進行中 ' + (stats.byStatus['進行中'] || 0) +
+      '・未啟動 ' + (stats.byStatus['未啟動'] || 0);
+    box.appendChild(note);
+
+    keBox.textContent = '';
+    var order = ['北一課', '北二課', '北三課', '中課', '南一課', '南二課', '分轉部'];
+    var remaining = [];
+    for(var k in stats.byKe){
+      if(order.indexOf(k) === -1) remaining.push(k);
+    }
+    remaining.sort();
+    var keGrid = document.createElement('div');
+    keGrid.className = 'ke-grid';
+    for(var oi = 0; oi < order.length; oi++){
+      if(stats.byKe[order[oi]] === undefined) continue;
+      keGrid.appendChild(keCard(order[oi], stats.byKe[order[oi]]));
+    }
+    for(var ri = 0; ri < remaining.length; ri++){
+      keGrid.appendChild(keCard(remaining[ri], stats.byKe[remaining[ri]]));
+    }
+    keBox.appendChild(keGrid);
+
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：SVG 輔助
+  // ---------------------------------------------------------------------------
+  function svgEl(tag, attrs){
+    var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    if(attrs){
+      for(var k in attrs) el.setAttribute(k, attrs[k]);
+    }
+    return el;
+  }
+
+  // 類別 → 顏色（固定對照，其餘用灰）
+  function catColor(cat){
+    var fixed = { '零擔': '#4f8eff', '1P(SCM)': '#5ad98b', '3P(MO+)': '#ffc94d' };
+    return fixed[cat] || '#9aa3b2';
+  }
+
+  // 渲染：里程碑漏斗（水平漸層條，長度 ∝ count，旁標 筆數＋占比）
+  function renderFunnel(container, funnel){
+    container.textContent = '';
+    if(!funnel || !funnel.funnel || !funnel.funnel.length || !funnel.total){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var items = funnel.funnel;
+    var total = funnel.total;
+    var max = 1;
+    var cImport = 0, cSign = 0;
+    for(var i = 0; i < items.length; i++){
+      if(items[i].count > max) max = items[i].count;
+      if(items[i].label === '導入') cImport = items[i].count;
+      if(items[i].label === '簽約') cSign = items[i].count;
+    }
+    var labelW = 88, gap = 12, barW = 470, RH = 46, padTop = 18, W = 720;
+    var H = padTop + items.length * RH + 6;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%' });
+    var defs = svgEl('defs', {});
+    var grad = svgEl('linearGradient', { id: 'funnelGrad', x1: '0', y1: '0', x2: '1', y2: '0' });
+    grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff' }));
+    grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#8fb6ff' }));
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    for(var i2 = 0; i2 < items.length; i2++){
+      var it = items[i2];
+      var y = padTop + i2 * RH;
+      var cy = y + RH / 2;
+      var lab = svgEl('text', { x: labelW - 6, y: cy + 5, 'text-anchor': 'end', 'font-size': '15', fill: '#e8eaef' });
+      lab.textContent = it.label;
+      svg.appendChild(lab);
+
+      var track = svgEl('rect', { x: labelW + gap, y: y + 10, width: barW, height: RH - 20, rx: 6, fill: '#21262f' });
+      svg.appendChild(track);
+
+      var bw = Math.max(0, Math.round(it.count / max * barW));
+      var bar = svgEl('rect', { x: labelW + gap, y: y + 10, width: bw, height: RH - 20, rx: 6, fill: 'url(#funnelGrad)' });
+      svg.appendChild(bar);
+
+      var val = svgEl('text', { x: labelW + gap + barW + 12, y: cy + 5, 'font-size': '14', 'font-weight': '650', fill: '#e8eaef' });
+      val.textContent = it.count + '（' + Math.round(it.count / total * 100) + '%）';
+      svg.appendChild(val);
+    }
+    container.appendChild(svg);
+
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = '註：各階段為「該日期欄非空」的列數，順序固定，不重算累計。' +
+      (cImport > cSign
+        ? '導入（' + cImport + '）多於簽約（' + cSign + '）屬正常：1P/3P 客戶未填簽約即在導入。'
+        : '');
+    container.appendChild(note);
+  }
+
+  // 渲染：類別占比甜甜圈（stroke-dasharray 分段）+ 導入成功率橫條
+  function renderCategoryAnalysis(container, data){
+    container.textContent = '';
+    if(!data || !data.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var total = 0;
+    for(var i = 0; i < data.length; i++) total += data[i].total;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'type-analysis';
+
+    // 左：甜甜圈
+    var size = 220, r = 70, sw = 34, cx = size / 2, cy = size / 2, GAP = 0.6, acc = 0;
+    var pieBox = document.createElement('div');
+    pieBox.className = 'type-pie';
+    var svg = svgEl('svg', { viewBox: '0 0 ' + size + ' ' + size, width: size, height: size });
+    var g = svgEl('g', { transform: 'rotate(-90 ' + cx + ' ' + cy + ')' });
+    for(var d = 0; d < data.length; d++){
+      var share = total ? (data[d].total / total * 100) : 0;
+      var dash = Math.max(share - GAP, 0);
+      var seg = svgEl('circle', {
+        cx: cx, cy: cy, r: r, fill: 'none',
+        stroke: catColor(data[d].cat),
+        'stroke-width': sw,
+        'pathLength': 100,
+        'stroke-dasharray': dash + ' ' + (100 - dash),
+        'stroke-dashoffset': -acc
+      });
+      g.appendChild(seg);
+      acc += share;
+    }
+    svg.appendChild(g);
+    var tf = svgEl('text', { x: cx, y: cy - 4, 'text-anchor': 'middle', 'font-size': '26', 'font-weight': '700', fill: '#e8eaef' });
+    tf.textContent = total;
+    var tl = svgEl('text', { x: cx, y: cy + 17, 'text-anchor': 'middle', 'font-size': '12' });
+    tl.setAttribute('fill', '#9aa3b2');
+    tl.textContent = '總計';
+    svg.appendChild(tf);
+    svg.appendChild(tl);
+    pieBox.appendChild(svg);
+    wrap.appendChild(pieBox);
+
+    // 右：明細 + 成功率長條
+    var right = document.createElement('div');
+    right.className = 'type-right';
+    var barTitle = document.createElement('div');
+    barTitle.className = 'type-bars-title';
+    barTitle.textContent = '導入成功率（合作成功 ÷ 類別總數）';
+    right.appendChild(barTitle);
+    for(var j = 0; j < data.length; j++){
+      var o = data[j];
+      var sharePct = total ? (o.total / total * 100) : 0;
+      var row = document.createElement('div');
+      row.className = 'type-row';
+      var head = document.createElement('div');
+      head.className = 'type-row-head';
+      var sw2 = document.createElement('span');
+      sw2.className = 'type-swatch';
+      sw2.style.background = catColor(o.cat);
+      var name = document.createElement('span');
+      name.className = 'type-cat';
+      name.textContent = o.cat;
+      var cnt = document.createElement('span');
+      cnt.className = 'type-count';
+      cnt.textContent = o.total + ' 筆（' + sharePct.toFixed(1) + '%）　成功率 ' + o.coop + '/' + o.total + '＝' + o.rate + '%';
+      head.appendChild(sw2);
+      head.appendChild(name);
+      head.appendChild(cnt);
+      row.appendChild(head);
+      var barWrap = document.createElement('div');
+      barWrap.className = 'type-bar-track';
+      var fill = document.createElement('div');
+      fill.className = 'type-bar-fill';
+      fill.style.width = Math.round(o.rate / 100 * 320) + 'px';
+      barWrap.appendChild(fill);
+      row.appendChild(barWrap);
+      right.appendChild(row);
+    }
+    wrap.appendChild(right);
+    container.appendChild(wrap);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 純函式：時程分析（天數）
+  // ---------------------------------------------------------------------------
+  function dateToSerial(s){
+    if(s === undefined || s === null || String(s).trim() === '') return null;
+    var num = Number(String(s).trim());
+    if(!isFinite(num) || num < 1) return null;
+    return num;
+  }
+
+  function summarize(arr){
+    if(!arr.length) return { n:0, avg:0, median:0, min:0, max:0 };
+    var sorted = arr.slice().sort(function(a,b){ return a - b; });
+    var n = sorted.length;
+    var sum = 0;
+    for(var i = 0; i < n; i++) sum += sorted[i];
+    var avg = sum / n;
+    var median = (n % 2 === 1)
+      ? sorted[Math.floor(n/2)]
+      : (sorted[n/2 - 1] + sorted[n/2]) / 2;
+    return { n: n, avg: Math.round(avg * 10) / 10, median: Math.round(median), min: sorted[0], max: sorted[n-1] };
+  }
+
+  var STAGE_PAIRS = [
+    { label: '填單→初步接洽', from: '填單日期', to: '初步接洽' },
+    { label: '初步接洽→需求確認', from: '初步接洽', to: '需求確認' },
+    { label: '需求確認→報價', from: '需求確認', to: '報價' },
+    { label: '報價→簽約', from: '報價', to: '簽約' },
+    { label: '簽約→導入', from: '簽約', to: '導入' }
+  ];
+
+  function computeStageDurations(rows){
+    var stages = [];
+    for(var i = 0; i < STAGE_PAIRS.length; i++){
+      var pair = STAGE_PAIRS[i];
+      var days = [];
+      for(var r = 0; r < rows.length; r++){
+        var raw = rows[r]._raw;
+        if(!raw) continue;
+        var s = dateToSerial(raw[pair.from]);
+        var e = dateToSerial(raw[pair.to]);
+        if(s === null || e === null) continue;
+        var diff = e - s;
+        if(diff < 0 || !isFinite(diff)) continue;
+        days.push(diff);
+      }
+      stages.push({ label: pair.label, data: days });
+    }
+    var totalDays = [];
+    for(var r2 = 0; r2 < rows.length; r2++){
+      var raw2 = rows[r2]._raw;
+      if(!raw2) continue;
+      var s2 = dateToSerial(raw2['填單日期']);
+      var e2 = dateToSerial(raw2['導入']);
+      if(s2 === null || e2 === null) continue;
+      var d2 = e2 - s2;
+      if(d2 < 0 || !isFinite(d2)) continue;
+      totalDays.push(d2);
+    }
+    return { stages: stages, total: { label: '填單→導入（總時程）', data: totalDays } };
+  }
+
+  // 類別規則檢核 → 中文註記文字
+  function buildRuleNote(v){
+    function catList(m){
+      var out = [];
+      var keys = Object.keys(m).sort();
+      for(var i = 0; i < keys.length; i++) out.push(keys[i] + ' ' + m[keys[i]] + ' 筆');
+      return out.length ? out.join('、') : '無';
+    }
+    var parts = [];
+    parts.push('規則檢核：導入有值且簽約空白 ' + v.importOnly + ' 筆（' + catList(v.importOnlyByCat) + '），應為 1P/3P');
+    parts.push('簽約＋導入皆有 ' + v.both + ' 筆（' + catList(v.bothByCat) + '），應為零擔/甲配');
+    if(v.signOnly){
+      parts.push('僅簽約未導入 ' + v.signOnly + ' 筆（' + v.signOnlyNames.join('、') + '）＝已簽約未導入之實際資料，非錯誤');
+    }
+    if(v.mismatches.length){
+      parts.push('不一致：' + v.mismatches.map(function(m){ return m.name + '（' + m.cat + '）' + m.note; }).join('；'));
+    } else {
+      parts.push('無不一致');
+    }
+    return parts.join('；');
+  }
+
+  // 渲染區段包裝（隱藏狀態一併切換）
+  function renderFunnelSection(model){
+    var sec = document.getElementById('funnelSection');
+    var box = document.getElementById('funnel');
+    if(!sec || !box || !model || !model.rows) return;
+    renderFunnel(box, computeMilestones(model.rows));
+    sec.hidden = false;
+  }
+
+  function renderTypeAnalysisSection(model){
+    var sec = document.getElementById('typeSection');
+    var box = document.getElementById('typeAnalysis');
+    if(!sec || !box || !model || !model.rows) return;
+    renderCategoryAnalysis(box, computeCategoryAnalysis(model.rows));
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = buildRuleNote(validateCategoryRule(model.rows));
+    box.appendChild(note);
+    sec.hidden = false;
+  }
+
+  // 渲染：時程分析（表格 + 平均天長條圖 + 總時程直方圖）
+  function renderTiming(container, timing){
+    container.textContent = '';
+    if(!timing || !timing.stages || !timing.stages.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+
+    // --- 表格 ---
+    var tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrap';
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    var cols = ['階段','樣本數','平均天','中位數','最短','最長'];
+    for(var c = 0; c < cols.length; c++){
+      var th = document.createElement('th');
+      th.textContent = cols[c];
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    var allPairs = timing.stages.concat([timing.total]);
+    for(var i = 0; i < allPairs.length; i++){
+      var sm = summarize(allPairs[i].data);
+      var tr = document.createElement('tr');
+      var vals = [allPairs[i].label, String(sm.n), sm.avg.toFixed(1), String(sm.median), String(sm.min), String(sm.max)];
+      for(var v = 0; v < vals.length; v++){
+        var td = document.createElement('td');
+        td.textContent = vals[v];
+        if(v === 1 && sm.n === 0) td.style.color = 'var(--muted)';
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    container.appendChild(tableWrap);
+
+    // --- 各階段平均天 SVG 長條圖 ---
+    var barData = timing.stages;
+    var maxAvg = 0;
+    for(var b = 0; b < barData.length; b++){
+      var sAvg = summarize(barData[b].data).avg;
+      if(sAvg > maxAvg) maxAvg = sAvg;
+    }
+    if(maxAvg > 0){
+      var bw = 700, labelW = 160, barArea = 340, RH = 36, gap = 6;
+      var bH = 30 + barData.length * (RH + gap) + 10;
+      var bSvg = svgEl('svg', { viewBox: '0 0 ' + bw + ' ' + bH, width: '100%' });
+      var bDefs = svgEl('defs', {});
+      var bGrad = svgEl('linearGradient', { id: 'timingBarGrad', x1: '0', y1: '0', x2: '1', y2: '0' });
+      bGrad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff' }));
+      bGrad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#8fb6ff' }));
+      bDefs.appendChild(bGrad);
+      bSvg.appendChild(bDefs);
+      var bTitle = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      bTitle.textContent = '各階段平均天數';
+      bSvg.appendChild(bTitle);
+      for(var j = 0; j < barData.length; j++){
+        var smJ = summarize(barData[j].data);
+        var y = 30 + j * (RH + gap);
+        var cy = y + RH / 2;
+        var lab = svgEl('text', { x: labelW - 8, y: cy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
+        lab.textContent = barData[j].label;
+        bSvg.appendChild(lab);
+        var track = svgEl('rect', { x: labelW, y: y + 4, width: barArea, height: RH - 8, rx: 5, fill: '#21262f' });
+        bSvg.appendChild(track);
+        var fw = Math.max(2, Math.round(smJ.avg / maxAvg * barArea));
+        var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: 'url(#timingBarGrad)' });
+        bSvg.appendChild(fill);
+        var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+        val.textContent = smJ.avg.toFixed(1) + ' 天（n=' + smJ.n + '）';
+        bSvg.appendChild(val);
+      }
+      container.appendChild(bSvg);
+    }
+
+    // --- 總時程直方圖 ---
+    var totalData = timing.total.data;
+    if(totalData.length){
+      var tMax = 0;
+      for(var t = 0; t < totalData.length; t++) if(totalData[t] > tMax) tMax = totalData[t];
+      var binEdges = [0, 7, 14, 21, 28, 42, 60];
+      binEdges.push(Math.max(tMax + 1, 61));
+      var bins = [];
+      for(var bi = 0; bi < binEdges.length - 1; bi++) bins.push(0);
+      for(var td2 = 0; td2 < totalData.length; td2++){
+        for(var bj = 0; bj < binEdges.length - 1; bj++){
+          if(totalData[td2] >= binEdges[bj] && totalData[td2] < binEdges[bj + 1]){ bins[bj]++; break; }
+        }
+      }
+      var maxBin = 1;
+      for(var bk = 0; bk < bins.length; bk++) if(bins[bk] > maxBin) maxBin = bins[bk];
+      var hW = 700, hLabelW = 60, hBarArea = 560, hRH = 36, hGap = 6;
+      var hH = 30 + bins.length * (hRH + hGap) + 10;
+      var hSvg = svgEl('svg', { viewBox: '0 0 ' + hW + ' ' + hH, width: '100%' });
+      var hTitle = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      hTitle.textContent = '總時程分布（填單→導入，共 ' + totalData.length + ' 筆）';
+      hSvg.appendChild(hTitle);
+      for(var hi = 0; hi < bins.length; hi++){
+        var hy = 30 + hi * (hRH + hGap);
+        var hcy = hy + hRH / 2;
+        var lo = binEdges[hi], hi2 = binEdges[hi + 1];
+        var binLabel = lo + '–' + (hi2 - 1) + ' 天';
+        if(hi === bins.length - 1 && hi2 > 60) binLabel = lo + '+ 天';
+        var hLab = svgEl('text', { x: hLabelW - 6, y: hcy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
+        hLab.textContent = binLabel;
+        hSvg.appendChild(hLab);
+        var hTrack = svgEl('rect', { x: hLabelW, y: hy + 4, width: hBarArea, height: hRH - 8, rx: 5, fill: '#21262f' });
+        hSvg.appendChild(hTrack);
+        var hFw = Math.max(bins[hi] > 0 ? 4 : 0, Math.round(bins[hi] / maxBin * hBarArea));
+        var hFill = svgEl('rect', { x: hLabelW, y: hy + 4, width: hFw, height: hRH - 8, rx: 5, fill: '#5ad98b' });
+        hSvg.appendChild(hFill);
+        var hVal = svgEl('text', { x: hLabelW + hFw + 8, y: hcy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+        hVal.textContent = bins[hi] + ' 筆';
+        hSvg.appendChild(hVal);
+      }
+      container.appendChild(hSvg);
+    }
+
+    // --- 備註 ---
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = '天數以 Excel 序號差計算（1 天＝86400000 ms）。僅計入起迄日皆有值之列；負數忽略。' +
+      '1P/3P 客戶簽約欄空白、導入有值，故「報價→簽約」「簽約→導入」樣本較少。';
+    container.appendChild(note);
+  }
+
+  function renderTimingSection(model){
+    var sec = document.getElementById('timingSection');
+    var box = document.getElementById('timing');
+    if(!sec || !box || !model || !model.rows) return;
+    renderTiming(box, computeStageDurations(model.rows));
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：轉換流失分析（每類別一個區塊 → 節點橫條 → 點節點展開客戶清單）
+  // ---------------------------------------------------------------------------
+  // 單一流失客戶卡：公司名稱＋類別/課別 chips + 結案原因 + 洽談內容全文（保留換行）
+  function buildDropOffCustomer(r){
+    function fieldLine(cls, label, text, emptyText){
+      var p = document.createElement('p');
+      p.className = cls;
+      var lb = document.createElement('span');
+      lb.className = 'do-field-label';
+      lb.textContent = label + '：';
+      p.appendChild(lb);
+      if(text){
+        p.appendChild(document.createTextNode(text));
+      } else {
+        p.classList.add('do-empty');
+        p.appendChild(document.createTextNode(emptyText));
+      }
+      return p;
+    }
+    var item = document.createElement('div');
+    item.className = 'do-cust';
+    var head = document.createElement('div');
+    head.className = 'do-cust-head';
+    var name = document.createElement('span');
+    name.className = 'do-cust-name';
+    var cName = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']).trim() : '';
+    name.textContent = cName || '(未填公司名稱)';
+    var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+      ? String(r['類別']).trim() : '(空白)';
+    var ke = (r['課別'] !== undefined && r['課別'] !== null && String(r['課別']).trim() !== '')
+      ? String(r['課別']).trim() : '(空白)';
+    var chipCat = document.createElement('span');
+    chipCat.className = 'do-chip';
+    chipCat.textContent = '類別 ' + cat;
+    var chipKe = document.createElement('span');
+    chipKe.className = 'do-chip';
+    chipKe.textContent = '課別 ' + ke;
+    head.appendChild(name);
+    head.appendChild(chipCat);
+    head.appendChild(chipKe);
+    item.appendChild(head);
+    var jText = (r['結案'] !== undefined && r['結案'] !== null) ? String(r['結案']).trim() : '';
+    item.appendChild(fieldLine('do-jiean', '結案', jText, '（無結案原因）'));
+    var cText = (r['洽談內容'] !== undefined && r['洽談內容'] !== null) ? String(r['洽談內容']).trim() : '';
+    item.appendChild(fieldLine('do-content', '洽談內容', cText, '（無洽談內容）'));
+    return item;
+  }
+
+  // 節點可點擊列 + 其下展開的客戶清單（初始隱藏）
+  function buildDropOffNode(bucket, arr, maxInCat){
+    var row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'do-node';
+    row.setAttribute('aria-expanded', 'false');
+    var caret = document.createElement('span');
+    caret.className = 'do-caret';
+    var lab = document.createElement('span');
+    lab.className = 'do-node-label';
+    lab.textContent = bucket;
+    var barTrack = document.createElement('span');
+    barTrack.className = 'do-node-track';
+    var barFill = document.createElement('span');
+    barFill.className = 'do-node-fill';
+    if(arr && arr.length && maxInCat > 0) barFill.style.width = Math.round(arr.length / maxInCat * 100) + '%';
+    barTrack.appendChild(barFill);
+    var cnt = document.createElement('span');
+    cnt.className = 'do-node-count';
+    cnt.textContent = arr ? String(arr.length) + ' 筆' : '0 筆';
+    row.appendChild(caret);
+    row.appendChild(lab);
+    row.appendChild(barTrack);
+    row.appendChild(cnt);
+
+    var listBox = document.createElement('div');
+    listBox.className = 'do-list';
+    listBox.hidden = true;
+    if(arr && arr.length){
+      for(var i = 0; i < arr.length; i++) listBox.appendChild(buildDropOffCustomer(arr[i]));
+    } else {
+      var empty = document.createElement('p');
+      empty.className = 'note do-empty';
+      empty.textContent = '此節點無流失客戶';
+      listBox.appendChild(empty);
+    }
+    row.addEventListener('click', function(e){
+      var open = row.classList.toggle('open');
+      listBox.hidden = !open;
+      row.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    return { row: row, list: listBox };
+  }
+
+  // 渲染：流失節點分析整段
+  function renderDropOff(container, data){
+    container.textContent = '';
+    if(!data || !data.byCat || !Object.keys(data.byCat).length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var nodeLabels = data.nodeLabels;
+
+    // 類別排序（與其他區段一致：零擔 → 1P(SCM) → 3P(MO+) → 其餘）
+    var fixed = ['零擔', '1P(SCM)', '3P(MO+)'];
+    var order = [];
+    for(var f = 0; f < fixed.length; f++){
+      if(data.byCat[fixed[f]]) order.push(fixed[f]);
+    }
+    var rest = Object.keys(data.byCat).sort();
+    for(var s = 0; s < rest.length; s++){
+      if(order.indexOf(rest[s]) === -1) order.push(rest[s]);
+    }
+
+    // 摘要行：各節點總停止數（跨類別）
+    var totalNon = 0, parts = [];
+    for(var n = 0; n < nodeLabels.length; n++){
+      var c = 0;
+      for(var o = 0; o < order.length; o++){
+        var arrN = data.byCat[order[o]][nodeLabels[n]];
+        if(arrN){ c += arrN.length; totalNon += arrN.length; }
+      }
+      if(c) parts.push(nodeLabels[n] + ' ' + c);
+    }
+    var header = document.createElement('p');
+    header.className = 'subtitle';
+    header.textContent = '非合作完成客戶（未含「導入完成」結案）共 ' + totalNon + ' 筆，依「最後到達節點」分桶：' + parts.join('、');
+    container.appendChild(header);
+
+    for(var c2 = 0; c2 < order.length; c2++){
+      var cat = order[c2];
+      var buckets = data.byCat[cat];
+      var catBlock = document.createElement('div');
+      catBlock.className = 'do-cat-block';
+
+      var maxInCat = 0, catSum = 0;
+      for(var n2 = 0; n2 < nodeLabels.length; n2++){
+        var arr2 = buckets[nodeLabels[n2]];
+        if(arr2){ if(arr2.length > maxInCat) maxInCat = arr2.length; catSum += arr2.length; }
+      }
+
+      var catHead = document.createElement('div');
+      catHead.className = 'do-cat-head';
+      var swatch = document.createElement('span');
+      swatch.className = 'type-swatch';
+      swatch.style.background = catColor(cat);
+      var cName = document.createElement('span');
+      cName.className = 'type-cat';
+      cName.textContent = cat;
+      var cTotal = document.createElement('span');
+      cTotal.className = 'do-cat-total';
+      cTotal.textContent = '流失 ' + catSum + ' 筆';
+      catHead.appendChild(swatch);
+      catHead.appendChild(cName);
+      catHead.appendChild(cTotal);
+      catBlock.appendChild(catHead);
+
+      for(var n3 = 0; n3 < nodeLabels.length; n3++){
+        var node = buildDropOffNode(nodeLabels[n3], buckets[nodeLabels[n3]], maxInCat);
+        catBlock.appendChild(node.row);
+        catBlock.appendChild(node.list);
+      }
+      container.appendChild(catBlock);
+    }
+
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = '註：節點為該客戶最後一個有日期的里程碑；「之後停止」＝該客戶未繼續走到下一階段。點擊節點可展開該批客戶的結案原因與洽談內容全文。';
+    container.appendChild(note);
+  }
+
+  function renderDropoffSection(model){
+    var sec = document.getElementById('dropoffSection');
+    var box = document.getElementById('dropoff');
+    if(!sec || !box || !model || !model.rows) return;
+    renderDropOff(box, computeDropOff(model.rows));
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 純函式：狀態圓餅 4 分桶／課別長條／排行（無 DOM 依賴，可於 Node 測試）
+  // ---------------------------------------------------------------------------
+  // 案件狀態 8 分桶 → 合作／不合作／進行中／未啟動 4 桶（不合作＝5 種不合作結案之合）
+  function computeStatusBuckets(byStatus){
+    var b = byStatus || {};
+    var nonCoop = (b['客戶婉拒'] || 0) + (b['聯繫失敗'] || 0) +
+      (b['考慮中/暫緩'] || 0) + (b['需求無法滿足(暫緩)'] || 0) + (b['其他結案'] || 0);
+    var buckets = [
+      { key: 'coop', label: '合作成功', count: b['合作成功'] || 0, color: '#5ad98b' },
+      { key: 'nonCoop', label: '不合作結案', count: nonCoop, color: '#ff6b6b' },
+      { key: 'pending', label: '進行中', count: b['進行中'] || 0, color: '#4f8eff' },
+      { key: 'noStart', label: '未啟動', count: b['未啟動'] || 0, color: '#9aa3b2' }
+    ];
+    var total = 0;
+    for(var i = 0; i < buckets.length; i++) total += buckets[i].count;
+    return { total: total, buckets: buckets, nonCoopBreakdown: {
+      '客戶婉拒': b['客戶婉拒'] || 0, '聯繫失敗': b['聯繫失敗'] || 0,
+      '考慮中/暫緩': b['考慮中/暫緩'] || 0, '需求無法滿足(暫緩)': b['需求無法滿足(暫緩)'] || 0,
+      '其他結案': b['其他結案'] || 0
+    } };
+  }
+
+  // 課別長條：依案件數降冪；並列時依固定課別順序（北一課→…→分轉部）取舍
+  var KE_BASE_ORDER = ['北一課', '北二課', '北三課', '中課', '南一課', '南二課', '分轉部'];
+
+  function computeKeBars(byKe){
+    var entries = [];
+    for(var k in byKe){
+      var o = KE_BASE_ORDER.indexOf(k);
+      entries.push({ label: k, count: byKe[k], _o: o === -1 ? 999 : o });
+    }
+    entries.sort(function(a, b){
+      if(b.count !== a.count) return b.count - a.count;
+      if(a._o !== b._o) return a._o - b._o;
+      return (a.label < b.label) ? -1 : (a.label > b.label ? 1 : 0);
+    });
+    return entries.map(function(e){ return { label: e.label, count: e.count }; });
+  }
+
+  // 依「表頭名稱清單」依序取第一個非空白值；全空 → '(空白)'
+  function fieldValue(row, keys){
+    for(var i = 0; i < keys.length; i++){
+      var v = row[keys[i]];
+      if(v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+    }
+    return '(空白)';
+  }
+
+  var RANK_METRICS = { total: '案件總數', coop: '合作結案數', import: '導入完成數', sign: '簽約數' };
+
+  // 排行：依 field 分組，計 total／coop（合作成功）／import（結案含「導入完成」）／sign（簽約有值）；
+  // 依 metric 降冪排序，score 相同並列同名次（competition ranking）；二胎先比 fixed 順序再比名稱。
+  function computeRanking(rows, field, metric){
+    var valid = ['total', 'coop', 'import', 'sign'];
+    if(valid.indexOf(metric) === -1) metric = 'total';
+    var keys = (field === '站所') ? ['站所', '收貨站所']
+      : (field === '課別') ? ['課別']
+      : (field === '開發者') ? ['開發者']
+      : [field];
+    var groups = {};
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var name = fieldValue(r, keys);
+      if(!groups[name]) groups[name] = { name: name, total: 0, coop: 0, import: 0, sign: 0 };
+      var g = groups[name];
+      g.total++;
+      if(classifyStatus(r) === '合作成功') g.coop++;
+      var j = r['結案'];
+      if(j !== undefined && j !== null && String(j).indexOf('導入完成') !== -1) g.import++;
+      var s = r['簽約'];
+      if(s !== undefined && s !== null && String(s).trim() !== '') g.sign++;
+    }
+    var arr = [];
+    for(var k in groups) arr.push(groups[k]);
+    arr.sort(function(a, b){
+      var d = b[metric] - a[metric];
+      if(d) return d;
+      var oa = (field === '課別') ? KE_BASE_ORDER.indexOf(a.name) : -1;
+      var ob = (field === '課別') ? KE_BASE_ORDER.indexOf(b.name) : -1;
+      oa = oa === -1 ? 999 : oa;
+      ob = ob === -1 ? 999 : ob;
+      if(oa !== ob) return oa - ob;
+      return (a.name < b.name) ? -1 : (a.name > b.name ? 1 : 0);
+    });
+    var prev = null, slot = 0;
+    for(var n = 0; n < arr.length; n++){
+      slot++;
+      if(prev !== null && arr[n][metric] === prev) arr[n].rank = arr[n - 1].rank;
+      else arr[n].rank = slot;
+      prev = arr[n][metric];
+    }
+    return arr;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 共用 SVG helper：makeChart(container, type, data, opts)
+  // type: bar（直條）| hbar（橫條）| pie（圓餅）| hist（橫條分桶同 hbar）
+  // data: [{ label, count, color? }]
+  // ---------------------------------------------------------------------------
+  function chartDefaultColor(i){
+    var palette = ['#4f8eff', '#5ad98b', '#ffc94d', '#ff6b6b', '#b48cff', '#6ad2d9', '#9aa3b2'];
+    return palette[i % palette.length];
+  }
+
+  // 圓餅扇形 arc 路徑（a0/a1 為徑度，0 = 頂點，順時針）
+  function arcPath(cx, cy, r, a0, a1){
+    if(a1 - a0 >= Math.PI * 2 - 0.0001){
+      var m0 = a0 + Math.PI;
+      var fx = cx + r * Math.cos(a0), fy = cy + r * Math.sin(a0);
+      var mx = cx + r * Math.cos(m0), my = cy + r * Math.sin(m0);
+      return 'M' + cx + ' ' + cy + ' L' + fx + ' ' + fy +
+        ' A' + r + ' ' + r + ' 0 1 1 ' + mx + ' ' + my +
+        ' A' + r + ' ' + r + ' 0 1 1 ' + fx + ' ' + fy + ' Z';
+    }
+    var large = ((a1 - a0) > Math.PI) ? 1 : 0;
+    var x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+    var x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    return 'M' + cx + ' ' + cy + ' L' + x0 + ' ' + y0 +
+      ' A' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 + ' Z';
+  }
+
+  function makeChart(container, type, data, opts){
+    container.textContent = '';
+    if(!data || !data.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return null;
+    }
+    container.className = '';
+    opts = opts || {};
+    if(type === 'pie') return makePieChart(container, data, opts);
+    if(type === 'hbar' || type === 'hist') return makeHBars(container, data, opts);
+    if(type === 'bar') return makeVBars(container, data, opts);
+    return makeHBars(container, data, opts);
+  }
+
+  function makePieChart(container, data, opts){
+    var size = opts.size || 220, r = opts.r || 85;
+    var cx = size / 2, cy = size / 2;
+    var total = 0;
+    for(var i = 0; i < data.length; i++) total += data[i].count;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + size + ' ' + size, width: size, height: size });
+    var g = svgEl('g', { transform: 'rotate(-90 ' + cx + ' ' + cy + ')' });
+    var acc = 0;
+    for(var d = 0; d < data.length; d++){
+      var share = total ? (data[d].count / total) : 0;
+      if(share <= 0) continue;
+      var a0 = acc * Math.PI * 2;
+      var a1 = (acc + share) * Math.PI * 2;
+      if(a1 - a0 < 0.000001){ acc += share; continue; }
+      var seg = svgEl('path', {
+        d: arcPath(cx, cy, r, a0, a1),
+        fill: data[d].color || chartDefaultColor(d),
+        stroke: '#0e1013', 'stroke-width': 1
+      });
+      g.appendChild(seg);
+      acc += share;
+    }
+    svg.appendChild(g);
+    var tf = svgEl('text', { x: cx, y: cy - 4, 'text-anchor': 'middle', 'font-size': '26', 'font-weight': '700', fill: '#e8eaef' });
+    tf.textContent = total;
+    var tl = svgEl('text', { x: cx, y: cy + 17, 'text-anchor': 'middle', 'font-size': '12', fill: '#9aa3b2' });
+    tl.textContent = '總計';
+    svg.appendChild(tf);
+    svg.appendChild(tl);
+    container.appendChild(svg);
+    return svg;
+  }
+
+  function makeHBars(container, data, opts){
+    var labelW = opts.labelW || 96, barArea = opts.barArea || 320, RH = 34, gap = 6;
+    var padTop = opts.title ? 30 : 16;
+    var max = 1;
+    for(var i = 0; i < data.length; i++) if(data[i].count > max) max = data[i].count;
+    var W = labelW + barArea + 150;
+    var H = padTop + data.length * RH + 8;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%' });
+    if(opts.title){
+      var title = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      title.textContent = opts.title;
+      svg.appendChild(title);
+    }
+    for(var j = 0; j < data.length; j++){
+      var it = data[j];
+      var y = padTop + j * RH, cy = y + RH / 2;
+      var lab = svgEl('text', { x: labelW - 8, y: cy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
+      lab.textContent = it.label;
+      svg.appendChild(lab);
+      var track = svgEl('rect', { x: labelW, y: y + 4, width: barArea, height: RH - 8, rx: 5, fill: '#21262f' });
+      svg.appendChild(track);
+      var fw = Math.max(it.count > 0 ? 3 : 0, Math.round(it.count / max * barArea));
+      var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: it.color || chartDefaultColor(j) });
+      svg.appendChild(fill);
+      var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+      val.textContent = it.count + ' 筆';
+      svg.appendChild(val);
+    }
+    container.appendChild(svg);
+    return svg;
+  }
+
+  function makeVBars(container, data, opts){
+    var colW = opts.colW || 82, barH = opts.barH || 170, padTop = opts.title ? 34 : 14, labH = 28;
+    var max = 1;
+    for(var i = 0; i < data.length; i++) if(data[i].count > max) max = data[i].count;
+    var W = Math.max(data.length * colW + 60, 300);
+    var H = padTop + barH + labH + 6;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%' });
+    if(opts.title){
+      var title = svgEl('text', { x: 0, y: 20, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      title.textContent = opts.title;
+      svg.appendChild(title);
+    }
+    var baseline = padTop + barH;
+    for(var d = 0; d < data.length; d++){
+      var it = data[d];
+      var x = padTop + d * colW + colW / 2;
+      var bw = Math.max(it.count > 0 ? 4 : 0, Math.round(it.count / max * barH));
+      var bar = svgEl('rect', { x: x - colW / 2 + 10, y: baseline - bw, width: colW - 20, height: bw, rx: 4, fill: it.color || chartDefaultColor(d) });
+      svg.appendChild(bar);
+      var v = svgEl('text', { x: x, y: baseline - bw - 6, 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+      v.textContent = it.count;
+      svg.appendChild(v);
+      var lb = svgEl('text', { x: x, y: baseline + 18, 'text-anchor': 'middle', 'font-size': '12', fill: '#e8eaef' });
+      lb.textContent = it.label;
+      svg.appendChild(lb);
+    }
+    container.appendChild(svg);
+    return svg;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：案件狀態圓餅（makeChart pie）+ 圖例 + 不合作細項註記
+  // ---------------------------------------------------------------------------
+  function renderStatePie(container, byStatus){
+    var sb = computeStatusBuckets(byStatus);
+    if(!sb.total){
+      container.className = (container.className ? container.className + ' ' : '') + 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    var h3 = document.createElement('h3');
+    h3.textContent = '案件狀態占比（合計 ' + sb.total + '）';
+    container.appendChild(h3);
+
+    var row = document.createElement('div');
+    row.className = 'state-pie-row';
+    var pieHost = document.createElement('div');
+    pieHost.className = 'state-pie';
+    makeChart(pieHost, 'pie', sb.buckets, { size: 200, r: 78 });
+    row.appendChild(pieHost);
+
+    var legend = document.createElement('div');
+    legend.className = 'state-legend';
+    for(var i = 0; i < sb.buckets.length; i++){
+      var b = sb.buckets[i];
+      var item = document.createElement('div');
+      item.className = 'state-legend-item';
+      var sw = document.createElement('span');
+      sw.className = 'type-swatch';
+      sw.style.background = b.color;
+      var tx = document.createElement('span');
+      tx.className = 'type-cat';
+      tx.textContent = b.label;
+      var cnt = document.createElement('span');
+      cnt.className = 'state-legend-count';
+      cnt.textContent = b.count + ' 筆（' + (sb.total ? Math.round(b.count / sb.total * 100) : 0) + '%）';
+      item.appendChild(sw);
+      item.appendChild(tx);
+      item.appendChild(cnt);
+      legend.appendChild(item);
+    }
+    row.appendChild(legend);
+    container.appendChild(row);
+
+    var nb = sb.nonCoopBreakdown;
+    var noteP = document.createElement('p');
+    noteP.className = 'note';
+    noteP.textContent = '不合作結案＝客戶婉拒（' + nb['客戶婉拒'] + '）＋聯繫失敗（' + nb['聯繫失敗'] +
+      '）＋考慮中/暫緩（' + nb['考慮中/暫緩'] + '）＋需求無法滿足(暫緩)（' + nb['需求無法滿足(暫緩)'] +
+      '）＋其他結案（' + nb['其他結案'] + '）＝' + sb.buckets[1].count + '。';
+    container.appendChild(noteP);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：排行表（開發者可切換指標；課別／站所固定案件數＋導入完成數）
+  // ---------------------------------------------------------------------------
+  function buildRankTable(items, metric, nameCol, selectable){
+    var wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    var table = document.createElement('table');
+    table.className = 'rank-table';
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    var cols = selectable
+      ? ['名次', nameCol, RANK_METRICS[metric], '導入完成數', '比例']
+      : ['名次', nameCol, '案件數', '導入完成數', '比例'];
+    for(var c = 0; c < cols.length; c++){
+      var th = document.createElement('th');
+      th.textContent = cols[c];
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var max = 1;
+    for(var i = 0; i < items.length; i++) if(items[i][metric] > max) max = items[i][metric];
+    var tbody = document.createElement('tbody');
+    for(var j = 0; j < items.length; j++){
+      var it = items[j];
+      var tr = document.createElement('tr');
+      var cells = [
+        String(it.rank),
+        it.name,
+        String(it[metric]),
+        String(it.import),
+        ''
+      ];
+      for(var v = 0; v < cells.length; v++){
+        var td = document.createElement('td');
+        if(v === 4){
+          var track = document.createElement('span');
+          track.className = 'rank-bar-track';
+          var fill = document.createElement('span');
+          fill.className = 'rank-bar-fill';
+          if(max > 0 && it[metric] > 0) fill.style.width = Math.round(it[metric] / max * 100) + '%';
+          track.appendChild(fill);
+          td.appendChild(track);
+        } else {
+          td.textContent = cells[v];
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  function buildRankBlock(container, rows, field, metric, selectable, title){
+    var block = document.createElement('div');
+    block.className = 'rank-block';
+    var h3 = document.createElement('h3');
+    h3.textContent = title;
+    block.appendChild(h3);
+    if(selectable){
+      var control = document.createElement('div');
+      control.className = 'rank-control';
+      var label = document.createElement('label');
+      label.textContent = '開發者排行指標：';
+      var sel = document.createElement('select');
+      sel.className = 'rank-select';
+      var keys = ['total', 'coop', 'import', 'sign'];
+      for(var i = 0; i < keys.length; i++){
+        var opt = document.createElement('option');
+        opt.value = keys[i];
+        opt.textContent = RANK_METRICS[keys[i]];
+        if(keys[i] === metric) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', function(ev){
+        renderRankings(container, rows, ev.target.value);
+      });
+      label.appendChild(sel);
+      control.appendChild(label);
+      block.appendChild(control);
+    }
+    var items = computeRanking(rows, field, metric);
+    block.appendChild(buildRankTable(items, metric, (field === '開發者' ? '開發者' : (field === '課別' ? '課別' : '站所')), selectable));
+    container.appendChild(block);
+  }
+
+  // 渲染：三張排行表（開發者／課別／站所）
+  function renderRankings(container, rows, defaultMetric){
+    container.textContent = '';
+    if(!rows || !rows.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var metric = defaultMetric || 'total';
+    buildRankBlock(container, rows, '開發者', metric, true, '開發者排行');
+    buildRankBlock(container, rows, '課別', 'total', false, '課別排行（案件數＋導入完成數）');
+    buildRankBlock(container, rows, '站所', 'total', false, '站所排行（案件數＋導入完成數）');
+    var noteP = document.createElement('p');
+    noteP.className = 'note';
+    noteP.textContent = '相同分數並列同名次（如「廖崇嵩／謝益偉」同 8 筆即同名次）。' +
+      '導入完成數＝「結案」欄文字含「導入完成」；簽約數＝「簽約」日期欄有值。' +
+      '站所欄對應表頭「收貨站所」（資料有值時優先取「站所」）。';
+    container.appendChild(noteP);
+  }
+
+  // 圖表區段：狀態圓餅（左）＋課別長條（右）
+  function renderChartsSection(model){
+    var sec = document.getElementById('chartsSection');
+    var box = document.getElementById('charts');
+    if(!sec || !box || !model || !model.rows) return;
+    var stats = computeStats(model.rows);
+    box.textContent = '';
+    box.className = '';
+    var grid = document.createElement('div');
+    grid.className = 'charts-grid';
+
+    var pieCol = document.createElement('div');
+    pieCol.className = 'chart-col';
+    renderStatePie(pieCol, stats.byStatus);
+    grid.appendChild(pieCol);
+
+    var keCol = document.createElement('div');
+    keCol.className = 'chart-col';
+    var h3 = document.createElement('h3');
+    h3.textContent = '各課別客戶數';
+    keCol.appendChild(h3);
+    var keHost = document.createElement('div');
+    makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 185 });
+    keCol.appendChild(keHost);
+    var keNote = document.createElement('p');
+    keNote.className = 'note';
+    keNote.textContent = '依案件數降冪排列；數值相同時按北一課→北二課→北三課→中課→南一課→南二課→分轉部順序。';
+    keCol.appendChild(keNote);
+    grid.appendChild(keCol);
+
+    box.appendChild(grid);
+    sec.hidden = false;
+  }
+
+  // 排行區段
+  function renderRankSection(model){
+    var sec = document.getElementById('rankSection');
+    var box = document.getElementById('rank');
+    if(!sec || !box || !model || !model.rows) return;
+    renderRankings(box, model.rows, 'total');
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task 7：篩選列 + 明細表（含洽談內容展開）
+  // ---------------------------------------------------------------------------
+
+  // 每頁筆數與顯示欄位（表頭名稱對應；「狀態」為計算欄）
+  var PAGE_SIZE = 50;
+
+  var LIST_COLUMNS = [
+    { key: '序號', label: '序號' },
+    { key: '公司名稱', label: '公司名稱' },
+    { key: '課別', label: '課別' },
+    { key: '開發者', label: '開發者' },
+    { key: '類別', label: '類別' },
+    { key: '收貨站所', label: '收貨站所' },
+    { key: '商品類別', label: '商品類別' },
+    { key: '填單日期', label: '填單日期' },
+    { key: '初步接洽', label: '初步接洽' },
+    { key: '需求確認', label: '需求確認' },
+    { key: '報價', label: '報價' },
+    { key: '簽約', label: '簽約' },
+    { key: '導入', label: '導入' },
+    { key: '狀態', label: '狀態' }
+  ];
+
+  // 空值桶（下拉選項用）：資料該欄為空白時以 '__blank__' 代表，顯示 (空白)
+  var BLANK_BUCKET = '__blank__';
+
+  // 狀態下拉偏好順序（不影響排序，僅用於選單顯示次序）
+  var STATUS_ORDER = ['合作成功', '客戶婉拒', '聯繫失敗', '考慮中/暫緩', '需求無法滿足(暫緩)', '其他結案', '進行中', '未啟動'];
+
+  function defaultFilters(){
+    return { 課別: '', 狀態: '', 開發者: '', 類別: '', 關鍵字: '' };
+  }
+
+  // 純函式：欄位字串（trim），空白或不存在回 ''
+  function fieldStr(r, key){
+    var v = r ? r[key] : undefined;
+    return (v === undefined || v === null) ? '' : String(v).trim();
+  }
+
+  // 純函式：關鍵字比對（不分大小寫；掃過所有字串欄，_raw 除外）
+  function keywordMatches(row, kw){
+    kw = String(kw || '').trim().toLowerCase();
+    if(!kw) return true;
+    for(var k in row){
+      if(k === '_raw') continue;
+      var v = row[k];
+      if(v === undefined || v === null) continue;
+      if(String(v).toLowerCase().indexOf(kw) !== -1) return true;
+    }
+    return false;
+  }
+
+  // 純函式：下拉選項值比對（''=全部；BLANK_BUCKET=空白桶；其餘精確比對）
+  function matchDrop(filterVal, actual){
+    if(filterVal === '' || filterVal === undefined || filterVal === null) return true;
+    if(filterVal === BLANK_BUCKET) return actual === '';
+    return actual === filterVal;
+  }
+
+  // 純函式：套用篩選（課別／類別／狀態／開發者 ＋ 關鍵字）；全空回傳全部
+  function applyFilters(rows, filters){
+    var f = filters || {};
+    var kw = String(f.關鍵字 || '').trim().toLowerCase();
+    var out = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(kw && !keywordMatches(r, kw)) continue;
+      if(!matchDrop(f.課別, fieldStr(r, '課別'))) continue;
+      if(!matchDrop(f.類別, fieldStr(r, '類別'))) continue;
+      if(!matchDrop(f.開發者, fieldStr(r, '開發者'))) continue;
+      if(!matchDrop(f.狀態, classifyStatus(r))) continue;
+      out.push(r);
+    }
+    return out;
+  }
+
+  // 純函式：排序值（狀態→分類名；其餘→欄位字串）
+  function sortValue(r, col){
+    if(col === '狀態') return classifyStatus(r);
+    return fieldStr(r, col);
+  }
+
+  function toNum(v){
+    if(v === undefined || v === null || String(v).trim() === '') return null;
+    var n = Number(String(v).trim());
+    return isFinite(n) ? n : null;
+  }
+
+  // 純函式：兩值比較（兩者皆可轉數值 → 數值比較；否則字串比較）
+  function compareVal(a, b){
+    var na = toNum(a), nb = toNum(b);
+    if(na !== null && nb !== null){
+      if(na < nb) return -1;
+      if(na > nb) return 1;
+      return 0;
+    }
+    if(a < b) return -1;
+    if(a > b) return 1;
+    return 0;
+  }
+
+  // 純函式：排序（副鍵＝原始 index，跨引擎穩定可重現）
+  function sortRows(rows, col, dir){
+    var d = (dir === 'asc') ? 1 : -1;
+    var arr = [];
+    for(var i = 0; i < rows.length; i++){
+      arr.push({ r: rows[i], v: sortValue(rows[i], col), i: i });
+    }
+    arr.sort(function(a, b){
+      var c = compareVal(a.v, b.v);
+      if(c === 0) c = (a.i < b.i) ? -1 : (a.i > b.i ? 1 : 0);
+      return c * d;
+    });
+    var out = [];
+    for(var j = 0; j < arr.length; j++) out.push(arr[j].r);
+    return out;
+  }
+
+  // 純函式：分頁（page 越界自動夾取）
+  function paginate(rows, page, pageSize){
+    pageSize = (pageSize === undefined) ? PAGE_SIZE : pageSize;
+    var total = rows.length;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    var p = page || 1;
+    if(p < 1) p = 1;
+    if(p > totalPages) p = totalPages;
+    var start = (p - 1) * pageSize;
+    var end = Math.min(start + pageSize, total);
+    return { rows: rows.slice(start, end), page: p, pageSize: pageSize,
+             total: total, totalPages: totalPages, start: start, end: end };
+  }
+
+  // 純函式：某欄相異值（空白→BLANK_BUCKET），preferred 依其順序優先、其餘依名稱排序（空白最後）
+  function distinctFieldValues(rows, key, preferred){
+    var seen = {};
+    for(var i = 0; i < rows.length; i++){
+      var v = (key === '狀態') ? classifyStatus(rows[i])
+        : (rows[i][key] === undefined || rows[i][key] === null) ? '' : String(rows[i][key]).trim();
+      if(v === '') v = BLANK_BUCKET;
+      seen[v] = 1;
+    }
+    var head = [], rest = [];
+    var hasPref = preferred && preferred.length;
+    if(hasPref){
+      for(var p = 0; p < preferred.length; p++){
+        if(seen[preferred[p]]) head.push(preferred[p]);
+      }
+    }
+    for(var k in seen){
+      if(hasPref && preferred.indexOf(k) !== -1) continue;
+      rest.push(k);
+    }
+    rest.sort(function(a, b){
+      if(a === BLANK_BUCKET) return 1;
+      if(b === BLANK_BUCKET) return -1;
+      return a < b ? -1 : (a > b ? 1 : 0);
+    });
+    return head.concat(rest);
+  }
+
+  function optionValueLabel(v){
+    return v === BLANK_BUCKET ? '(空白)' : v;
+  }
+
+  // 純函式：分頁按鈕清單（頁數少全列；多則 第一個＋當前±2＋最後一個，超過顯示 …）
+  function pagerItems(page, totalPages, maxAround){
+    maxAround = (maxAround === undefined) ? 2 : maxAround;
+    var items = [];
+    function add(n){ items.push({ type: 'page', n: n }); }
+    function gap(){ if(items.length && items[items.length - 1].type !== 'gap') items.push({ type: 'gap' }); }
+    if(totalPages <= 9){
+      for(var i = 1; i <= totalPages; i++) add(i);
+      return items;
+    }
+    add(1);
+    var lo = Math.max(2, page - maxAround);
+    var hi = Math.min(totalPages - 1, page + maxAround);
+    if(lo > 2) gap();
+    for(var j = lo; j <= hi; j++) add(j);
+    if(hi < totalPages - 1) gap();
+    add(totalPages);
+    return items;
+  }
+
+  // ---------------------------------------------------------------------------
+  // DOM：明細表區段
+  // ---------------------------------------------------------------------------
+  var listRebuildTimer = null;
+
+  function scheduleRebuild(delay){
+    if(listRebuildTimer) clearTimeout(listRebuildTimer);
+    listRebuildTimer = setTimeout(function(){
+      listRebuildTimer = null;
+      rebuild();
+    }, delay === undefined ? 160 : delay);
+  }
+
+  // 建立篩選列（每次載入新檔案時重建；值來自 state.model 的全量相異值）
+  function buildFilterBar(box){
+    var model = state.model;
+    if(!model || !model.rows) return;
+    var toolbar = document.createElement('div');
+    toolbar.className = 'list-toolbar';
+
+    function fieldBlock(labelText, fieldKey, values, selected){
+      var lb = document.createElement('label');
+      lb.className = 'list-field';
+      var cap = document.createElement('span');
+      cap.textContent = labelText;
+      var sel = document.createElement('select');
+      sel.className = 'list-select';
+      sel.dataset.field = fieldKey;
+      var allOpt = document.createElement('option');
+      allOpt.value = '';
+      allOpt.textContent = '全部';
+      sel.appendChild(allOpt);
+      for(var i = 0; i < values.length; i++){
+        var opt = document.createElement('option');
+        opt.value = values[i];
+        opt.textContent = optionValueLabel(values[i]);
+        if(values[i] === selected) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      lb.appendChild(cap);
+      lb.appendChild(sel);
+      return lb;
+    }
+
+    var f = state.filters || defaultFilters();
+    toolbar.appendChild(fieldBlock('課別', '課別', distinctFieldValues(model.rows, '課別', KE_BASE_ORDER), f.課別));
+    toolbar.appendChild(fieldBlock('類別', '類別', distinctFieldValues(model.rows, '類別', ['零擔', '1P(SCM)', '3P(MO+)']), f.類別));
+    toolbar.appendChild(fieldBlock('狀態', '狀態', distinctFieldValues(model.rows, '狀態', STATUS_ORDER), f.狀態));
+    toolbar.appendChild(fieldBlock('開發者', '開發者', distinctFieldValues(model.rows, '開發者'), f.開發者));
+
+    var kw = document.createElement('label');
+    kw.className = 'list-field';
+    var kwCap = document.createElement('span');
+    kwCap.textContent = '關鍵字';
+    var kwIn = document.createElement('input');
+    kwIn.type = 'search';
+    kwIn.id = 'listKeyword';
+    kwIn.placeholder = '公司名稱／洽談內容…';
+    kwIn.value = f.關鍵字 || '';
+    kw.appendChild(kwCap);
+    kw.appendChild(kwIn);
+    toolbar.appendChild(kw);
+
+    var reset = document.createElement('button');
+    reset.type = 'button';
+    reset.id = 'resetFilters';
+    reset.textContent = '重置篩選';
+    toolbar.appendChild(reset);
+
+    box.textContent = '';
+    box.appendChild(toolbar);
+
+    var results = document.createElement('div');
+    results.id = 'listResults';
+    box.appendChild(results);
+
+    var selects = toolbar.querySelectorAll('.list-select');
+    for(var s = 0; s < selects.length; s++){
+      (function(sel){
+        sel.addEventListener('change', function(ev){
+          state.filters[sel.dataset.field] = sel.value;
+          state.page = 1;
+          scheduleRebuild(0);
+        });
+      })(selects[s]);
+    }
+    kwIn.addEventListener('input', function(ev){
+      state.filters.關鍵字 = kwIn.value;
+      state.page = 1;
+      scheduleRebuild(160);
+    });
+    reset.addEventListener('click', function(){ resetFilters(); });
+  }
+
+  // 重置篩選（同步 DOM 控制項 → 立即整頁重算）
+  function resetFilters(){
+    if(listRebuildTimer){ clearTimeout(listRebuildTimer); listRebuildTimer = null; }
+    state.filters = defaultFilters();
+    state.page = 1;
+    var bar = document.querySelector('#list .list-toolbar');
+    if(bar){
+      var sels = bar.querySelectorAll('.list-select');
+      for(var i = 0; i < sels.length; i++) sels[i].value = '';
+      var kwin = document.getElementById('listKeyword');
+      if(kwin) kwin.value = '';
+    }
+    rebuild();
+  }
+
+  // 展開列的明細子表格內容（洽談內容／說明／結案，保留換行；createTextNode 防 XSS）
+  function buildListDetail(r){
+    var inner = document.createElement('div');
+    inner.className = 'list-detail-inner';
+    var fields = [
+      { label: '洽談內容', key: '洽談內容', empty: '（無洽談內容）' },
+      { label: '說明', key: '說明', empty: '（無說明）' },
+      { label: '結案', key: '結案', empty: '（無結案原因）' }
+    ];
+    for(var i = 0; i < fields.length; i++){
+      var p = document.createElement('p');
+      var lb = document.createElement('span');
+      lb.className = 'do-field-label';
+      lb.textContent = fields[i].label + '：';
+      p.appendChild(lb);
+      var t = fieldStr(r, fields[i].key);
+      if(t){
+        p.appendChild(document.createTextNode(t));
+      } else {
+        p.classList.add('do-empty');
+        p.appendChild(document.createTextNode(fields[i].empty));
+      }
+      inner.appendChild(p);
+    }
+    return inner;
+  }
+
+  // 渲染明細表（摘要 + 可排序表 + 分頁控制）；onSort/onPage 供外部接線
+  function renderList(container, opts){
+    container.textContent = '';
+    var cols = opts.columns;
+    var totalPages = opts.totalPages;
+
+    var summary = document.createElement('p');
+    summary.className = 'list-summary';
+    summary.textContent = (opts.total === 0)
+      ? '共 0 筆'
+      : '顯示 ' + (opts.start + 1) + '–' + opts.end + ' / 總 ' + opts.total + ' 筆';
+    container.appendChild(summary);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    var table = document.createElement('table');
+    table.className = 'list-table';
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    hr.appendChild(document.createElement('th'));
+    for(var c = 0; c < cols.length; c++){
+      var col = cols[c];
+      var th = document.createElement('th');
+      th.className = 'sortable';
+      th.setAttribute('scope', 'col');
+      var lab = document.createElement('span');
+      lab.textContent = col.label;
+      th.appendChild(lab);
+      if(col.key === opts.sortCol){
+        th.setAttribute('aria-sort', opts.sortDir);
+        var arrow = document.createElement('span');
+        arrow.className = 'sort-arrow';
+        arrow.textContent = (opts.sortDir === 'asc') ? '▲' : '▼';
+        th.appendChild(arrow);
+      }
+      (function(colKey){
+        th.addEventListener('click', function(){ if(opts.onSort) opts.onSort(colKey); });
+      })(col.key);
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    for(var r = 0; r < opts.rows.length; r++){
+      var built = buildListRow(opts, opts.rows[r]);
+      tbody.appendChild(built.tr);
+      tbody.appendChild(built.detail);
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    container.appendChild(wrap);
+
+    // 分頁控制
+    var pager = document.createElement('div');
+    pager.className = 'list-pager';
+    function mkBtn(text, disabled, fn){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = text;
+      b.disabled = !!disabled;
+      b.addEventListener('click', function(){ if(!b.disabled && fn) fn(); });
+      return b;
+    }
+    pager.appendChild(mkBtn('◀ 上一頁', !(opts.page > 1), function(){ if(opts.onPage) opts.onPage(opts.page - 1); }));
+    var items = pagerItems(opts.page, totalPages);
+    for(var pi = 0; pi < items.length; pi++){
+      if(items[pi].type === 'gap'){
+        var gap = document.createElement('span');
+        gap.className = 'pg-gap';
+        gap.textContent = '…';
+        pager.appendChild(gap);
+        continue;
+      }
+      (function(pgN){
+        var b = mkBtn(String(pgN), false, function(){ if(opts.onPage) opts.onPage(pgN); });
+        if(pgN === opts.page) b.classList.add('active');
+        pager.appendChild(b);
+      })(items[pi].n);
+    }
+    pager.appendChild(mkBtn('下一頁 ▶', !(opts.page < totalPages), function(){ if(opts.onPage) opts.onPage(opts.page + 1); }));
+    var info = document.createElement('span');
+    info.className = 'pg-info';
+    info.textContent = '第 ' + opts.page + ' / ' + totalPages + ' 頁';
+    pager.appendChild(info);
+    container.appendChild(pager);
+    return wrap;
+  }
+
+  // 單一資料列＋其下展開列（tr/detail/caret 各為此呼叫的區域變數，閉包不串號）
+  function buildListRow(opts, row){
+    var cols = opts.columns;
+    var tr = document.createElement('tr');
+    tr.className = 'list-row';
+    tr.setAttribute('tabindex', '0');
+    var caretTd = document.createElement('td');
+    var caret = document.createElement('span');
+    caret.className = 'list-caret';
+    caret.textContent = '▸';
+    caretTd.appendChild(caret);
+    tr.appendChild(caretTd);
+
+    for(var v = 0; v < cols.length; v++){
+      var td = document.createElement('td');
+      var val = (cols[v].key === '狀態') ? classifyStatus(row) : fieldStr(row, cols[v].key);
+      td.textContent = val;
+      if(cols[v].key === '狀態' && val === '合作成功') td.classList.add('ok');
+      tr.appendChild(td);
+    }
+
+    var detail = document.createElement('tr');
+    detail.className = 'list-detail';
+    detail.hidden = true;
+    var dtTd = document.createElement('td');
+    dtTd.colSpan = String(cols.length + 1);
+    dtTd.appendChild(buildListDetail(row));
+    detail.appendChild(dtTd);
+
+    function toggle(){
+      var open = !tr.classList.contains('list-row-open');
+      tr.classList.toggle('list-row-open', open);
+      detail.hidden = !open;
+      tr.setAttribute('aria-expanded', open ? 'true' : 'false');
+      caret.textContent = open ? '▾' : '▸';
+    }
+    tr.addEventListener('click', toggle);
+    tr.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+    return { tr: tr, detail: detail };
+  }
+
+  // 排序點表頭：同欄切換升降冪，換欄重設為升冪；回到第 1 頁
+  function sortBy(col){
+    if(state.sortCol === col){
+      state.sortDir = (state.sortDir === 'asc') ? 'desc' : 'asc';
+    } else {
+      state.sortCol = col;
+      state.sortDir = 'asc';
+    }
+    state.page = 1;
+    rebuildListResults();
+  }
+
+  // 換頁（依目前篩選結果夾取）
+  function gotoPage(p){
+    var filtered = applyFilters(state.model.rows, state.filters);
+    var total = filtered.length;
+    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if(p < 1) p = 1;
+    if(p > totalPages) p = totalPages;
+    state.page = p;
+    rebuildListResults();
+  }
+
+  // 重算清單結果區（篩選→排序→分頁→renderList）
+  function rebuildListResults(){
+    var box = document.getElementById('list');
+    var results = document.getElementById('listResults');
+    if(!box || !results || !state.model || !state.model.rows) return;
+    var filtered = applyFilters(state.model.rows, state.filters);
+    var sorted = sortRows(filtered, state.sortCol, state.sortDir);
+    var page = paginate(sorted, state.page, PAGE_SIZE);
+    state.page = page.page;
+    results.textContent = '';
+    if(!page.total){
+      var p = document.createElement('p');
+      p.className = 'pending';
+      p.textContent = '共 0 筆，無符合條件的資料';
+      results.appendChild(p);
+      return;
+    }
+    renderList(results, {
+      columns: LIST_COLUMNS,
+      rows: page.rows,
+      start: page.start, end: page.end, total: page.total,
+      page: page.page, totalPages: page.totalPages,
+      sortCol: state.sortCol, sortDir: state.sortDir,
+      onSort: sortBy, onPage: gotoPage
+    });
+  }
+
+  // 案件清單區段（篩選列一次建立；結果每次重建）
+  function renderListSection(){
+    var sec = document.getElementById('listSection');
+    var box = document.getElementById('list');
+    if(!sec || !box || !state.model || !state.model.rows) return;
+    sec.hidden = false;
+    if(!box.querySelector('.list-toolbar')) buildFilterBar(box);
+    rebuildListResults();
+  }
+
+  // 載入新檔案時：重置清單狀態並重建篩選列
+  function initListControls(){
+    if(listRebuildTimer){ clearTimeout(listRebuildTimer); listRebuildTimer = null; }
+    var box = document.getElementById('list');
+    if(!box) return;
+    buildFilterBar(box);
+  }
+
+  // rebuild：依 state.filters 重算所有面板（統計→漏斗→類別→時程→流失→圖表→排行→明細）
+  function rebuild(){
+    if(!state.model || !state.model.rows) return;
+    var filtered = applyFilters(state.model.rows, state.filters);
+    var m = { headers: state.model.headers, rows: filtered, sheetName: state.model.sheetName };
+    renderStats(m);
+    renderFunnelSection(m);
+    renderTypeAnalysisSection(m);
+    renderTimingSection(m);
+    renderDropoffSection(m);
+    renderChartsSection(m);
+    renderRankSection(m);
+    renderListSection();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task 8：CSV 匯出 + 列印
+  // ---------------------------------------------------------------------------
+
+  // RFC 4180 欄位跳脫：含 , " 或換行時以 " 包圍，內部 " 重複（" → ""）
+  function csvEscapeField(v){
+    var s = (v === undefined || v === null) ? '' : String(v);
+    if(/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  // 純函式：headers（可含「狀態」計算欄）＋ rows → BOM 開頭 UTF-8 CSV（CRLF 結尾）
+  // 空白表頭略過（與 buildModel 一致）；「狀態」欄由 statusFn 計算，預設 classifyStatus
+  function buildCsv(headers, rows, statusFn){
+    var hdrs = [];
+    for(var h = 0; h < headers.length; h++){
+      if(headers[h] && String(headers[h]).trim() !== '') hdrs.push(headers[h]);
+    }
+    var lines = [];
+    var headCells = [];
+    for(var hc = 0; hc < hdrs.length; hc++) headCells.push(csvEscapeField(hdrs[hc]));
+    lines.push(headCells.join(','));
+    var fn = statusFn || classifyStatus;
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i] || {};
+      var cells = [];
+      for(var c = 0; c < hdrs.length; c++){
+        var key = hdrs[c];
+        cells.push(csvEscapeField((key === '狀態') ? fn(r) : r[key]));
+      }
+      lines.push(cells.join(','));
+    }
+    return '\uFEFF' + lines.join('\r\n');
+  }
+
+  // 匯出檔名：crm-report-YYYYMMDD.csv（dateObj 可注入供測試）
+  function csvExportFilename(dateObj){
+    var d = dateObj || new Date();
+    function pad(n){ return (n < 10 ? '0' : '') + n; }
+    return 'crm-report-' + d.getFullYear() +
+      pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv';
+  }
+
+  // 下載：全域24欄＋計算欄，依目前 state 篩選＋排序結果；Blob + 暫存 <a download>
+  function exportCsv(rows){
+    var model = state.model;
+    if(!model || !model.rows) return;
+    var headers = model.headers.concat(['狀態']);
+    var csv = buildCsv(headers, rows || [], classifyStatus);
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = csvExportFilename();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+
+  // 依目前篩選＋排序狀態匯出（供 #exportCsvBtn 使用）
+  function exportFilteredCsv(){
+    if(!state.model || !state.model.rows) return;
+    var filtered = applyFilters(state.model.rows, state.filters);
+    var sorted = sortRows(filtered, state.sortCol, state.sortDir);
+    exportCsv(sorted);
+  }
+
+  async function handleFile(file){
+    var name = (file && file.name) ? file.name : 'unknown';
+    try{
+      csvWarning = null;
+      var model = null;
+      var ext = name.toLowerCase().split('.').pop();
+      if(ext === 'xlsx' || ext === 'xlsm'){
+        var ab = await file.arrayBuffer();
+        model = await parseXlsx(ab);
+      } else if(ext === 'csv'){
+        var text = await readFileText(file);
+        model = parseCsv(text);
+      } else {
+        throw new Error('不支援的檔案類型：' + name + '（請用 .xlsx 或 .csv）');
+      }
+
+      state.model = model;
+      state.fileName = name;
+      state.filters = defaultFilters();
+      state.sortCol = '序號';
+      state.sortDir = 'asc';
+      state.page = 1;
+      clearError();
+      if(csvWarning) showError(csvWarning, true);
+      var fn = document.getElementById('fileName');
+      if(fn){ fn.textContent = '已載入：' + name; fn.hidden = false; }
+      renderRawTable(model);
+      initListControls();
+      rebuild();
+      var expBtn = document.getElementById('exportCsvBtn');
+      if(expBtn) expBtn.disabled = false;
+      var pBtn = document.getElementById('printBtn');
+      if(pBtn) pBtn.disabled = false;
+      return model;
+    }catch(err){
+      showError(err && err.message ? err.message : String(err));
+      return null;
+    }
+  }
+
+  function readFileText(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(String(reader.result)); };
+      reader.onerror = function(){ reject(new Error('讀取檔案失敗')); };
+      reader.readAsText(file, 'UTF-8');
+    });
+  }
+
+  // 主題：深色/淺色。resolveTheme 為純函式（Node 可測）。
+  function resolveTheme(storedPref, prefersDark){
+    if(storedPref === 'dark' || storedPref === 'light') return storedPref;
+    return prefersDark ? 'dark' : 'light';
+  }
+  function applyTheme(theme, persist){
+    document.documentElement.dataset.theme = theme;
+    var isLight = theme === 'light';
+    var btn = document.getElementById('themeBtn');
+    if(btn){
+      btn.textContent = isLight ? '切換到深色' : '切換到淺色';
+      btn.setAttribute('aria-pressed', String(isLight));
+    }
+    if(persist !== false){ try{ localStorage.setItem('crm-theme', theme); }catch(_){} }
+  }
+  function initTheme(){
+    var stored = null;
+    try{ stored = localStorage.getItem('crm-theme'); }catch(_){}
+    var mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+    var base = resolveTheme(stored, mq ? mq.matches : true);
+    var persist = (stored === 'dark' || stored === 'light');
+    if(!stored && mq){
+      var follow = function(e){ applyTheme(resolveTheme(null, e.matches), false); };
+      if(mq.addEventListener) mq.addEventListener('change', follow);
+      else if(mq.addListener) mq.addListener(follow);
+    }
+    applyTheme(base, persist);
+    var btn = document.getElementById('themeBtn');
+    if(btn) btn.addEventListener('click', function(){
+      applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  function initApp(){
+    var dropzone = document.getElementById('dropzone');
+    var fileInput = document.getElementById('fileInput');
+    var pickBtn = document.getElementById('pickBtn');
+    initTheme();
+    if(!dropzone) return;
+
+    window.addEventListener('dragover', function(e){ e.preventDefault(); });
+    window.addEventListener('drop', function(e){ e.preventDefault(); });
+
+    ['dragenter','dragover'].forEach(function(ev){
+      dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('drag-over'); });
+    });
+    dropzone.addEventListener('dragleave', function(e){
+      if(e.relatedTarget && dropzone.contains(e.relatedTarget)) return;
+      dropzone.classList.remove('drag-over');
+    });
+    dropzone.addEventListener('drop', function(e){
+      e.preventDefault();
+      dropzone.classList.remove('drag-over');
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if(files && files.length) handleFile(files[0]);
+    });
+    dropzone.addEventListener('click', function(){ fileInput.click(); });
+    dropzone.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); }
+    });
+    if(pickBtn){
+      pickBtn.addEventListener('click', function(e){ e.stopPropagation(); fileInput.click(); });
+    }
+    if(fileInput){
+      fileInput.addEventListener('change', function(){
+        if(fileInput.files && fileInput.files.length) handleFile(fileInput.files[0]);
+        fileInput.value = '';
+      });
+    }
+
+    var exportCsvBtn = document.getElementById('exportCsvBtn');
+    if(exportCsvBtn){
+      exportCsvBtn.addEventListener('click', exportFilteredCsv);
+    }
+    var printBtn = document.getElementById('printBtn');
+    if(printBtn){
+      printBtn.addEventListener('click', function(){ window.print(); });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 啟動（瀏覽器才執行；Node 直接 require 不會觸發 DOM 程式碼）
+  // ---------------------------------------------------------------------------
+  if(typeof document !== 'undefined' && document.getElementById){
+    initApp();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Node 測試匯出（瀏覽器環境 module 未定義則忽略）
+  // ---------------------------------------------------------------------------
+  if(typeof module !== 'undefined' && module.exports){
+    module.exports = {
+      excelSerialToDate: excelSerialToDate,
+      colIndexFromRef: colIndexFromRef,
+      isTemplateRow: isTemplateRow,
+      filterTemplateRows: filterTemplateRows,
+      decodeUtf8: decodeUtf8,
+      parseZipEntries: parseZipEntries,
+      readZipEntry: readZipEntry,
+      inflateDeflate: inflateDeflate,
+      parseXml: parseXml,
+      parseSharedStrings: parseSharedStrings,
+      readSheetMatrix: readSheetMatrix,
+      splitHeader: splitHeader,
+      buildModel: buildModel,
+      parseXlsx: parseXlsx,
+      parseCsv: parseCsv,
+      classifyStatus: classifyStatus,
+      computeStats: computeStats,
+      MILESTONES: MILESTONES,
+      computeMilestones: computeMilestones,
+      computeFunnel: computeFunnel,
+      lastMilestone: lastMilestone,
+      computeDropOff: computeDropOff,
+      buildDropOffCustomer: buildDropOffCustomer,
+      renderDropOff: renderDropOff,
+      renderDropoffSection: renderDropoffSection,
+      computeCategoryAnalysis: computeCategoryAnalysis,
+      validateCategoryRule: validateCategoryRule,
+      dateToSerial: dateToSerial,
+      summarize: summarize,
+      STAGE_PAIRS: STAGE_PAIRS,
+      computeStageDurations: computeStageDurations,
+      renderTiming: renderTiming,
+      renderTimingSection: renderTimingSection,
+      computeStatusBuckets: computeStatusBuckets,
+      computeKeBars: computeKeBars,
+      KE_BASE_ORDER: KE_BASE_ORDER,
+      fieldValue: fieldValue,
+      RANK_METRICS: RANK_METRICS,
+      computeRanking: computeRanking,
+      chartDefaultColor: chartDefaultColor,
+      arcPath: arcPath,
+      makeChart: makeChart,
+      renderStatePie: renderStatePie,
+      buildRankTable: buildRankTable,
+      buildRankBlock: buildRankBlock,
+      renderRankings: renderRankings,
+      renderChartsSection: renderChartsSection,
+      renderRankSection: renderRankSection,
+      PAGE_SIZE: PAGE_SIZE,
+      LIST_COLUMNS: LIST_COLUMNS,
+      BLANK_BUCKET: BLANK_BUCKET,
+      STATUS_ORDER: STATUS_ORDER,
+      defaultFilters: defaultFilters,
+      fieldStr: fieldStr,
+      keywordMatches: keywordMatches,
+      matchDrop: matchDrop,
+      applyFilters: applyFilters,
+      sortValue: sortValue,
+      compareVal: compareVal,
+      sortRows: sortRows,
+      paginate: paginate,
+      distinctFieldValues: distinctFieldValues,
+      optionValueLabel: optionValueLabel,
+      pagerItems: pagerItems,
+      renderList: renderList,
+      buildListRow: buildListRow,
+      buildListDetail: buildListDetail,
+      buildFilterBar: buildFilterBar,
+      resetFilters: resetFilters,
+      sortBy: sortBy,
+      gotoPage: gotoPage,
+      rebuildListResults: rebuildListResults,
+      renderListSection: renderListSection,
+      initListControls: initListControls,
+      rebuild: rebuild,
+      handleFile: handleFile,
+      csvEscapeField: csvEscapeField,
+      buildCsv: buildCsv,
+      csvExportFilename: csvExportFilename,
+      exportCsv: exportCsv,
+      exportFilteredCsv: exportFilteredCsv,
+      resolveTheme: resolveTheme,
+      applyTheme: applyTheme,
+      state: state
+    };
+  }
+</script>
+</body>
+</html>
