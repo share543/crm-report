@@ -54,6 +54,15 @@
   :root[data-theme="light"] svg rect[fill="#3a4150"]{ fill:#c3cad6; }
   :root[data-theme="light"] svg path[stroke="#0e1013"]{ stroke:#f5f6f8; }
   :root[data-theme="light"] svg text[fill="#9aa3b2"]{ fill:#5d6875; }
+  :root[data-theme="light"] .qk-table th.qk-l1{ background:#e1e5ec; }
+  :root[data-theme="light"] .qk-table td.qk-ke,
+  :root[data-theme="light"] .qk-table th.qk-corner{ background:#eef0f4; }
+  :root[data-theme="light"] .qk-table tbody tr:hover td{ background:#e2e7ee; }
+  :root[data-theme="light"] .qk-table tbody tr:hover td.qk-ke{ background:#d7dce5; }
+  :root[data-theme="light"] .qk-table tr.qk-total td{ background:#eef0f4; }
+  :root[data-theme="light"] .qk-table tr.qk-total td.qk-ke{ background:#e1e5ec; }
+  :root[data-theme="light"] .qk-table tr.qk-import td{ background:#eef0f4; }
+  :root[data-theme="light"] .qk-table tr.qk-import td.qk-ke{ background:#e1e5ec; }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ background:var(--bg); color:var(--text);
     font-family:system-ui,-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
@@ -133,6 +142,30 @@
   .pg-table tr.pg-total:hover td.pg-ke{ background:#2a3140; }
   .pg-table td.pg-coop{ color:var(--ok); font-weight:650; }
   .pg-table th.pg-coop-head{ color:var(--ok); }
+  .qk-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
+  .qk-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
+  .qk-table th{ position:static; background:var(--card-2); color:var(--muted);
+    font-weight:600; text-align:center; padding:8px 10px; border-bottom:1px solid var(--border);
+    border-left:1px solid var(--border); white-space:nowrap; }
+  .qk-table th.qk-l1{ background:#21262f; color:var(--text); font-weight:700; }
+  .qk-table th.qk-l3{ color:var(--text); }
+  .qk-table th.qk-corner{ position:sticky; left:0; z-index:3; background:var(--card-2); }
+  .qk-table td{ padding:7px 10px; border-bottom:1px solid #20242c; white-space:nowrap;
+    vertical-align:middle; text-align:center; }
+  .qk-table tbody tr:last-child td{ border-bottom:0; }
+  .qk-table td.qk-ke{ position:sticky; left:0; background:var(--card-2); color:var(--text);
+    font-weight:650; text-align:left; z-index:1; }
+  .qk-table tbody tr:hover td{ background:#1b202a; }
+  .qk-table tbody tr:hover td.qk-ke{ background:#242a36; }
+  .qk-table tr.qk-total td{ background:var(--card-2); font-weight:700; border-top:1px solid var(--border); }
+  .qk-table tr.qk-total td.qk-ke{ background:#242a36; }
+  .qk-table tr.qk-total:hover td{ background:#242a36; }
+  .qk-table tr.qk-total:hover td.qk-ke{ background:#2a3140; }
+  .qk-table tr.qk-import td{ background:#1c212b; font-weight:700; border-top:1px solid var(--border); }
+  .qk-table tr.qk-import td.qk-ke{ background:#242a36; }
+  .qk-table tr.qk-import td.qk-import-val{ color:var(--ok); font-size:14px; }
+  .qk-table tr.qk-import:hover td{ background:#21262f; }
+  .qk-table tr.qk-import:hover td.qk-ke{ background:#2a3140; }
   .pg-cell{ display:flex; flex-direction:column; gap:4px; min-width:46px; }
   .pg-count{ font-size:13px; font-weight:650; line-height:1.1; }
   .pg-cell.is-empty .pg-count{ color:var(--muted); font-weight:400; }
@@ -315,6 +348,12 @@
     .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
     .pg-table th, .pg-table td, .pg-table td.pg-ke, .pg-table tr.pg-total td,
     .pg-table tr.pg-total td.pg-ke{ background:#fff; border-color:#ccc; }
+    .qk-table th, .qk-table th.qk-l1, .qk-table td, .qk-table td.qk-ke,
+    .qk-table tr.qk-total td, .qk-table tr.qk-total td.qk-ke,
+    .qk-table tr.qk-import td, .qk-table tr.qk-import td.qk-ke{ background:#fff; border-color:#ccc; }
+    .qk-table tbody tr:hover td{ background:#fff; }
+    .qk-table tr.qk-total td, .qk-table tr.qk-import td{ border-top:1px solid #999; }
+    .qk-table th{ position:static; }
     .pg-table tbody tr:hover td{ background:#fff; }
     .pg-table tr.pg-total td{ border-top:1px solid #999; }
     .pg-track{ background:#eee; border-color:#ccc; }
@@ -401,6 +440,10 @@
     <h3 class="subtitle">各課別客戶數</h3>
     <div id="keCards"></div>
     <div id="keBarWrap"></div>
+  </section>
+  <section class="card" id="keQuickSection" hidden>
+    <h2>各課追蹤簡表 <span class="muted">課別 × 甲指／甲配／零擔 · 新增／開發累計／已導入累計</span></h2>
+    <div id="keQuickTable" class="pending">待產生</div>
   </section>
   <section class="card" id="progressSection" hidden>
     <h2>進度追蹤表 <span class="muted">類別・課別 · 填單日期→結案</span></h2>
@@ -604,6 +647,89 @@ var state = {
 
   function computeKeProgress(rows){ return computeProgress(rows, '課別', KE_ORDER); }
   function computeCatProgress(rows){ return computeProgress(rows, '類別', CAT_ORDER); }
+
+  // 純函式：各課追蹤簡表（課別 × 甲指/甲配/零擔，無 DOM 依賴，可於 Node 測試）
+  // scopeRows  = 已套「課別/開發者/關鍵字」篩選、不含期間的全量列（供 開發累計／已導入累計）
+  // periodRows = 同篩選後再套期間的列（供「新增」）
+  // 甲指 = 類別 1P(SCM)＋3P(MO+)；甲配＝類別甲配；零擔＝類別零擔；其餘類別不計入。
+  // 回傳 { kes, cols, cells, totals, importCum }：
+  //   kes = 固定課別順序（不含 (空白)）；cols = 7 欄定義（l1/l2/l3）；
+  //   cells[ke] = [7 數值]；totals = [7 數值各課加總]；
+  //   importCum = { 甲指:n, 甲配:n, 零擔:n }（導入日期欄非空的累計）。
+  var KE_QUICK_ORDER = ['北一課','北二課','北三課','南一課','南二課','中課'];
+  var KE_QUICK_COLUMNS = [
+    { l1: '甲指', l2: '新增', l3: '1P(SCM)' },
+    { l1: '甲指', l2: '新增', l3: '3P(MO+)' },
+    { l1: '甲指', l2: '開發累計' },
+    { l1: '甲配', l2: '新增' },
+    { l1: '甲配', l2: '開發累計' },
+    { l1: '零擔', l2: '新增' },
+    { l1: '零擔', l2: '開發累計' }
+  ];
+
+  function computeKeQuick(scopeRows, periodRows){
+    scopeRows = scopeRows || [];
+    periodRows = periodRows || [];
+    function keyOf(c){ return c.l1 + '\u0000' + (c.l2 || '') + '\u0000' + (c.l3 || ''); }
+    function is13(cat){ return cat === '1P(SCM)' || cat === '3P(MO+)'; }
+    function hasDate(r, k){
+      var v = r && r[k];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    }
+    function catOf(r){
+      var cv = r && r['類別'];
+      return (cv !== undefined && cv !== null && String(cv).trim() !== '') ? String(cv).trim() : '';
+    }
+    // 依 新增(isNew)／累計 把列分配到對應欄；回傳 { colKey: { 課別: n } }
+    function tally(rows, isNew){
+      var m = {};
+      for(var i = 0; i < rows.length; i++){
+        var r = rows[i];
+        var cat = catOf(r);
+        var ke = (r && r['課別']) || '';
+        ke = String(ke).trim();
+        var key = null;
+        if(cat === '1P(SCM)') key = keyOf(isNew ? KE_QUICK_COLUMNS[0] : KE_QUICK_COLUMNS[2]);
+        else if(cat === '3P(MO+)') key = keyOf(isNew ? KE_QUICK_COLUMNS[1] : KE_QUICK_COLUMNS[2]);
+        else if(cat === '甲配') key = keyOf(isNew ? KE_QUICK_COLUMNS[3] : KE_QUICK_COLUMNS[4]);
+        else if(cat === '零擔') key = keyOf(isNew ? KE_QUICK_COLUMNS[5] : KE_QUICK_COLUMNS[6]);
+        if(!key) continue;
+        m[key] = m[key] || {};
+        m[key][ke] = (m[key][ke] || 0) + 1;
+      }
+      return m;
+    }
+    var newMap = tally(periodRows, true);
+    var cumMap = tally(scopeRows, false);
+    var cells = {};
+    for(var k = 0; k < KE_QUICK_ORDER.length; k++){
+      var ke = KE_QUICK_ORDER[k];
+      var row = [];
+      for(var c = 0; c < KE_QUICK_COLUMNS.length; c++){
+        var cellKey = keyOf(KE_QUICK_COLUMNS[c]);
+        var src = (KE_QUICK_COLUMNS[c].l2 === '新增') ? newMap[cellKey] : cumMap[cellKey];
+        row.push(src && src[ke] ? src[ke] : 0);
+      }
+      cells[ke] = row;
+    }
+    var totals = [0, 0, 0, 0, 0, 0, 0];
+    for(var c2 = 0; c2 < KE_QUICK_COLUMNS.length; c2++){
+      for(var k2 = 0; k2 < KE_QUICK_ORDER.length; k2++){
+        totals[c2] += cells[KE_QUICK_ORDER[k2]][c2];
+      }
+    }
+    var importCum = { '甲指': 0, '甲配': 0, '零擔': 0 };
+    for(var i2 = 0; i2 < scopeRows.length; i2++){
+      var r2 = scopeRows[i2];
+      if(!hasDate(r2, '導入')) continue;
+      var c3 = catOf(r2);
+      if(is13(c3)) importCum['甲指']++;
+      else if(c3 === '甲配') importCum['甲配']++;
+      else if(c3 === '零擔') importCum['零擔']++;
+    }
+    return { kes: KE_QUICK_ORDER.slice(), cols: KE_QUICK_COLUMNS,
+             cells: cells, totals: totals, importCum: importCum };
+  }
 
   // 純函式：最後到達里程碑（無 DOM 依賴，可於 Node 測試）
   // 由 MILESTONES 由後往前找第一個日期欄非空的 index；全部空白 → -1
@@ -1155,6 +1281,149 @@ var state = {
       keBarWrap.appendChild(keNote);
     }
 
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：各課追蹤簡表（課別 × 甲指/甲配/零擔 · 新增／開發累計／已導入累計）
+  // 新增＝目前分析期間內填單的新進案件；開發累計／已導入累計＝全量累計，不隨期間縮放。
+  // 篩選僅套用 課別/開發者/關鍵字（類別已為欄位維度、狀態不套用）。
+  // ---------------------------------------------------------------------------
+  function renderKeQuickSection(model){
+    var sec = document.getElementById('keQuickSection');
+    var box = document.getElementById('keQuickTable');
+    if(!sec || !box || !model || !model.rows) return;
+    box.textContent = '';
+    if(!state.model || !state.model.rows || !state.model.rows.length){
+      box.className = 'pending';
+      box.textContent = '無資料';
+      sec.hidden = false;
+      return;
+    }
+    box.className = '';
+    var f = {};
+    if(state.filters){
+      f.關鍵字 = state.filters.關鍵字;
+      f.課別 = state.filters.課別;
+      f.開發者 = state.filters.開發者;
+    }
+    var scope = applyFilters(state.model.rows, f);
+    var pr = applyPeriod(scope, state.period);
+    var data = computeKeQuick(scope, pr.rows);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'qk-wrap';
+    var table = document.createElement('table');
+    table.className = 'qk-table';
+
+    var thead = document.createElement('thead');
+    var r1 = document.createElement('tr');
+    var corner = document.createElement('th');
+    corner.className = 'qk-corner';
+    corner.setAttribute('rowspan', '3');
+    corner.textContent = '課別';
+    r1.appendChild(corner);
+    var l1Runs = [];
+    for(var c = 0; c < data.cols.length; c++){
+      if(!c || data.cols[c].l1 !== data.cols[c - 1].l1){
+        l1Runs.push({ l1: data.cols[c].l1, count: 1 });
+      } else {
+        l1Runs[l1Runs.length - 1].count++;
+      }
+    }
+    for(var a = 0; a < l1Runs.length; a++){
+      var th1 = document.createElement('th');
+      th1.className = 'qk-l1';
+      if(l1Runs[a].count > 1) th1.setAttribute('colspan', String(l1Runs[a].count));
+      th1.textContent = l1Runs[a].l1;
+      r1.appendChild(th1);
+    }
+    thead.appendChild(r1);
+
+    var r2 = document.createElement('tr');
+    var l2Runs = [];
+    for(var c2 = 0; c2 < data.cols.length; c2++){
+      var col = data.cols[c2];
+      var prev = data.cols[c2 - 1];
+      if(!c2 || col.l1 !== prev.l1 || col.l2 !== prev.l2){
+        l2Runs.push({ l2: col.l2, count: 1 });
+      } else {
+        l2Runs[l2Runs.length - 1].count++;
+      }
+    }
+    for(var b = 0; b < l2Runs.length; b++){
+      var th2 = document.createElement('th');
+      if(l2Runs[b].count > 1) th2.setAttribute('colspan', String(l2Runs[b].count));
+      th2.textContent = l2Runs[b].l2;
+      r2.appendChild(th2);
+    }
+    thead.appendChild(r2);
+
+    var r3 = document.createElement('tr');
+    for(var c3 = 0; c3 < data.cols.length; c3++){
+      var th3 = document.createElement('th');
+      if(data.cols[c3].l3){
+        th3.className = 'qk-l3';
+        th3.textContent = data.cols[c3].l3;
+      }
+      r3.appendChild(th3);
+    }
+    thead.appendChild(r3);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    for(var k = 0; k < data.kes.length; k++){
+      var ke = data.kes[k];
+      var tr = document.createElement('tr');
+      var tdKe = document.createElement('td');
+      tdKe.className = 'qk-ke';
+      tdKe.textContent = ke;
+      tr.appendChild(tdKe);
+      for(var c4 = 0; c4 < data.cols.length; c4++){
+        var td = document.createElement('td');
+        td.textContent = String(data.cells[ke][c4]);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+
+    var trTotal = document.createElement('tr');
+    trTotal.className = 'qk-total';
+    var tdTotalKe = document.createElement('td');
+    tdTotalKe.className = 'qk-ke';
+    tdTotalKe.textContent = '加總';
+    trTotal.appendChild(tdTotalKe);
+    for(var c5 = 0; c5 < data.cols.length; c5++){
+      var tdT = document.createElement('td');
+      tdT.textContent = String(data.totals[c5]);
+      trTotal.appendChild(tdT);
+    }
+    tbody.appendChild(trTotal);
+
+    var trImp = document.createElement('tr');
+    trImp.className = 'qk-import';
+    var tdImpKe = document.createElement('td');
+    tdImpKe.className = 'qk-ke';
+    tdImpKe.textContent = '已導入累計';
+    trImp.appendChild(tdImpKe);
+    for(var d = 0; d < l1Runs.length; d++){
+      var tdImp = document.createElement('td');
+      tdImp.className = 'qk-import-val';
+      tdImp.setAttribute('colspan', String(l1Runs[d].count));
+      tdImp.textContent = String(data.importCum[l1Runs[d].l1] || 0);
+      trImp.appendChild(tdImp);
+    }
+    tbody.appendChild(trImp);
+
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(withUnitLabel(wrap, '單位：客戶數'));
+
+    var note = document.createElement('p');
+    note.className = 'pg-note';
+    note.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
+      '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
+    box.appendChild(note);
     sec.hidden = false;
   }
 
@@ -3367,6 +3636,7 @@ var state = {
     var m = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
     renderHighlightsSection(m);
     renderStats(m);
+    renderKeQuickSection(m);
     renderProgressSection(m);
     renderFunnelSection(m);
     renderTypeAnalysisSection(m);
@@ -3631,6 +3901,10 @@ var state = {
       lastMilestone: lastMilestone,
       computeKeProgress: computeKeProgress,
       computeCatProgress: computeCatProgress,
+      computeKeQuick: computeKeQuick,
+      renderKeQuickSection: renderKeQuickSection,
+      KE_QUICK_ORDER: KE_QUICK_ORDER,
+      KE_QUICK_COLUMNS: KE_QUICK_COLUMNS,
       computeDropOff: computeDropOff,
       buildDropOffCustomer: buildDropOffCustomer,
       renderDropOff: renderDropOff,
