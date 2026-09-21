@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CRM 報表工具</title>
+<script>
+  if(typeof document !== 'undefined' && document.documentElement){
+    try{
+      var _t = localStorage.getItem('crm-theme');
+      if(_t !== 'dark' && _t !== 'light'){
+        _t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', _t || 'dark');
+    }catch(_){
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }
+</script>
 <style>
   :root{
     --bg:#0e1013;
@@ -37,6 +50,9 @@
   :root[data-theme="light"] .list-row-open td,
   :root[data-theme="light"] .list-detail td,
   :root[data-theme="light"] .do-cust{ background:#eef0f4; }
+  :root[data-theme="light"] svg rect[fill="#21262f"]{ fill:#e1e5ec; }
+  :root[data-theme="light"] svg path[stroke="#0e1013"]{ stroke:#f5f6f8; }
+  :root[data-theme="light"] svg text[fill="#9aa3b2"]{ fill:#5d6875; }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ background:var(--bg); color:var(--text);
     font-family:system-ui,-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
@@ -123,10 +139,9 @@
   .do-content{ font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.6; margin-top:2px; }
   .do-field-label{ color:var(--accent); font-weight:600; }
   .do-empty{ color:var(--muted); font-style:italic; }
-  .charts-grid{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
-  .chart-col{ flex:1 1 320px; min-width:300px; }
-  .chart-col h3{ font-size:14px; margin:0 0 10px; color:var(--text); }
   .state-pie-row{ display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
+  .state-pie-wrap{ margin:6px 0 18px; }
+  #keBarWrap{ margin-top:14px; }
   .state-legend{ display:flex; flex-direction:column; gap:9px; }
   .state-legend-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
   .state-legend-count{ color:var(--muted); margin-left:auto; white-space:nowrap; }
@@ -180,6 +195,31 @@
     border-radius:8px; padding:7px 18px; font-size:13px; cursor:pointer; }
   .top-actions button:hover:not(:disabled){ border-color:var(--accent); color:var(--text); }
   .top-actions button:disabled{ opacity:.4; cursor:default; }
+  /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
+  button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .list-row:focus-visible, .do-node:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .do-node:focus{ outline:none; }
+  #fileName.loading{ color:var(--muted); }
+  .stat-value.accent{ color:var(--accent); }
+  .hl-list{ list-style:none; margin-top:14px; display:flex; flex-direction:column; gap:6px; font-size:13px; }
+  .hl-list li{ padding-left:16px; position:relative; color:var(--text); }
+  .hl-list li::before{ content:''; position:absolute; left:2px; top:6px; width:6px; height:6px;
+    border-radius:50%; background:var(--accent); }
+  .alert-list{ margin-top:2px; }
+  .alert-item{ background:var(--card-2); border:1px solid var(--border); border-left:4px solid var(--warning);
+    border-radius:8px; padding:10px 14px; margin-bottom:10px; }
+  .alert-item.high{ border-left-color:var(--error); }
+  .alert-item.mid{ border-left-color:var(--warning); }
+  .alert-item.low{ border-left-color:var(--accent); }
+  .alert-title{ font-weight:650; font-size:14px; }
+  .alert-detail{ color:var(--muted); font-size:12.5px; margin-top:4px; line-height:1.7; }
+  @media (max-width:640px){
+    main{ padding:14px; }
+    .top-actions button{ flex:1 1 auto; }
+    .type-analysis, .state-pie-row{ flex-direction:column; }
+    .type-bar-track{ max-width:none; }
+    .do-node-label{ flex-basis:110px; }
+  }
   /* Task 8：列印樣式（深色主題→白底黑字，隱藏操作型 UI，表格避免分頁切欄） */
   @media print{
     @page{ size:A4; margin:12mm; }
@@ -200,6 +240,9 @@
     .ok, .stat-value.ok{ color:#157a3a; }
     .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
     .do-content, .list-detail-inner p{ color:#222; }
+    .alert-item{ background:#fff; border-color:#bbb; }
+    .alert-title{ color:#000; }
+    .alert-detail{ color:#333; }
     .do-field-label{ color:#173d85; }
     .do-list{ border-top:1px dashed #999; }
     .list-row-open td, .list-detail td, .list-row:hover td{ background:#fff; }
@@ -234,26 +277,32 @@
       <button type="button" id="pickBtn">選擇檔案</button>
       <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
     </div>
-    <p id="fileName" hidden></p>
-    <p id="errorBox" hidden></p>
+    <p id="fileName" hidden aria-live="polite"></p>
+    <p id="errorBox" hidden role="alert"></p>
   </section>
-  <section class="card" id="rawSection" hidden>
-    <h2 id="rawTitle">原始資料預覽</h2>
-    <div id="rawTable"></div>
+  <section class="card" id="highlightSection" hidden>
+    <h2>開場亮點摘要</h2>
+    <div id="highlight" class="pending">待產生</div>
   </section>
   <section class="card" id="statSection" hidden>
     <h2 id="statTitle">案件狀態統計</h2>
     <div id="statCards"></div>
+    <div id="statePieWrap"></div>
     <h3 class="subtitle">各課別客戶數</h3>
     <div id="keCards"></div>
+    <div id="keBarWrap"></div>
+  </section>
+  <section class="card" id="typeSection" hidden>
+    <h2>案件類型分析</h2>
+    <div id="typeAnalysis" class="pending">待產生</div>
   </section>
   <section class="card" id="funnelSection" hidden>
     <h2>漏斗分析</h2>
     <div id="funnel" class="pending">待產生</div>
   </section>
-  <section class="card" id="typeSection" hidden>
-    <h2>案件類型分析</h2>
-    <div id="typeAnalysis" class="pending">待產生</div>
+  <section class="card" id="rankSection" hidden>
+    <h2>排行分析 <span class="muted">開發者・課別・站所</span></h2>
+    <div id="rank" class="pending">待產生</div>
   </section>
   <section class="card" id="timingSection" hidden>
     <h2>開發時間分析</h2>
@@ -263,17 +312,17 @@
     <h2>轉換流失分析</h2>
     <div id="dropoff" class="pending">待產生</div>
   </section>
-  <section class="card" id="chartsSection" hidden>
-    <h2>圖表</h2>
-    <div id="charts" class="pending">待產生</div>
-  </section>
-  <section class="card" id="rankSection" hidden>
-    <h2>排行分析 <span class="muted">開發者・課別・站所</span></h2>
-    <div id="rank" class="pending">待產生</div>
+  <section class="card" id="alertSection" hidden>
+    <h2>待留意事項</h2>
+    <div id="alerts" class="pending">待產生</div>
   </section>
   <section class="card" id="listSection" hidden>
     <h2>案件清單</h2>
     <div id="list" class="pending">待產生</div>
+  </section>
+  <section class="card" id="rawSection" hidden>
+    <h2 id="rawTitle">原始資料預覽</h2>
+    <div id="rawTable"></div>
   </section>
 </main>
 <script>
@@ -902,6 +951,250 @@ var state = {
     }
     keBox.appendChild(keGrid);
 
+    var pieWrap = document.getElementById('statePieWrap');
+    if(pieWrap){ pieWrap.textContent = ''; renderStatePie(pieWrap, stats.byStatus, { note: false }); }
+
+    var keBarWrap = document.getElementById('keBarWrap');
+    if(keBarWrap){
+      keBarWrap.textContent = '';
+      var keH = document.createElement('h3');
+      keH.className = 'subtitle';
+      keH.textContent = '各課別客戶數長條圖（依案件數降冪）';
+      keBarWrap.appendChild(keH);
+      var keHost = document.createElement('div');
+      makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 185 });
+      keBarWrap.appendChild(keHost);
+      var keNote = document.createElement('p');
+      keNote.className = 'note';
+      keNote.textContent = '數值相同時按北一課→北二課→北三課→中課→南一課→南二課→分轉部順序。';
+      keBarWrap.appendChild(keNote);
+    }
+
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：開場亮點摘要（第一眼：總覽數值＋最佳/待補強開發者＋主要流失節點）
+  // ---------------------------------------------------------------------------
+  function renderHighlights(container, model){
+    container.textContent = '';
+    if(!model || !model.rows || !model.rows.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var stats = computeStats(model.rows);
+
+    var grid = document.createElement('div');
+    grid.className = 'stat-grid';
+    var big = [
+      { label: '總客戶數', value: String(stats.total), cls: '' },
+      { label: '成案率', value: stats.rate + '%', cls: 'ok' },
+      { label: '合作結案', value: String(stats.coop), cls: '' },
+      { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent' },
+      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '' }
+    ];
+    for(var i = 0; i < big.length; i++){
+      var c = document.createElement('div');
+      c.className = 'stat-card';
+      var v = document.createElement('div');
+      v.className = 'stat-value' + (big[i].cls ? ' ' + big[i].cls : '');
+      v.textContent = big[i].value;
+      var l = document.createElement('div');
+      l.className = 'stat-label';
+      l.textContent = big[i].label;
+      c.appendChild(v);
+      c.appendChild(l);
+      grid.appendChild(c);
+    }
+    container.appendChild(grid);
+
+    var ul = document.createElement('ul');
+    ul.className = 'hl-list';
+
+    var devs = computeRanking(model.rows, '開發者', 'total');
+    var li1 = document.createElement('li');
+    li1.textContent = (devs && devs.length)
+      ? '最佳開發者：' + devs[0].name + '（' + devs[0].total + ' 筆・導入完成 ' + devs[0].import + '）'
+      : '最佳開發者：無資料';
+    ul.appendChild(li1);
+    var li2 = document.createElement('li');
+    li2.textContent = (devs && devs.length > 1)
+      ? '待補強開發者：' + devs[devs.length - 1].name + '（' + devs[devs.length - 1].total + ' 筆，低於其他開發者）'
+      : '待補強開發者：無資料';
+    ul.appendChild(li2);
+
+    var drop = computeDropOff(model.rows);
+    var nodeSum = {};
+    if(drop && drop.byCat){
+      for(var n = 0; n < drop.nodeLabels.length; n++) nodeSum[drop.nodeLabels[n]] = 0;
+      for(var k in drop.byCat){
+        var buckets = drop.byCat[k];
+        for(var m = 0; m < drop.nodeLabels.length; m++){
+          var arr = buckets[drop.nodeLabels[m]];
+          if(arr) nodeSum[drop.nodeLabels[m]] += arr.length;
+        }
+      }
+    }
+    var topNode = null, topNodeCount = 0;
+    for(var nn in nodeSum){
+      if(nodeSum[nn] > topNodeCount){ topNodeCount = nodeSum[nn]; topNode = nn; }
+    }
+    var li3 = document.createElement('li');
+    li3.textContent = topNodeCount
+      ? '主要流失節點：' + topNode + '（' + topNodeCount + ' 筆），建議優先檢視此階段停滯原因'
+      : '主要流失節點：無（本批無非合作完成客戶）';
+    ul.appendChild(li3);
+
+    container.appendChild(ul);
+  }
+
+  function renderHighlightsSection(model){
+    var sec = document.getElementById('highlightSection');
+    var box = document.getElementById('highlight');
+    if(!sec || !box || !model || !model.rows) return;
+    renderHighlights(box, model);
+    sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 渲染：待留意事項（類別規則不一致 / 時程過長 / 進行中停滯）
+  // ---------------------------------------------------------------------------
+  var SLOW_DAYS = 60;
+  var STALE_DAYS = 30;
+  var ALERT_MAX = 5;
+
+  function renderAlerts(container, model){
+    container.textContent = '';
+    if(!model || !model.rows || !model.rows.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return;
+    }
+    container.className = '';
+    var rows = model.rows;
+    var items = [];
+
+    function nameOf(r){
+      if(r && r['公司名稱'] !== undefined && r['公司名稱'] !== null && String(r['公司名稱']).trim() !== ''){
+        return String(r['公司名稱']).trim();
+      }
+      return '(未填公司名稱)';
+    }
+
+    var vr = validateCategoryRule(rows);
+    if(vr.mismatches.length){
+      var names = vr.mismatches.slice(0, ALERT_MAX).map(function(mm){
+        return mm.name + '（' + mm.cat + '）' + mm.note;
+      });
+      if(vr.mismatches.length > ALERT_MAX) names.push('…等 ' + vr.mismatches.length + ' 筆');
+      items.push({
+        sev: 'high',
+        title: '類別規則不一致 ' + vr.mismatches.length + ' 筆',
+        detail: '簽約／導入與類別填寫規則不符：' + names.join('；')
+      });
+    }
+
+    var maxLast = -Infinity;
+    for(var i = 0; i < rows.length; i++){
+      var rawI = rows[i]._raw;
+      if(!rawI) continue;
+      for(var m2 = 0; m2 < MILESTONES.length; m2++){
+        var sI = dateToSerial(rawI[MILESTONES[m2]]);
+        if(sI !== null && sI > maxLast) maxLast = sI;
+      }
+    }
+
+    var slow = [];
+    for(var j = 0; j < rows.length; j++){
+      var rj = rows[j];
+      var rawJ = rj._raw;
+      if(!rawJ) continue;
+      var s0 = dateToSerial(rawJ['填單日期']);
+      if(s0 === null) continue;
+      var liJ = lastMilestone(rj);
+      if(liJ < 0) continue;
+      var endKey = MILESTONES[liJ];
+      var eJ = dateToSerial(rawJ[endKey]);
+      if(eJ === null || eJ < s0) continue;
+      var days = eJ - s0;
+      if(days > SLOW_DAYS) slow.push({ name: nameOf(rj), days: days, end: endKey });
+    }
+    slow.sort(function(a, b){ return b.days - a.days; });
+    if(slow.length){
+      var slowNames = slow.slice(0, ALERT_MAX).map(function(o){
+        return o.name + '（' + o.days + ' 天，至' + o.end + '）';
+      });
+      if(slow.length > ALERT_MAX) slowNames.push('…等 ' + slow.length + ' 筆');
+      items.push({
+        sev: 'mid',
+        title: '時程過長個案 ' + slow.length + ' 筆（填單→最後里程碑超過 ' + SLOW_DAYS + ' 天）',
+        detail: '建議檢視流程卡關原因：' + slowNames.join('；')
+      });
+    }
+
+    var stale = [];
+    if(isFinite(maxLast) && maxLast > 0){
+      for(var s3 = 0; s3 < rows.length; s3++){
+        var rs = rows[s3];
+        if(classifyStatus(rs) !== '進行中') continue;
+        var rawS = rs._raw;
+        if(!rawS) continue;
+        var liS = lastMilestone(rs);
+        if(liS < 0) continue;
+        var ls = dateToSerial(rawS[MILESTONES[liS]]);
+        if(ls === null) continue;
+        var gap = maxLast - ls;
+        if(gap > STALE_DAYS) stale.push({ name: nameOf(rs), gap: gap, at: MILESTONES[liS] });
+      }
+    }
+    stale.sort(function(a, b){ return b.gap - a.gap; });
+    if(stale.length){
+      var staleNames = stale.slice(0, ALERT_MAX).map(function(o){
+        return o.name + '（停於' + o.at + '，落後 ' + o.gap + ' 天）';
+      });
+      if(stale.length > ALERT_MAX) staleNames.push('…等 ' + stale.length + ' 筆');
+      items.push({
+        sev: 'low',
+        title: '進行中停滯可能 ' + stale.length + ' 筆',
+        detail: '最後里程碑較全資料最新進度落後超過 ' + STALE_DAYS + ' 天，建議追蹤：' + staleNames.join('；')
+      });
+    }
+
+    if(!items.length){
+      var ok = document.createElement('p');
+      ok.className = 'note';
+      ok.style.color = 'var(--ok)';
+      ok.textContent = '✓ 目前無待留意事項（類別規則一致、無時程過長、無明顯停滯個案）。';
+      container.appendChild(ok);
+      return;
+    }
+
+    var list = document.createElement('div');
+    list.className = 'alert-list';
+    for(var a = 0; a < items.length; a++){
+      var it = items[a];
+      var item = document.createElement('div');
+      item.className = 'alert-item ' + it.sev;
+      var t = document.createElement('div');
+      t.className = 'alert-title';
+      t.textContent = it.title;
+      var d = document.createElement('div');
+      d.className = 'alert-detail';
+      d.textContent = it.detail;
+      item.appendChild(t);
+      item.appendChild(d);
+      list.appendChild(item);
+    }
+    container.appendChild(list);
+  }
+
+  function renderAlertsSection(model){
+    var sec = document.getElementById('alertSection');
+    var box = document.getElementById('alerts');
+    if(!sec || !box || !model || !model.rows) return;
+    renderAlerts(box, model);
     sec.hidden = false;
   }
 
@@ -1246,7 +1539,7 @@ var state = {
         var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: 'url(#timingBarGrad)' });
         bSvg.appendChild(fill);
         var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
-        val.textContent = smJ.avg.toFixed(1) + ' 天（n=' + smJ.n + '）';
+        val.textContent = smJ.avg.toFixed(1) + ' 天（有效樣本 ' + smJ.n + ' 筆）';
         bSvg.appendChild(val);
       }
       container.appendChild(bSvg);
@@ -1726,13 +2019,14 @@ var state = {
   // ---------------------------------------------------------------------------
   // 渲染：案件狀態圓餅（makeChart pie）+ 圖例 + 不合作細項註記
   // ---------------------------------------------------------------------------
-  function renderStatePie(container, byStatus){
+  function renderStatePie(container, byStatus, opts){
     var sb = computeStatusBuckets(byStatus);
     if(!sb.total){
       container.className = (container.className ? container.className + ' ' : '') + 'pending';
       container.textContent = '無資料';
       return;
     }
+    opts = opts || {};
     var h3 = document.createElement('h3');
     h3.textContent = '案件狀態占比（合計 ' + sb.total + '）';
     container.appendChild(h3);
@@ -1768,12 +2062,14 @@ var state = {
     container.appendChild(row);
 
     var nb = sb.nonCoopBreakdown;
-    var noteP = document.createElement('p');
-    noteP.className = 'note';
-    noteP.textContent = '不合作結案＝客戶婉拒（' + nb['客戶婉拒'] + '）＋聯繫失敗（' + nb['聯繫失敗'] +
-      '）＋考慮中/暫緩（' + nb['考慮中/暫緩'] + '）＋需求無法滿足(暫緩)（' + nb['需求無法滿足(暫緩)'] +
-      '）＋其他結案（' + nb['其他結案'] + '）＝' + sb.buckets[1].count + '。';
-    container.appendChild(noteP);
+    if(opts.note !== false){
+      var noteP = document.createElement('p');
+      noteP.className = 'note';
+      noteP.textContent = '不合作結案＝客戶婉拒（' + nb['客戶婉拒'] + '）＋聯繫失敗（' + nb['聯繫失敗'] +
+        '）＋考慮中/暫緩（' + nb['考慮中/暫緩'] + '）＋需求無法滿足(暫緩)（' + nb['需求無法滿足(暫緩)'] +
+        '）＋其他結案（' + nb['其他結案'] + '）＝' + sb.buckets[1].count + '。';
+      container.appendChild(noteP);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1887,39 +2183,6 @@ var state = {
   }
 
   // 圖表區段：狀態圓餅（左）＋課別長條（右）
-  function renderChartsSection(model){
-    var sec = document.getElementById('chartsSection');
-    var box = document.getElementById('charts');
-    if(!sec || !box || !model || !model.rows) return;
-    var stats = computeStats(model.rows);
-    box.textContent = '';
-    box.className = '';
-    var grid = document.createElement('div');
-    grid.className = 'charts-grid';
-
-    var pieCol = document.createElement('div');
-    pieCol.className = 'chart-col';
-    renderStatePie(pieCol, stats.byStatus);
-    grid.appendChild(pieCol);
-
-    var keCol = document.createElement('div');
-    keCol.className = 'chart-col';
-    var h3 = document.createElement('h3');
-    h3.textContent = '各課別客戶數';
-    keCol.appendChild(h3);
-    var keHost = document.createElement('div');
-    makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 185 });
-    keCol.appendChild(keHost);
-    var keNote = document.createElement('p');
-    keNote.className = 'note';
-    keNote.textContent = '依案件數降冪排列；數值相同時按北一課→北二課→北三課→中課→南一課→南二課→分轉部順序。';
-    keCol.appendChild(keNote);
-    grid.appendChild(keCol);
-
-    box.appendChild(grid);
-    sec.hidden = false;
-  }
-
   // 排行區段
   function renderRankSection(model){
     var sec = document.getElementById('rankSection');
@@ -2455,13 +2718,14 @@ var state = {
     if(!state.model || !state.model.rows) return;
     var filtered = applyFilters(state.model.rows, state.filters);
     var m = { headers: state.model.headers, rows: filtered, sheetName: state.model.sheetName };
+    renderHighlightsSection(m);
     renderStats(m);
     renderFunnelSection(m);
     renderTypeAnalysisSection(m);
     renderTimingSection(m);
     renderDropoffSection(m);
-    renderChartsSection(m);
     renderRankSection(m);
+    renderAlertsSection(m);
     renderListSection();
   }
 
@@ -2535,6 +2799,8 @@ var state = {
 
   async function handleFile(file){
     var name = (file && file.name) ? file.name : 'unknown';
+    var fnEl = document.getElementById('fileName');
+    if(fnEl){ fnEl.className = 'loading'; fnEl.textContent = '正在解析「' + name + '」…'; fnEl.hidden = false; }
     try{
       csvWarning = null;
       var model = null;
@@ -2558,7 +2824,7 @@ var state = {
       clearError();
       if(csvWarning) showError(csvWarning, true);
       var fn = document.getElementById('fileName');
-      if(fn){ fn.textContent = '已載入：' + name; fn.hidden = false; }
+      if(fn){ fn.className = ''; fn.textContent = '已載入：' + name; fn.hidden = false; }
       renderRawTable(model);
       initListControls();
       rebuild();
@@ -2569,6 +2835,7 @@ var state = {
       return model;
     }catch(err){
       showError(err && err.message ? err.message : String(err));
+      if(fnEl){ fnEl.className = ''; fnEl.textContent = '載入失敗：' + name; }
       return null;
     }
   }
@@ -2691,6 +2958,12 @@ var state = {
       parseCsv: parseCsv,
       classifyStatus: classifyStatus,
       computeStats: computeStats,
+      renderStats: renderStats,
+      renderHighlights: renderHighlights,
+      renderHighlightsSection: renderHighlightsSection,
+      SLOW_DAYS: SLOW_DAYS, STALE_DAYS: STALE_DAYS, ALERT_MAX: ALERT_MAX,
+      renderAlerts: renderAlerts,
+      renderAlertsSection: renderAlertsSection,
       MILESTONES: MILESTONES,
       computeMilestones: computeMilestones,
       computeFunnel: computeFunnel,
@@ -2720,7 +2993,6 @@ var state = {
       buildRankTable: buildRankTable,
       buildRankBlock: buildRankBlock,
       renderRankings: renderRankings,
-      renderChartsSection: renderChartsSection,
       renderRankSection: renderRankSection,
       PAGE_SIZE: PAGE_SIZE,
       LIST_COLUMNS: LIST_COLUMNS,
