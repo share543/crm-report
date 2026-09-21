@@ -51,6 +51,7 @@
   :root[data-theme="light"] .list-detail td,
   :root[data-theme="light"] .do-cust{ background:#eef0f4; }
   :root[data-theme="light"] svg rect[fill="#21262f"]{ fill:#e1e5ec; }
+  :root[data-theme="light"] svg rect[fill="#3a4150"]{ fill:#c3cad6; }
   :root[data-theme="light"] svg path[stroke="#0e1013"]{ stroke:#f5f6f8; }
   :root[data-theme="light"] svg text[fill="#9aa3b2"]{ fill:#5d6875; }
   *{ box-sizing:border-box; margin:0; padding:0; }
@@ -72,6 +73,12 @@
     padding:9px 18px; font-size:14px; cursor:pointer; }
   #dropzone button:hover{ filter:brightness(1.1); }
   #fileName{ margin-top:14px; color:var(--ok); font-weight:600; font-size:14px; }
+  #importProgress{ margin-top:14px; }
+  .progress-track{ height:8px; background:var(--card-2); border:1px solid var(--border);
+    border-radius:999px; overflow:hidden; }
+  .progress-fill{ height:100%; width:0%; background:var(--accent); border-radius:999px;
+    transition:width .15s ease; }
+  .progress-label{ color:var(--muted); font-size:12px; margin-top:6px; }
   #errorBox{ margin-top:14px; color:var(--error); font-size:14px; white-space:pre-wrap; }
   #errorBox.warning{ color:var(--warning); }
   section h2{ font-size:16px; margin-bottom:12px; color:var(--text); }
@@ -216,9 +223,16 @@
   #fileName.loading{ color:var(--muted); }
   .stat-value.accent{ color:var(--accent); }
   .hl-list{ list-style:none; margin-top:14px; display:flex; flex-direction:column; gap:6px; font-size:13px; }
-  .hl-list li{ padding-left:16px; position:relative; color:var(--text); }
+  .hl-list li{ padding-left:16px; position:relative; color:var(--text);
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
   .hl-list li::before{ content:''; position:absolute; left:2px; top:6px; width:6px; height:6px;
     border-radius:50%; background:var(--accent); }
+  .hl-jump{ margin-left:auto; color:var(--accent); text-decoration:none; white-space:nowrap;
+    font-size:12px; font-weight:650; border:1px solid var(--border); padding:3px 10px;
+    border-radius:999px; transition:border-color .12s, color .12s, background .12s; }
+  .hl-jump:hover{ border-color:var(--accent); background:var(--card-2); }
+  html{ scroll-behavior:smooth; }
+  section[id], #rank-devs, #rank-kes, #rank-stations{ scroll-margin-top:18px; }
   .alert-list{ margin-top:2px; }
   .alert-item{ background:var(--card-2); border:1px solid var(--border); border-left:4px solid var(--warning);
     border-radius:8px; padding:10px 14px; margin-bottom:10px; }
@@ -292,6 +306,12 @@
       <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
     </div>
     <p id="fileName" hidden aria-live="polite"></p>
+    <div id="importProgress" hidden aria-live="polite">
+      <div class="progress-track" role="progressbar" aria-label="匯入進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="importProgressFill" class="progress-fill"></div>
+      </div>
+      <p id="importProgressLabel" class="progress-label"></p>
+    </div>
     <p id="errorBox" hidden role="alert"></p>
   </section>
   <section class="card" id="periodCard" hidden>
@@ -420,11 +440,13 @@ var state = {
   // 純函式：案件狀態分類（無 DOM 依賴，可於 Node 測試）
   // ---------------------------------------------------------------------------
   // 依 結案（空白時退回 說明）欄文字順序匹配關鍵字；
-  // 其他含「結案」→ 其他結案；結案/說明皆空但 洽談內容 非空 → 進行中；否則 未啟動
+  // 其他含「結案」→ 其他結案；結案/說明皆空但 洽談內容 非空 或 初步接洽 有日期 → 進行中；
+  // 否則（結案/說明/洽談內容 皆空 且 初步接洽 無日期）→ 未啟動
   function classifyStatus(r){
     var jiean = (r && r['結案'] !== undefined && r['結案'] !== null) ? String(r['結案']).trim() : '';
     var shuoming = (r && r['說明'] !== undefined && r['說明'] !== null) ? String(r['說明']).trim() : '';
     var qiantan = (r && r['洽談內容'] !== undefined && r['洽談內容'] !== null) ? String(r['洽談內容']).trim() : '';
+    var chujia = (r && r['初步接洽'] !== undefined && r['初步接洽'] !== null) ? String(r['初步接洽']).trim() : '';
     var primary = jiean || shuoming;
     var keywords = [
       ['導入完成', '合作成功'],
@@ -437,7 +459,7 @@ var state = {
       if(primary.indexOf(keywords[i][0]) !== -1) return keywords[i][1];
     }
     if((jiean && jiean.indexOf('結案') !== -1) || (shuoming && shuoming.indexOf('結案') !== -1)) return '其他結案';
-    if(qiantan) return '進行中';
+    if(qiantan || chujia) return '進行中';
     return '未啟動';
   }
 
@@ -783,8 +805,27 @@ var state = {
   // ---------------------------------------------------------------------------
   // XLSX 解析（workbook / rels / sharedStrings / sheet）
   // ---------------------------------------------------------------------------
+  function updateImportProgress(pct, label){
+    var wrap = document.getElementById('importProgress');
+    if(!wrap) return;
+    var track = wrap.querySelector('.progress-track');
+    var fill = document.getElementById('importProgressFill');
+    var lbl = document.getElementById('importProgressLabel');
+    wrap.hidden = false;
+    var p = Math.max(0, Math.min(100, Math.round(pct || 0)));
+    if(fill) fill.style.width = p + '%';
+    if(track) track.setAttribute('aria-valuenow', String(p));
+    if(lbl) lbl.textContent = (label || '匯入中') + ' ' + p + '%';
+  }
+  function hideImportProgress(){
+    var wrap = document.getElementById('importProgress');
+    if(wrap) wrap.hidden = true;
+  }
+  var importDoneTimer = null;
+
   async function parseXlsx(arrayBuffer){
     var buf = new Uint8Array(arrayBuffer);
+    updateImportProgress(12, '掃描 ZIP 結構');
     var entries = parseZipEntries(buf);
     var entryMap = {};
     for(var i = 0; i < entries.length; i++){
@@ -798,8 +839,11 @@ var state = {
 
     if(typeof DOMParser === 'undefined') throw new Error('需要較新瀏覽器（缺少 DOMParser）');
     var strings = null;
-    if(entryMap['xl/sharedStrings.xml']) strings = parseSharedStrings(parseXml(await getEntry('xl/sharedStrings.xml')));
-
+    if(entryMap['xl/sharedStrings.xml']){
+      updateImportProgress(25, '解析共用字串');
+      strings = parseSharedStrings(parseXml(await getEntry('xl/sharedStrings.xml')));
+    }
+    updateImportProgress(40, '解析工作表清單');
     var wbDoc = parseXml(await getEntry('xl/workbook.xml'));
     var relsDoc = parseXml(await getEntry('xl/_rels/workbook.xml.rels'));
     var sheets = parseSheets(wbDoc, relsDoc);
@@ -810,9 +854,12 @@ var state = {
     if(!chosen) chosen = sheets[0];
     if(!chosen) throw new Error('workbook 沒有 sheet');
 
+    updateImportProgress(60, '解析資料工作表');
     var sheetDoc = parseXml(await getEntry(chosen.path));
+    updateImportProgress(72, '整理資料列');
     var matrix = readSheetMatrix(sheetDoc, strings);
     var sh = splitHeader(matrix);
+    updateImportProgress(92, '建立資料模型');
     return buildModel(sh.headers, sh.dataMatrix, chosen.name);
   }
 
@@ -1010,7 +1057,7 @@ var state = {
   }
 
   // ---------------------------------------------------------------------------
-  // 渲染：開場亮點摘要（第一眼：總覽數值＋最佳/待補強開發者＋主要流失節點）
+  // 渲染：開場亮點摘要（總覽數值＋最佳開發/完成導入者·課·站所＋主要流失節點，附跳轉錨點）
   // ---------------------------------------------------------------------------
   function renderHighlights(container, model){
     container.textContent = '';
@@ -1049,17 +1096,47 @@ var state = {
     var ul = document.createElement('ul');
     ul.className = 'hl-list';
 
-    var devs = computeRanking(model.rows, '開發者', 'total');
-    var li1 = document.createElement('li');
-    li1.textContent = (devs && devs.length)
-      ? '最佳開發者：' + devs[0].name + '（' + devs[0].total + ' 筆・導入完成 ' + devs[0].import + '）'
-      : '最佳開發者：無資料';
-    ul.appendChild(li1);
-    var li2 = document.createElement('li');
-    li2.textContent = (devs && devs.length > 1)
-      ? '待補強開發者：' + devs[devs.length - 1].name + '（' + devs[devs.length - 1].total + ' 筆，低於其他開發者）'
-      : '待補強開發者：無資料';
-    ul.appendChild(li2);
+    function hlItem(text, target, label){
+      var li = document.createElement('li');
+      var span = document.createElement('span');
+      span.textContent = text;
+      li.appendChild(span);
+      if(target){
+        var a = document.createElement('a');
+        a.className = 'hl-jump';
+        a.href = '#' + target;
+        a.textContent = label;
+        li.appendChild(a);
+      }
+      ul.appendChild(li);
+    }
+    function topOf(arr){
+      if(!arr) return null;
+      for(var i2 = 0; i2 < arr.length; i2++){
+        if(arr[i2].name === '(空白)') continue;
+        return arr[i2];
+      }
+      return null;
+    }
+    function bestPhrase(rows, field, metric){
+      var top = topOf(computeRanking(rows, field, metric));
+      if(!top) return '無資料';
+      return (metric === 'import')
+        ? top.name + '（導入完成 ' + top.import + ' 筆・案件總數 ' + top.total + '）'
+        : top.name + '（' + top.total + ' 筆・導入完成 ' + top.import + '）';
+    }
+    var zdRows = [];
+    for(var zr = 0; zr < model.rows.length; zr++){
+      var zz = model.rows[zr]['類別'];
+      if(zz !== undefined && zz !== null && String(zz).trim() === '零擔') zdRows.push(model.rows[zr]);
+    }
+
+    hlItem('最佳開發課（零擔）：' + bestPhrase(zdRows, '課別', 'total'), 'rank-kes', '前往課別排行');
+    hlItem('最佳開發站所（零擔）：' + bestPhrase(zdRows, '站所', 'total'), 'rank-stations', '前往站所排行');
+    hlItem('最佳開發者（零擔）：' + bestPhrase(zdRows, '開發者', 'total'), 'rank-devs', '前往開發者排行');
+    hlItem('最佳完成導入課：' + bestPhrase(model.rows, '課別', 'import'), 'rank-kes', '前往課別排行');
+    hlItem('最佳完成導入站所：' + bestPhrase(model.rows, '站所', 'import'), 'rank-stations', '前往站所排行');
+    hlItem('最佳完成導入者：' + bestPhrase(model.rows, '開發者', 'import'), 'rank-devs', '前往開發者排行');
 
     var drop = computeDropOff(model.rows);
     var nodeSum = {};
@@ -1077,11 +1154,9 @@ var state = {
     for(var nn in nodeSum){
       if(nodeSum[nn] > topNodeCount){ topNodeCount = nodeSum[nn]; topNode = nn; }
     }
-    var li3 = document.createElement('li');
-    li3.textContent = topNodeCount
+    hlItem(topNodeCount
       ? '主要流失節點：' + topNode + '（' + topNodeCount + ' 筆），建議優先檢視此階段停滯原因'
-      : '主要流失節點：無（本批無非合作完成客戶）';
-    ul.appendChild(li3);
+      : '主要流失節點：無（本批無非合作完成客戶）', 'dropoffSection', '前往流失分析');
 
     container.appendChild(ul);
   }
@@ -2023,31 +2098,52 @@ var state = {
   }
 
   function makeVBars(container, data, opts){
-    var colW = opts.colW || 82, barH = opts.barH || 170, padTop = opts.title ? 34 : 14, labH = 28;
+    var colW = opts.colW || 84, barH = opts.barH || 170, labH = 26, valGap = 9;
+    var mx = opts.mx || 42;
+    var padTop = opts.title ? 58 : 40;
     var max = 1;
     for(var i = 0; i < data.length; i++) if(data[i].count > max) max = data[i].count;
-    var W = Math.max(data.length * colW + 60, 300);
-    var H = padTop + barH + labH + 6;
-    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%' });
-    if(opts.title){
-      var title = svgEl('text', { x: 0, y: 20, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
-      title.textContent = opts.title;
-      svg.appendChild(title);
+    var W = Math.max(mx + data.length * colW + 26, 340);
+    var H = padTop + barH + labH + 14;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', role: 'img',
+      'aria-label': (opts.title || '長條圖') });
+
+    var defs = svgEl('defs', {});
+    for(var g = 0; g < data.length; g++){
+      var color = data[g].color || chartDefaultColor(g);
+      var lg = svgEl('linearGradient', { id: 'vbBarGrad' + g, x1: '0', y1: '0', x2: '0', y2: '1' });
+      lg.appendChild(svgEl('stop', { offset: '0', 'stop-color': color, 'stop-opacity': '1' }));
+      lg.appendChild(svgEl('stop', { offset: '1', 'stop-color': color, 'stop-opacity': '0.45' }));
+      defs.appendChild(lg);
     }
+    svg.appendChild(defs);
+
     var baseline = padTop + barH;
+    if(opts.title){
+      var ttl = svgEl('text', { x: mx, y: padTop - 26, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      ttl.textContent = opts.title;
+      svg.appendChild(ttl);
+    }
     for(var d = 0; d < data.length; d++){
       var it = data[d];
-      var x = padTop + d * colW + colW / 2;
+      var cx = mx + d * colW + colW / 2;
       var bw = Math.max(it.count > 0 ? 4 : 0, Math.round(it.count / max * barH));
-      var bar = svgEl('rect', { x: x - colW / 2 + 10, y: baseline - bw, width: colW - 20, height: bw, rx: 4, fill: it.color || chartDefaultColor(d) });
+      var track = svgEl('rect', { x: cx - colW / 2 + 8, y: baseline - barH, width: colW - 16, height: barH, rx: 4, fill: '#21262f' });
+      svg.appendChild(track);
+      var bar = svgEl('rect', { x: cx - colW / 2 + 8, y: baseline - bw, width: colW - 16, height: bw, rx: 4, fill: 'url(#vbBarGrad' + d + ')' });
       svg.appendChild(bar);
-      var v = svgEl('text', { x: x, y: baseline - bw - 6, 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+      var tip = svgEl('title', {});
+      tip.textContent = it.label + '：' + it.count + ' 筆';
+      bar.appendChild(tip);
+      var v = svgEl('text', { x: cx, y: baseline - bw - valGap, 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
       v.textContent = it.count;
       svg.appendChild(v);
-      var lb = svgEl('text', { x: x, y: baseline + 18, 'text-anchor': 'middle', 'font-size': '12', fill: '#e8eaef' });
+      var lb = svgEl('text', { x: cx, y: baseline + 18, 'text-anchor': 'middle', 'font-size': '12', fill: '#9aa3b2' });
       lb.textContent = it.label;
       svg.appendChild(lb);
     }
+    var axis = svgEl('rect', { x: 0, y: baseline - 0.5, width: W, height: 1, fill: '#3a4150' });
+    svg.appendChild(axis);
     container.appendChild(svg);
     return svg;
   }
@@ -2164,9 +2260,10 @@ var state = {
     return wrap;
   }
 
-  function buildRankBlock(container, rows, field, metric, selectable, title){
+  function buildRankBlock(container, rows, field, metric, selectable, title, blockId){
     var block = document.createElement('div');
     block.className = 'rank-block';
+    if(blockId) block.id = blockId;
     var h3 = document.createElement('h3');
     h3.textContent = title;
     block.appendChild(h3);
@@ -2207,9 +2304,9 @@ var state = {
     }
     container.className = '';
     var metric = defaultMetric || 'total';
-    buildRankBlock(container, rows, '開發者', metric, true, '開發者排行');
-    buildRankBlock(container, rows, '課別', 'total', false, '課別排行（案件數＋導入完成數）');
-    buildRankBlock(container, rows, '站所', 'total', false, '站所排行（案件數＋導入完成數）');
+    buildRankBlock(container, rows, '開發者', metric, true, '開發者排行', 'rank-devs');
+    buildRankBlock(container, rows, '課別', 'total', false, '課別排行（案件數＋導入完成數）', 'rank-kes');
+    buildRankBlock(container, rows, '站所', 'total', false, '站所排行（案件數＋導入完成數）', 'rank-stations');
     var noteP = document.createElement('p');
     noteP.className = 'note';
     noteP.textContent = '相同分數並列同名次（如「廖崇嵩／謝益偉」同 8 筆即同名次）。' +
@@ -2984,19 +3081,24 @@ var state = {
     var name = (file && file.name) ? file.name : 'unknown';
     var fnEl = document.getElementById('fileName');
     if(fnEl){ fnEl.className = 'loading'; fnEl.textContent = '正在解析「' + name + '」…'; fnEl.hidden = false; }
+    if(importDoneTimer){ clearTimeout(importDoneTimer); importDoneTimer = null; }
     try{
       csvWarning = null;
       var model = null;
       var ext = name.toLowerCase().split('.').pop();
       if(ext === 'xlsx' || ext === 'xlsm'){
+        updateImportProgress(3, '讀取檔案');
         var ab = await file.arrayBuffer();
         model = await parseXlsx(ab);
       } else if(ext === 'csv'){
         var text = await readFileText(file);
+        updateImportProgress(60, '解析 CSV 內容');
         model = parseCsv(text);
       } else {
         throw new Error('不支援的檔案類型：' + name + '（請用 .xlsx 或 .csv）');
       }
+      updateImportProgress(100, '完成');
+      importDoneTimer = setTimeout(function(){ hideImportProgress(); }, 900);
 
       state.model = model;
       state.fileName = name;
@@ -3021,6 +3123,8 @@ var state = {
       if(pBtn) pBtn.disabled = false;
       return model;
     }catch(err){
+      if(importDoneTimer){ clearTimeout(importDoneTimer); importDoneTimer = null; }
+      hideImportProgress();
       showError(err && err.message ? err.message : String(err));
       if(fnEl){ fnEl.className = ''; fnEl.textContent = '載入失敗：' + name; }
       return null;
