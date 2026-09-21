@@ -98,11 +98,53 @@
   .stat-value{ font-size:26px; font-weight:700; }
   .stat-value.ok{ color:var(--ok); }
   .stat-label{ color:var(--muted); font-size:13px; margin-top:2px; }
-  .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .stat-cats{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; padding-top:9px;
+    border-top:1px dashed var(--border); }
+  .stat-cat{ display:inline-flex; align-items:center; gap:6px; background:var(--card-2);
+    border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
+  .stat-cat .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .stat-cat .sc-name{ font-size:12px; color:var(--muted); }
+  .stat-cat .sc-count{ font-size:12px; font-weight:700; color:var(--text); }
+  .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
-    padding:10px 12px; display:flex; justify-content:space-between; align-items:baseline; }
+    padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+  .ke-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .ke-card .ke-val{ font-size:20px; font-weight:650; color:var(--text); }
   .ke-card .ke-name{ color:var(--muted); font-size:13px; }
+  .ke-card .stat-cats{ margin-top:0; padding-top:8px; border-top:1px dashed var(--border); }
+  .ke-card .stat-cat{ padding:2px 8px; }
+  .ke-card .stat-cat .sc-name{ font-size:11px; }
+  .ke-card .stat-cat .sc-count{ font-size:11px; }
+  .pg-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
+  .pg-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
+  .pg-table th{ position:sticky; top:0; background:var(--card-2); color:var(--muted);
+    font-weight:600; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
+    white-space:nowrap; z-index:2; }
+  .pg-table th.pg-th-sticky{ left:0; z-index:3; }
+  .pg-table td{ padding:7px 10px; border-bottom:1px solid #20242c; white-space:nowrap; vertical-align:middle; }
+  .pg-table tbody tr:last-child td{ border-bottom:0; }
+  .pg-table tbody tr:hover td{ background:#1b202a; }
+  .pg-table td.pg-ke{ position:sticky; left:0; background:var(--card-2); color:var(--text);
+    font-weight:650; z-index:1; }
+  .pg-table tbody tr:hover td.pg-ke{ background:#242a36; }
+  .pg-table tr.pg-total td{ background:var(--card-2); font-weight:700; border-top:1px solid var(--border); }
+  .pg-table tr.pg-total td.pg-ke{ background:#242a36; }
+  .pg-table tr.pg-total:hover td{ background:#242a36; }
+  .pg-table tr.pg-total:hover td.pg-ke{ background:#2a3140; }
+  .pg-table td.pg-coop{ color:var(--ok); font-weight:650; }
+  .pg-table th.pg-coop-head{ color:var(--ok); }
+  .pg-cell{ display:flex; flex-direction:column; gap:4px; min-width:46px; }
+  .pg-count{ font-size:13px; font-weight:650; line-height:1.1; }
+  .pg-cell.is-empty .pg-count{ color:var(--muted); font-weight:400; }
+  .pg-track{ height:5px; background:var(--card); border-radius:5px; overflow:hidden;
+    border:1px solid var(--border); }
+  .pg-fill{ display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),#8fb6ff); }
+  .pg-cell.pg-coop-cell .pg-fill{ background:linear-gradient(90deg,var(--ok),#8fe3b0); }
+  .pg-note{ color:var(--muted); font-size:12px; margin-top:10px; line-height:1.6; }
+  .tab-frame{ position:relative; margin-top:14px; }
+  .tab-unit{ position:absolute; top:-11px; right:8px; z-index:4; font-size:11px;
+    color:var(--muted); background:var(--card); border:1px solid var(--border);
+    border-radius:999px; padding:2px 10px; white-space:nowrap; }
   .note{ color:var(--muted); font-size:12px; margin-top:10px; line-height:1.6; }
   .pending{ color:var(--muted); font-size:13px; }
   .type-analysis{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
@@ -265,8 +307,19 @@
     .muted, .pending, .note, .list-summary, .pg-info, .subtitle,
     .type-bars-title, .type-count, .do-cat-total, .do-node-count,
     .stat-label, .ke-name, .rank-control, .do-node-label, .do-chip{ color:#333; }
+    .stat-cats{ border-top-color:#bbb; }
+    .stat-cat{ background:#fff; border-color:#bbb; }
+    .stat-cat .sc-name{ color:#333; }
+    .stat-cat .sc-count{ color:#000; }
     .ok, .stat-value.ok{ color:#157a3a; }
     .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
+    .pg-table th, .pg-table td, .pg-table td.pg-ke, .pg-table tr.pg-total td,
+    .pg-table tr.pg-total td.pg-ke{ background:#fff; border-color:#ccc; }
+    .pg-table tbody tr:hover td{ background:#fff; }
+    .pg-table tr.pg-total td{ border-top:1px solid #999; }
+    .pg-track{ background:#eee; border-color:#ccc; }
+    .pg-fill{ print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+    .tab-unit{ background:#fff; border-color:#bbb; color:#333; }
     .do-content, .list-detail-inner p{ color:#222; }
     .alert-item{ background:#fff; border-color:#bbb; }
     .alert-title{ color:#000; }
@@ -319,6 +372,8 @@
     <div class="period-row">
       <span class="period-chips" id="periodChips">
         <button type="button" class="period-chip" data-preset="all" aria-pressed="true">全部數據</button>
+        <button type="button" class="period-chip" data-preset="thisWeek">本週</button>
+        <button type="button" class="period-chip" data-preset="lastWeek">上週</button>
         <button type="button" class="period-chip" data-preset="thisMonth">本月</button>
         <button type="button" class="period-chip" data-preset="lastMonth">上個月</button>
         <button type="button" class="period-chip" data-preset="thisQuarter">本季</button>
@@ -346,6 +401,13 @@
     <h3 class="subtitle">各課別客戶數</h3>
     <div id="keCards"></div>
     <div id="keBarWrap"></div>
+  </section>
+  <section class="card" id="progressSection" hidden>
+    <h2>進度追蹤表 <span class="muted">類別・課別 · 填單日期→結案</span></h2>
+    <h3 class="subtitle">依類別</h3>
+    <div id="progressCatTable" class="pending">待產生</div>
+    <h3 class="subtitle">依課別</h3>
+    <div id="progressTable" class="pending">待產生</div>
   </section>
   <section class="card" id="typeSection" hidden>
     <h2>案件類型分析</h2>
@@ -508,6 +570,40 @@ var state = {
 
   // 別名（Task 編號口語亦稱 computeFunnel）
   function computeFunnel(rows){ return computeMilestones(rows); }
+
+  // 純函式：各群組進度交叉表（無 DOM 依賴）
+  // 依群組固定排序（order 內者依序，其餘依名稱排序）；
+  // 每群回傳 { group, total, stages:{各里程碑:該日期欄非空筆數}, coop:合作成功筆數 }。
+  var KE_ORDER = ['北一課','北二課','北三課','中課','南一課','南二課','分轉部'];
+  var CAT_ORDER = ['零擔','1P(SCM)','3P(MO+)','甲配'];
+
+  function computeProgress(rows, field, order){
+    var by = {};
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var g = (r && r[field] !== undefined && r[field] !== null && String(r[field]).trim() !== '')
+        ? String(r[field]).trim() : '(空白)';
+      if(!by[g]) by[g] = { group: g, total: 0, stages: {}, coop: 0, _o: (order.indexOf(g) === -1) ? 999 : order.indexOf(g) };
+      var o = by[g];
+      o.total++;
+      for(var m = 0; m < MILESTONES.length; m++){
+        var v = r[MILESTONES[m]];
+        if(v !== undefined && v !== null && String(v).trim() !== '') o.stages[MILESTONES[m]] = (o.stages[MILESTONES[m]] || 0) + 1;
+      }
+      if(classifyStatus(r) === '合作成功') o.coop++;
+    }
+    var list = [];
+    for(var k in by) list.push(by[k]);
+    list.sort(function(a, b){
+      if(a._o !== b._o) return a._o - b._o;
+      return a.group < b.group ? -1 : (a.group > b.group ? 1 : 0);
+    });
+    for(var d = 0; d < list.length; d++) delete list[d]._o;
+    return { groups: list, stageOrder: MILESTONES.slice() };
+  }
+
+  function computeKeProgress(rows){ return computeProgress(rows, '課別', KE_ORDER); }
+  function computeCatProgress(rows){ return computeProgress(rows, '類別', CAT_ORDER); }
 
   // 純函式：最後到達里程碑（無 DOM 依賴，可於 Node 測試）
   // 由 MILESTONES 由後往前找第一個日期欄非空的 index；全部空白 → -1
@@ -959,17 +1055,21 @@ var state = {
     section.hidden = false;
   }
 
-  function keCard(name, val){
+  function keCard(name, val, cats){
     var c = document.createElement('div');
     c.className = 'ke-card';
+    var top = document.createElement('div');
+    top.className = 'ke-top';
     var n = document.createElement('span');
     n.className = 'ke-name';
     n.textContent = name;
     var v = document.createElement('span');
     v.className = 'ke-val';
     v.textContent = String(val);
-    c.appendChild(n);
-    c.appendChild(v);
+    top.appendChild(n);
+    top.appendChild(v);
+    c.appendChild(top);
+    if(cats && hasAnyCat(cats)) appendStatCats(c, cats);
     return c;
   }
 
@@ -983,9 +1083,9 @@ var state = {
 
     box.textContent = '';
     var big = [
-      { label: '總客戶數', value: String(stats.total), cls: '' },
-      { label: '合作結案', value: String(stats.coop), cls: 'ok' },
-      { label: '不合作結案', value: String(stats.nonCoop), cls: '' },
+      { label: '總客戶數', value: String(stats.total), cls: '', cats: catsBreakdown(model.rows, null) },
+      { label: '合作結案', value: String(stats.coop), cls: 'ok', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }) },
+      { label: '不合作結案', value: String(stats.nonCoop), cls: '', cats: catsBreakdown(model.rows, function(r){ var s = classifyStatus(r); return s !== '合作成功' && s !== '進行中' && s !== '未啟動'; }) },
       { label: '成案率', value: stats.rate + '%', cls: '' }
     ];
     var grid = document.createElement('div');
@@ -1001,6 +1101,7 @@ var state = {
       l.textContent = big[i].label;
       c.appendChild(v);
       c.appendChild(l);
+      if(big[i].cats) appendStatCats(c, big[i].cats);
       grid.appendChild(c);
     }
     box.appendChild(grid);
@@ -1023,14 +1124,15 @@ var state = {
       if(order.indexOf(k) === -1) remaining.push(k);
     }
     remaining.sort();
+    var keCats = catsByKe(model.rows);
     var keGrid = document.createElement('div');
     keGrid.className = 'ke-grid';
     for(var oi = 0; oi < order.length; oi++){
       if(stats.byKe[order[oi]] === undefined) continue;
-      keGrid.appendChild(keCard(order[oi], stats.byKe[order[oi]]));
+      keGrid.appendChild(keCard(order[oi], stats.byKe[order[oi]], keCats[order[oi]]));
     }
     for(var ri = 0; ri < remaining.length; ri++){
-      keGrid.appendChild(keCard(remaining[ri], stats.byKe[remaining[ri]]));
+      keGrid.appendChild(keCard(remaining[ri], stats.byKe[remaining[ri]], keCats[remaining[ri]]));
     }
     keBox.appendChild(keGrid);
 
@@ -1057,6 +1159,235 @@ var state = {
   }
 
   // ---------------------------------------------------------------------------
+  // 渲染：進度追蹤表（類別 + 課別 × 里程碑 → 合作結案，每格計數＋迷你進度條）
+  // ---------------------------------------------------------------------------
+  function renderProgressSection(model){
+    var sec = document.getElementById('progressSection');
+    var catBox = document.getElementById('progressCatTable');
+    var keBox = document.getElementById('progressTable');
+    if(!sec || !catBox || !keBox || !model || !model.rows) return;
+    catBox.textContent = '';
+    keBox.textContent = '';
+    if(!model.rows.length){
+      catBox.className = 'pending';
+      catBox.textContent = '無資料';
+      keBox.hidden = true;
+      sec.hidden = false;
+      return;
+    }
+    catBox.className = '';
+    keBox.hidden = false;
+    var showCat = computeCatProgress(model.rows);
+    var showKe = computeKeProgress(model.rows);
+    catBox.appendChild(withUnitLabel(buildProgressTable(showCat, '類別'), '單位：客戶數'));
+    keBox.appendChild(withUnitLabel(buildProgressTable(showKe, '課別'), '單位：客戶數'));
+    if(!showCat.groups.length){ catBox.className = 'pending'; catBox.textContent = '無資料'; }
+
+    var note = document.createElement('p');
+    note.className = 'pg-note';
+    note.textContent = '每格下方長條＝該群組「填單數」的轉化比例。各里程碑數 = 該日期欄非空筆數；' +
+      '1P/3P 客戶「簽約」空白故簽約數偏低，「導入」多於「簽約」屬正常。與分析期間＋篩選同步縮放。';
+    keBox.appendChild(note);
+    sec.hidden = false;
+  }
+
+  // 輔助：將表格包進 .tab-frame 並在右上角加上單位標籤
+  function withUnitLabel(inner, unit){
+    var frame = document.createElement('div');
+    frame.className = 'tab-frame';
+    if(unit){
+      var lbl = document.createElement('span');
+      lbl.className = 'tab-unit';
+      lbl.textContent = unit;
+      frame.appendChild(lbl);
+    }
+    frame.appendChild(inner);
+    return frame;
+  }
+
+  // 輔助：依 computeProgress 資料建立交叉表（不含表格外註記）
+  function buildProgressTable(data, groupLabel){
+    var wrap = document.createElement('div');
+    wrap.className = 'pg-wrap';
+    var table = document.createElement('table');
+    table.className = 'pg-table';
+
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    var thGroup = document.createElement('th');
+    thGroup.className = 'pg-th-sticky';
+    thGroup.textContent = groupLabel || '欄位群組';
+    hr.appendChild(thGroup);
+    for(var s = 0; s < data.stageOrder.length; s++){
+      var th = document.createElement('th');
+      th.textContent = data.stageOrder[s];
+      hr.appendChild(th);
+    }
+    var thCoop = document.createElement('th');
+    thCoop.className = 'pg-coop-head';
+    thCoop.textContent = '合作結案';
+    hr.appendChild(thCoop);
+    var thTotal = document.createElement('th');
+    thTotal.textContent = '填單數';
+    hr.appendChild(thTotal);
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    var totals = { stages: {}, coop: 0, total: 0 };
+    for(var r = 0; r < data.groups.length; r++){
+      var g = data.groups[r];
+      totals.total += g.total;
+      totals.coop += g.coop;
+      for(var ts = 0; ts < data.stageOrder.length; ts++){
+        totals.stages[data.stageOrder[ts]] = (totals.stages[data.stageOrder[ts]] || 0) + (g.stages[data.stageOrder[ts]] || 0);
+      }
+      var tr = document.createElement('tr');
+      var tdGroup = document.createElement('td');
+      tdGroup.className = 'pg-ke';
+      tdGroup.textContent = g.group;
+      tr.appendChild(tdGroup);
+      for(var s2 = 0; s2 < data.stageOrder.length; s2++){
+        var key = data.stageOrder[s2];
+        var count = g.stages[key] || 0;
+        tr.appendChild(progressCell(count, g.total));
+      }
+      tr.appendChild(progressCell(g.coop, g.total, true));
+      var tdTotal = document.createElement('td');
+      tdTotal.textContent = String(g.total);
+      tr.appendChild(tdTotal);
+      tbody.appendChild(tr);
+    }
+
+    var trT = document.createElement('tr');
+    trT.className = 'pg-total';
+    var tdGroupT = document.createElement('td');
+    tdGroupT.className = 'pg-ke';
+    tdGroupT.textContent = '全體合計';
+    trT.appendChild(tdGroupT);
+    for(var s3 = 0; s3 < data.stageOrder.length; s3++){
+      var key3 = data.stageOrder[s3];
+      trT.appendChild(progressCell(totals.stages[key3] || 0, totals.total));
+    }
+    trT.appendChild(progressCell(totals.coop, totals.total, true));
+    var tdTotalT = document.createElement('td');
+    tdTotalT.textContent = String(totals.total);
+    trT.appendChild(tdTotalT);
+    tbody.appendChild(trT);
+
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // 輔助：計數 + 迷你進度條儲存格（denominator 為 0 時不繪條）
+  function progressCell(count, denominator, coop){
+    var td = document.createElement('td');
+    if(coop) td.className = 'pg-coop';
+    td.appendChild(progressCellInner(count, denominator, coop));
+    return td;
+  }
+
+  function progressCellInner(count, denominator, coop){
+    var cell = document.createElement('div');
+    cell.className = 'pg-cell' + (coop ? ' pg-coop-cell' : '');
+    var n = document.createElement('div');
+    n.className = 'pg-count';
+    n.textContent = String(count);
+    cell.appendChild(n);
+    if(count && denominator){
+      var track = document.createElement('div');
+      track.className = 'pg-track';
+      track.setAttribute('role', 'progressbar');
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', String(denominator));
+      track.setAttribute('aria-valuenow', String(count));
+      track.setAttribute('aria-label', String(Math.round(count / denominator * 100)) + '%');
+      var fill = document.createElement('div');
+      fill.className = 'pg-fill';
+      var rnd = Math.max(2, Math.round(count / denominator * 100));
+      fill.style.width = Math.min(100, rnd) + '%';
+      track.appendChild(fill);
+      cell.appendChild(track);
+    } else {
+      cell.classList.add('is-empty');
+    }
+    return cell;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 共用：類別細分（統計卡與課別小卡的「零擔 ：N」藥丸排）
+  // ---------------------------------------------------------------------------
+  var CATS_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
+  var CAT_COLORS = { '零擔': '#4f8eff', '1P(SCM)': '#5ad98b', '3P(MO+)': '#ffc94d', '其他': '#9aa3b2' };
+
+  function catOf(r){
+    var cv = r && r['類別'];
+    var c = (cv !== undefined && cv !== null && String(cv).trim() !== '') ? String(cv).trim() : '(空白)';
+    return (CATS_ORDER.indexOf(c) !== -1 && c !== '其他') ? c : '其他';
+  }
+
+  // 依 filterFn 篩選後，各類別計數（含 0 值省略的產出）
+  function catsBreakdown(rows, filterFn){
+    var out = {};
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(filterFn && !filterFn(r)) continue;
+      var k = catOf(r);
+      out[k] = (out[k] || 0) + 1;
+    }
+    return out;
+  }
+
+  // 各課別 → 各類別計數（keKey 與 computeStats.byKe 一致）
+  function catsByKe(rows){
+    var out = {};
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var ke = (r && r['課別']) || '(空白)';
+      out[ke] = out[ke] || {};
+      var k = catOf(r);
+      out[ke][k] = (out[ke][k] || 0) + 1;
+    }
+    return out;
+  }
+
+  function hasAnyCat(counts){
+    if(!counts) return false;
+    for(var i = 0; i < CATS_ORDER.length; i++){
+      if(counts[CATS_ORDER[i]]) return true;
+    }
+    return false;
+  }
+
+  // 依 counts（{零擔:n,…}）產出藥丸排並附加到 container
+  function appendStatCats(container, counts){
+    var cb = document.createElement('div');
+    cb.className = 'stat-cats';
+    for(var ci = 0; ci < CATS_ORDER.length; ci++){
+      var kc = CATS_ORDER[ci];
+      if(!counts[kc]) continue;
+      var cd = document.createElement('div');
+      cd.className = 'stat-cat';
+      var dot = document.createElement('span');
+      dot.className = 'sc-dot';
+      dot.style.background = CAT_COLORS[kc];
+      var cs = document.createElement('span');
+      cs.className = 'sc-name';
+      cs.textContent = kc;
+      var cn = document.createElement('b');
+      cn.className = 'sc-count';
+      cn.textContent = '：' + counts[kc];
+      cd.appendChild(dot);
+      cd.appendChild(cs);
+      cd.appendChild(cn);
+      cb.appendChild(cd);
+    }
+    if(cb.children.length) container.appendChild(cb);
+    return cb;
+  }
+
+  // ---------------------------------------------------------------------------
   // 渲染：開場亮點摘要（總覽數值＋最佳開發/完成導入者·課·站所＋主要流失節點，附跳轉錨點）
   // ---------------------------------------------------------------------------
   function renderHighlights(container, model){
@@ -1072,11 +1403,11 @@ var state = {
     var grid = document.createElement('div');
     grid.className = 'stat-grid';
     var big = [
-      { label: '總客戶數', value: String(stats.total), cls: '' },
-      { label: '成案率', value: stats.rate + '%', cls: 'ok' },
-      { label: '合作結案', value: String(stats.coop), cls: '' },
-      { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent' },
-      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '' }
+      { label: '總客戶數', value: String(stats.total), cls: '', cats: catsBreakdown(model.rows, null) },
+      { label: '合作結案', value: String(stats.coop), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }) },
+      { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '進行中'; }) },
+      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) },
+      { label: '成案率', value: stats.rate + '%', cls: 'ok' }
     ];
     for(var i = 0; i < big.length; i++){
       var c = document.createElement('div');
@@ -1089,6 +1420,7 @@ var state = {
       l.textContent = big[i].label;
       c.appendChild(v);
       c.appendChild(l);
+      if(big[i].cats) appendStatCats(c, big[i].cats);
       grid.appendChild(c);
     }
     container.appendChild(grid);
@@ -2290,7 +2622,7 @@ var state = {
       block.appendChild(control);
     }
     var items = computeRanking(rows, field, metric);
-    block.appendChild(buildRankTable(items, metric, (field === '開發者' ? '開發者' : (field === '課別' ? '課別' : '站所')), selectable));
+    block.appendChild(withUnitLabel(buildRankTable(items, metric, (field === '開發者' ? '開發者' : (field === '課別' ? '課別' : '站所')), selectable), '單位：客戶數'));
     container.appendChild(block);
   }
 
@@ -2405,14 +2737,26 @@ var state = {
   // ---------------------------------------------------------------------------
   // 純函式：分析期間（依「填單日期」定位客戶進場月份；無 DOM 依賴，可於 Node 測試）
   // ---------------------------------------------------------------------------
-  // period = { preset:'all'|'thisMonth'|'lastMonth'|'thisQuarter'|'thisYear'|'lastYear',
-  //            from:'YYYY-MM', to:'YYYY-MM' }；custom 時 preset='all' 且 from/to 為自訂開放端
-  var PERIOD_PRESETS = ['all','thisMonth','lastMonth','thisQuarter','thisYear','lastYear'];
+  // period = { preset:'all'|'thisWeek'|'lastWeek'|'thisMonth'|'lastMonth'|'thisQuarter'|'thisYear'|'lastYear',
+  //            from:'YYYY-MM', to:'YYYY-MM' }；custom 時 preset='all' 且 from/to 為自訂開放端。
+  // 本週/上週以自然週（週一起算）定位，from/to 為 'YYYY-MM-DD'。
+  var PERIOD_PRESETS = ['all','thisWeek','lastWeek','thisMonth','lastMonth','thisQuarter','thisYear','lastYear'];
 
   function periodKey(dateStr){
     if(!dateStr) return '';
     var m = /^(\d{4})-(\d{2})/.exec(String(dateStr));
     return m ? m[1] + '-' + m[2] : '';
+  }
+
+  function periodKeyDay(dateStr){
+    if(!dateStr) return '';
+    var d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
+    return d ? d[1] + '-' + d[2] + '-' + d[3] : '';
+  }
+
+  function isoDate(d){
+    var yy = d.getFullYear(), mm = d.getMonth() + 1, dd = d.getDate();
+    return yy + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd;
   }
 
   function monthKey(year, month01){
@@ -2427,7 +2771,19 @@ var state = {
     var y = now.getFullYear();
     var m = now.getMonth() + 1;
     var from = String(period.from || ''), to = String(period.to || '');
-    if(p === 'thisMonth'){ from = monthKey(y, m); to = from; }
+    if(p === 'thisWeek'){
+      var td = now.getDate(), dw = new Date(y, m - 1, td).getDay();
+      var offW = (dw + 6) % 7;
+      from = isoDate(new Date(y, m - 1, td - offW));
+      to = isoDate(new Date(y, m - 1, td - offW + 6));
+    }
+    else if(p === 'lastWeek'){
+      var td2 = now.getDate(), dw2 = new Date(y, m - 1, td2).getDay();
+      var offW2 = (dw2 + 6) % 7;
+      from = isoDate(new Date(y, m - 1, td2 - offW2 - 7));
+      to = isoDate(new Date(y, m - 1, td2 - offW2 - 1));
+    }
+    else if(p === 'thisMonth'){ from = monthKey(y, m); to = from; }
     else if(p === 'lastMonth'){
       var d = new Date(y, m - 2, 1);
       from = monthKey(d.getFullYear(), d.getMonth() + 1); to = from;
@@ -2444,8 +2800,11 @@ var state = {
   }
 
   function periodMatches(k, from, to){
-    if(from && k < from) return false;
-    if(to && k > to) return false;
+    // from/to 為月份（YYYY-MM）或日期（YYYY-MM-DD）；依較長層級比較
+    if(from && from.length >= 10 && k < from) return false;
+    if(to && to.length >= 10 && k > to) return false;
+    if(from && from.length < 10 && k.slice(0, 7) < from.slice(0, 7)) return false;
+    if(to && to.length < 10 && k.slice(0, 7) > to.slice(0, 7)) return false;
     return true;
   }
 
@@ -2453,9 +2812,10 @@ var state = {
   function applyPeriod(rows, period, now){
     var range = periodRange(period, now);
     if(!range) return { rows: rows, excluded: 0 };
+    var week = (period && (period.preset === 'thisWeek' || period.preset === 'lastWeek')) || false;
     var out = [], excl = 0;
     for(var i = 0; i < rows.length; i++){
-      var k = periodKey(rows[i]['填單日期']);
+      var k = week ? periodKeyDay(rows[i]['填單日期']) : periodKey(rows[i]['填單日期']);
       if(!k){ excl++; continue; }
       if(periodMatches(k, range.from, range.to)) out.push(rows[i]);
     }
@@ -2467,6 +2827,14 @@ var state = {
     var range = periodRange(period, now);
     if(!range) return '全部數據';
     var from = range.from, to = range.to;
+    if(from && to && from.length >= 10 && to.length >= 10){
+      var fg = /^(\d{4})-(\d{2})-(\d{2})/.exec(from);
+      var tg = /^(\d{4})-(\d{2})-(\d{2})/.exec(to);
+      if(fg && tg){
+        if(from === to) return fg[1] + ' 年 ' + Number(fg[2]) + ' 月 ' + Number(fg[3]) + ' 日';
+        return fg[1] + ' 年 ' + Number(fg[2]) + ' 月 ' + Number(fg[3]) + ' 日～' + Number(tg[2]) + ' 月 ' + Number(tg[3]) + ' 日';
+      }
+    }
     if(from && !to) return Number(from.slice(5,7)) + ' 月 ' + from.slice(0,4) + '（含）之後';
     if(!from && to) return Number(to.slice(5,7)) + ' 月 ' + to.slice(0,4) + '（含）以前';
     if(from === to){
@@ -2722,7 +3090,7 @@ var state = {
     var pf = document.getElementById('periodFrom');
     var pt = document.getElementById('periodTo');
     if(pf && pt){
-      if(isPreset && range){ pf.value = range.from; pt.value = range.to; }
+      if(isPreset && range){ pf.value = String(range.from).slice(0,7); pt.value = String(range.to).slice(0,7); }
       else { pf.value = state.period.from || ''; pt.value = state.period.to || ''; }
     }
   }
@@ -2999,6 +3367,7 @@ var state = {
     var m = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
     renderHighlightsSection(m);
     renderStats(m);
+    renderProgressSection(m);
     renderFunnelSection(m);
     renderTypeAnalysisSection(m);
     renderTimingSection(m);
@@ -3260,6 +3629,8 @@ var state = {
       computeMilestones: computeMilestones,
       computeFunnel: computeFunnel,
       lastMilestone: lastMilestone,
+      computeKeProgress: computeKeProgress,
+      computeCatProgress: computeCatProgress,
       computeDropOff: computeDropOff,
       buildDropOffCustomer: buildDropOffCustomer,
       renderDropOff: renderDropOff,
@@ -3297,6 +3668,7 @@ var state = {
       applyFilters: applyFilters,
       PERIOD_PRESETS: PERIOD_PRESETS,
       periodKey: periodKey,
+      periodKeyDay: periodKeyDay,
       monthKey: monthKey,
       periodRange: periodRange,
       periodMatches: periodMatches,
