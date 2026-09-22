@@ -116,13 +116,13 @@
   .stat-cat .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
   .stat-cat .sc-name{ font-size:12px; color:var(--muted); }
   .stat-cat .sc-count{ font-size:12px; font-weight:700; color:var(--text); }
-  .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
-    padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
   .ke-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .ke-card .ke-val{ font-size:20px; font-weight:650; color:var(--text); }
   .ke-card .ke-name{ color:var(--muted); font-size:13px; }
-  .ke-card .stat-cats{ margin-top:0; padding-top:8px; border-top:1px dashed var(--border); }
+  .ke-card .stat-cats{ margin-top:0; padding-top:4px; border-top:1px dashed var(--border); }
   .ke-card .stat-cat{ padding:2px 8px; }
   .ke-card .stat-cat .sc-name{ font-size:11px; }
   .ke-card .stat-cat .sc-count{ font-size:11px; }
@@ -344,6 +344,19 @@
   #presentOverlay .pv-dock button:hover{ border-color:var(--accent); }
   #presentOverlay .pv-exit{ margin-left:auto; }
   #presentOverlay .pv-hint{ font-size:12px; color:var(--muted); margin-left:auto; }
+  #presentOverlay .pv-pages-panel{ position:absolute; right:18px; top:52px; width:240px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; z-index:1001; max-height:70vh; overflow:auto;
+    box-shadow:0 8px 28px rgba(0,0,0,.35); }
+  #presentOverlay .pv-pages-title{ font-size:13px; font-weight:700; color:var(--text); margin-bottom:8px; }
+  #presentOverlay .pv-page-item{ display:flex; align-items:center; gap:8px; font-size:13px;
+    color:var(--text); padding:4px 0; cursor:pointer; }
+  #presentOverlay .pv-page-item input{ width:15px; height:15px; accent-color:var(--accent); cursor:pointer; }
+  #presentOverlay .pv-pages-row{ display:flex; gap:6px; margin-top:8px; padding-top:8px;
+    border-top:1px solid var(--border); }
+  #presentOverlay .pv-pages-row button{ flex:1; font-size:12px; padding:4px 6px;
+    background:var(--card-2); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; }
+  #presentOverlay .pv-pages-row button:hover{ border-color:var(--accent); }
   @media print{ #presentOverlay{ display:none !important; } }
   /* 簡報中議題卡只讀：隱藏編輯入口與編輯器 */
   body.pv-mode #agendaBlock .mini-btn,
@@ -520,9 +533,6 @@
   </section>
   <section class="card" id="statSection" hidden>
     <h2 id="statTitle">案件狀態統計</h2>
-    <div id="statCards"></div>
-    <div id="statePieWrap"></div>
-    <h3 class="subtitle">各課別客戶數</h3>
     <div id="keCards"></div>
     <div id="keBarWrap"></div>
   </section>
@@ -580,7 +590,8 @@ var state = {
     model: null,      // { headers:[], rows:[], sheetName:string }
     fileName: null,
     period: { preset: 'all', from: '', to: '' },
-    agenda: []        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
+    agenda: [],        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
+    presentEnabled: {} // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
   };
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
@@ -1305,49 +1316,12 @@ var state = {
     return c;
   }
 
-  // 渲染：案件狀態統計卡（4 大卡 + 各課別小卡）
+  // 渲染：案件狀態統計（各課別客戶數卡 → 各課別客戶數長條圖）
   function renderStats(model){
     var sec = document.getElementById('statSection');
-    var box = document.getElementById('statCards');
     var keBox = document.getElementById('keCards');
-    if(!sec || !box || !keBox || !model || !model.rows) return;
+    if(!sec || !keBox || !model || !model.rows) return;
     var stats = computeStats(model.rows);
-
-    box.textContent = '';
-    var big = [
-      { label: '總客戶數', value: String(stats.total), cls: '', cats: catsBreakdown(model.rows, null) },
-      { label: '合作結案', value: String(stats.coop), cls: 'ok', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }) },
-      { label: '不合作結案', value: String(stats.nonCoop), cls: '', cats: catsBreakdown(model.rows, function(r){ var s = classifyStatus(r); return s !== '合作成功' && s !== '進行中' && s !== '未啟動'; }) },
-      { label: '成案率', value: stats.rate + '%', cls: '' }
-    ];
-    var grid = document.createElement('div');
-    grid.className = 'stat-grid';
-    for(var i = 0; i < big.length; i++){
-      var c = document.createElement('div');
-      c.className = 'stat-card';
-      var v = document.createElement('div');
-      v.className = 'stat-value' + (big[i].cls ? ' ' + big[i].cls : '');
-      v.textContent = big[i].value;
-      var l = document.createElement('div');
-      l.className = 'stat-label';
-      l.textContent = big[i].label;
-      c.appendChild(v);
-      c.appendChild(l);
-      if(big[i].cats) appendStatCats(c, big[i].cats);
-      grid.appendChild(c);
-    }
-    box.appendChild(grid);
-
-    var note = document.createElement('p');
-    note.className = 'note';
-    note.textContent = '不合作結案 ' + stats.nonCoop + '（聯繫失敗 ' + (stats.byStatus['聯繫失敗'] || 0) +
-      '・婉拒 ' + (stats.byStatus['客戶婉拒'] || 0) +
-      '・考慮中 ' + (stats.byStatus['考慮中/暫緩'] || 0) +
-      '・需求無法滿足 ' + (stats.byStatus['需求無法滿足(暫緩)'] || 0) +
-      '・其他結案 ' + (stats.byStatus['其他結案'] || 0) + '）' +
-      '・進行中 ' + (stats.byStatus['進行中'] || 0) +
-      '・未啟動 ' + (stats.byStatus['未啟動'] || 0);
-    box.appendChild(note);
 
     keBox.textContent = '';
     var order = ['北一課', '北二課', '北三課', '中課', '南一課', '南二課', '分轉部'];
@@ -1368,23 +1342,12 @@ var state = {
     }
     keBox.appendChild(keGrid);
 
-    var pieWrap = document.getElementById('statePieWrap');
-    if(pieWrap){ pieWrap.textContent = ''; renderStatePie(pieWrap, stats.byStatus, { note: false }); }
-
     var keBarWrap = document.getElementById('keBarWrap');
     if(keBarWrap){
       keBarWrap.textContent = '';
-      var keH = document.createElement('h3');
-      keH.className = 'subtitle';
-      keH.textContent = '各課別客戶數長條圖（依案件數降冪）';
-      keBarWrap.appendChild(keH);
       var keHost = document.createElement('div');
-      makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 185 });
+      makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 130 });
       keBarWrap.appendChild(keHost);
-      var keNote = document.createElement('p');
-      keNote.className = 'note';
-      keNote.textContent = '數值相同時按北一課→北二課→北三課→中課→南一課→南二課→分轉部順序。';
-      keBarWrap.appendChild(keNote);
     }
 
     sec.hidden = false;
@@ -4091,7 +4054,8 @@ var state = {
       savedAt: new Date().toISOString(),
       name: state.fileName || '資料',
       model: state.model,
-      agenda: state.agenda
+      agenda: state.agenda,
+      presentEnabled: state.presentEnabled
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -4136,7 +4100,7 @@ var state = {
   function persistData(){
     try{
       if(!state.model) return;
-      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model, agenda: state.agenda });
+      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
     }catch(_){}
   }
@@ -4157,6 +4121,7 @@ var state = {
   function clearStoredData(){
     try{ localStorage.removeItem(DATA_STORAGE_KEY); }catch(_){}
     state.agenda = [];
+    state.presentEnabled = {};
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
     renderAgenda();
@@ -4194,8 +4159,29 @@ var state = {
     { id: 'alertSection', title: '待留意事項' },
     { id: 'listSection', title: '案件清單' }
   ];
+
+  // 簡報頁面勾選正規化（未給定一律視為勾選；純函式）
+  function normalizePresentEnabled(raw){
+    var out = {};
+    for(var pi = 0; pi < PRESENT_SLIDES.length; pi++){
+      var pid = PRESENT_SLIDES[pi].id;
+      out[pid] = raw && typeof raw === 'object' && raw[pid] !== undefined ? !!raw[pid] : true;
+    }
+    return out;
+  }
+
+  // 依勾選動態組出簡報頁清單（維持固定順序；純函式）
+  function buildPresentSlides(enabled){
+    var en = normalizePresentEnabled(enabled);
+    var out = [];
+    for(var pi = 0; pi < PRESENT_SLIDES.length; pi++){
+      if(en[PRESENT_SLIDES[pi].id]) out.push(PRESENT_SLIDES[pi]);
+    }
+    return out;
+  }
+
   var PRESENT_PERIOD_LABELS = { all:'全部期間', thisWeek:'本週', lastWeek:'上週', thisMonth:'本月', lastMonth:'上月', thisQuarter:'本季', thisYear:'今年', lastYear:'去年' };
-  var presentState = { on:false, index:0, origins:null, moved:null, overlay:null };
+  var presentState = { on:false, index:0, origins:null, moved:null, overlay:null, slides: PRESENT_SLIDES };
 
   function buildPresentOverlay(){
     var ov = document.createElement('div');
@@ -4217,12 +4203,14 @@ var state = {
     }
     var prevBtn = buttonEl('pvPrev', '← 上一頁');
     var nextBtn = buttonEl('pvNext', '下一頁 →');
+    var pagesBtn = buttonEl('pvPagesBtn', '頁面 ✎');
     var hint = document.createElement('span'); hint.className = 'pv-hint'; hint.id = 'pvHint';
     hint.textContent = '←/→ 或空白換頁 · D 切到期間下拉 · Esc 結束';
     var exitBtn = buttonEl('pvExit', '結束簡報（Esc）');
     exitBtn.className = 'pv-exit';
     dock.appendChild(b); dock.appendChild(sel);
     dock.appendChild(prevBtn); dock.appendChild(nextBtn);
+    dock.appendChild(pagesBtn);
     dock.appendChild(hint); dock.appendChild(exitBtn);
     ov.appendChild(top); ov.appendChild(body); ov.appendChild(dock);
 
@@ -4231,9 +4219,99 @@ var state = {
     prevBtn.addEventListener('click', function(){ showPresentSlide(presentState.index - 1); });
     nextBtn.addEventListener('click', function(){ showPresentSlide(presentState.index + 1); });
     exitBtn.addEventListener('click', leavePresent);
+    var pagesPanel = buildPresentPagesPanel(ov);
+    pagesBtn.addEventListener('click', function(){
+      syncPagesPanel(pagesPanel);
+      pagesPanel.hidden = !pagesPanel.hidden;
+    });
     document.body.appendChild(ov);
     presentState.overlay = ov;
     return ov;
+  }
+
+  // 簡報頁面勾選面板：列出所有可投影片區段，勾選才列入簡報；變更即存檔。
+  function buildPresentPagesPanel(ov){
+    var panel = document.createElement('div');
+    panel.className = 'pv-pages-panel';
+    panel.id = 'pvPagesPanel';
+    panel.hidden = true;
+    var title = document.createElement('div');
+    title.className = 'pv-pages-title';
+    title.textContent = '簡報頁面（勾選才列入）';
+    panel.appendChild(title);
+    for(var i = 0; i < PRESENT_SLIDES.length; i++){
+      var s = PRESENT_SLIDES[i];
+      var lab = document.createElement('label');
+      lab.className = 'pv-page-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = s.id;
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(s.title));
+      (function(c){
+        c.addEventListener('change', function(){
+          if(!c.checked){
+            var pending = {};
+            for(var k in state.presentEnabled) pending[k] = state.presentEnabled[k];
+            pending[c.value] = false;
+            if(!buildPresentSlides(pending).length){ c.checked = true; return; }
+          }
+          state.presentEnabled[c.value] = c.checked;
+          persistData();
+          applyPresentSelection();
+        });
+      })(cb);
+      panel.appendChild(lab);
+    }
+    var row = document.createElement('div');
+    row.className = 'pv-pages-row';
+    var allBtn = buttonEl('pvPagesAll', '全部勾選');
+    allBtn.addEventListener('click', function(){
+      state.presentEnabled = {};
+      var boxes = panel.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++) boxes[b].checked = true;
+      persistData();
+      applyPresentSelection();
+    });
+    var noneBtn = buttonEl('pvPagesNone', '全部取消');
+    noneBtn.addEventListener('click', function(){
+      state.presentEnabled = {};
+      for(var si = 0; si < PRESENT_SLIDES.length; si++) state.presentEnabled[PRESENT_SLIDES[si].id] = false;
+      var boxes = panel.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++) boxes[b].checked = false;
+      persistData();
+      applyPresentSelection();
+    });
+    var doneBtn = buttonEl('pvPagesDone', '完成');
+    doneBtn.addEventListener('click', function(){ panel.hidden = true; });
+    row.appendChild(allBtn); row.appendChild(noneBtn); row.appendChild(doneBtn);
+    panel.appendChild(row);
+    ov.appendChild(panel);
+    return panel;
+  }
+
+  // 勾選狀態同步到面板 checkbox
+  function syncPagesPanel(panel){
+    if(!panel) return;
+    var en = normalizePresentEnabled(state.presentEnabled);
+    var boxes = panel.querySelectorAll('input[type="checkbox"]');
+    for(var b = 0; b < boxes.length; b++){
+      boxes[b].checked = !!en[boxes[b].value];
+    }
+  }
+
+  // 勾選變更後，簡報中的目前頁清單即時重建（不小於一頁）
+  function applyPresentSelection(){
+    if(!presentState.on) return;
+    var next = buildPresentSlides(state.presentEnabled);
+    if(!next.length) return;
+    presentState.slides = next;
+    var still = false;
+    for(var i = 0; i < next.length; i++){
+      if(next[i].id === presentState.moved) still = true;
+    }
+    var idx = still ? Math.min(presentState.index, next.length - 1) : next.length - 1;
+    showPresentSlide(idx);
   }
 
   function buttonEl(id, text){
@@ -4246,16 +4324,19 @@ var state = {
 
   function enterPresent(){
     if(!state.model || !state.model.rows || presentState.on) return;
+    var slides = buildPresentSlides(state.presentEnabled);
+    if(!slides.length) return;
     var per = document.getElementById('periodCard');
     if(per) per.hidden = false;
     var overlay = presentState.overlay || buildPresentOverlay();
     var origins = {};
     var i, el;
-    for(i = 0; i < PRESENT_SLIDES.length; i++){
-      el = document.getElementById(PRESENT_SLIDES[i].id);
-      if(el) origins[PRESENT_SLIDES[i].id] = { parent: el.parentNode, ref: el.nextSibling };
+    for(i = 0; i < slides.length; i++){
+      el = document.getElementById(slides[i].id);
+      if(el) origins[slides[i].id] = { parent: el.parentNode, ref: el.nextSibling };
     }
     presentState.on = true;
+    presentState.slides = slides;
     presentState.origins = origins;
     presentState.moved = null;
     presentState.index = 0;
@@ -4273,6 +4354,7 @@ var state = {
     }
     presentState.origins = null;
     presentState.on = false;
+    presentState.slides = PRESENT_SLIDES;
     if(presentState.overlay) presentState.overlay.hidden = true;
     document.body.classList.remove('pv-mode');
     document.removeEventListener('keydown', presentOnKey);
@@ -4288,7 +4370,8 @@ var state = {
 
   function showPresentSlide(i){
     if(!presentState.on) return;
-    var n = PRESENT_SLIDES.length;
+    var n = presentState.slides ? presentState.slides.length : 0;
+    if(!n) return;
     if(i < 0) i = 0;
     if(i >= n) i = n - 1;
     presentState.index = i;
@@ -4296,7 +4379,7 @@ var state = {
       restorePresentSlide(presentState.moved);
       presentState.moved = null;
     }
-    var slide = PRESENT_SLIDES[i];
+    var slide = presentState.slides[i];
     var el = document.getElementById(slide.id);
     if(el){
       var body = document.getElementById('pvBody');
@@ -4314,11 +4397,20 @@ var state = {
   function presentOnKey(e){
     var t = e.target;
     if(t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')){
-      if(e.key === 'Escape'){ leavePresent(); e.preventDefault(); }
+      if(e.key === 'Escape'){
+        var p2 = document.getElementById('pvPagesPanel');
+        if(p2 && !p2.hidden){ p2.hidden = true; }
+        else { leavePresent(); }
+        e.preventDefault();
+      }
       return;
     }
     var k = e.key;
-    if(k === 'Escape'){ leavePresent(); e.preventDefault(); return; }
+    if(k === 'Escape'){
+      var panel = document.getElementById('pvPagesPanel');
+      if(panel && !panel.hidden){ panel.hidden = true; e.preventDefault(); return; }
+      leavePresent(); e.preventDefault(); return;
+    }
     if(k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' '){
       e.preventDefault();
       showPresentSlide(presentState.index + 1);
@@ -4330,7 +4422,7 @@ var state = {
       showPresentSlide(0);
     } else if(k === 'End'){
       e.preventDefault();
-      showPresentSlide(PRESENT_SLIDES.length - 1);
+      showPresentSlide((presentState.slides ? presentState.slides.length : 1) - 1);
     } else if(k === 'd' || k === 'D'){
       var sel = document.getElementById('pvPeriod');
       if(sel) sel.focus();
@@ -4343,6 +4435,10 @@ var state = {
     renderAgenda();
     persistData();
   }
+  function restorePresentConfig(d){
+    state.presentEnabled = normalizePresentEnabled(d && d.presentEnabled);
+    persistData();
+  }
   function tryRestoreData(){
     var emb = document.getElementById('crm-embedded');
     if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
@@ -4351,6 +4447,7 @@ var state = {
         if(payload && payload.model && Array.isArray(payload.model.headers) && Array.isArray(payload.model.rows)){
           applyModel(payload.model, payload.name || '內嵌資料', { source: '內嵌副本' });
           restoreAgenda(payload);
+          restorePresentConfig(payload);
           return true;
         }
       }catch(_){}
@@ -4359,6 +4456,7 @@ var state = {
     if(stored){
       applyModel(stored.model, stored.name || '記憶資料', { source: '記憶' });
       restoreAgenda(stored);
+      restorePresentConfig(stored);
       return true;
     }
     return false;
@@ -4569,6 +4667,8 @@ var state = {
       syncPeriodControls: syncPeriodControls,
       PRESENT_SLIDES: PRESENT_SLIDES,
       PRESENT_PERIOD_LABELS: PRESENT_PERIOD_LABELS,
+      normalizePresentEnabled: normalizePresentEnabled,
+      buildPresentSlides: buildPresentSlides,
       enterPresent: enterPresent,
       leavePresent: leavePresent,
       showPresentSlide: showPresentSlide,
