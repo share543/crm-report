@@ -50,6 +50,8 @@
   :root[data-theme="light"] .list-row-open td,
   :root[data-theme="light"] .list-detail td,
   :root[data-theme="light"] .do-cust{ background:#eef0f4; }
+  :root[data-theme="light"] .tl{ background:#fff; border-color:#ccc; }
+  :root[data-theme="light"] .tl-item.tl-undated .tl-badge{ background:#eef0f4; border-color:#bbb; color:#333; }
   :root[data-theme="light"] svg rect[fill="#21262f"]{ fill:#e1e5ec; }
   :root[data-theme="light"] svg rect[fill="#3a4150"]{ fill:#c3cad6; }
   :root[data-theme="light"] svg path[stroke="#0e1013"]{ stroke:#f5f6f8; }
@@ -179,6 +181,7 @@
     color:var(--muted); background:var(--card); border:1px solid var(--border);
     border-radius:999px; padding:2px 10px; white-space:nowrap; }
   .note{ color:var(--muted); font-size:12px; margin-top:10px; line-height:1.6; }
+  .muted{ color:var(--muted); }
   .pending{ color:var(--muted); font-size:13px; }
   .type-analysis{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
   .type-pie{ flex:0 0 auto; }
@@ -277,6 +280,17 @@
     color:var(--muted); white-space:pre-wrap; }
   .list-detail-inner p:last-child{ margin-bottom:0; }
   .list-detail-inner .do-field-label{ color:var(--accent); font-weight:600; }
+  .tl{ display:flex; flex-direction:column; gap:5px; margin:2px 0 8px; padding:8px 10px;
+    background:#10131a; border:1px solid var(--border); border-radius:8px; }
+  .tl-cap{ font-size:11px; color:var(--muted); margin-bottom:2px; }
+  .tl-item{ display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:1.6;
+    color:var(--text); }
+  .tl-badge{ flex:0 0 auto; font-family:ui-monospace,monospace; font-size:11px; color:#0a0d13;
+    background:var(--accent); padding:1px 7px; border-radius:999px; min-width:34px; text-align:center; }
+  .tl-item.tl-undated .tl-badge{ background:var(--card-2); color:var(--muted);
+    border:1px solid var(--border); }
+  .tl-text{ color:var(--muted); white-space:pre-wrap; }
+  .list-detail-inner p:last-child{ margin-bottom:0; }
   .list-pager{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:12px; }
   .list-pager button{ background:var(--card-2); color:var(--text); border:1px solid var(--border);
     border-radius:6px; padding:5px 12px; font-size:13px; cursor:pointer; }
@@ -366,6 +380,8 @@
     .do-field-label{ color:#173d85; }
     .do-list{ border-top:1px dashed #999; }
     .list-row-open td, .list-detail td, .list-row:hover td{ background:#fff; }
+    .tl{ background:#fff; border-color:#bbb; }
+    .tl-item.tl-undated .tl-badge{ background:#efefef; border-color:#bbb; color:#333; }
     .table-wrap{ overflow:visible; max-height:none; border:1px solid #ccc; }
     table{ width:100% !important; font-size:11px; }
     thead th{ position:static; background:#e8e8e8; color:#000; z-index:auto;
@@ -513,6 +529,18 @@ var state = {
     var y = iso.slice(0,4);
     if(y < '1900' || y > '9999') return '';
     return iso.slice(0,10);
+  }
+
+  // 純函式：日期欄強制解析——先吃 Excel 序號／ISO；不行再用自由文字（M/D、M月D日）以 yearHint 補年。
+  // 資料常見把「洽談註記」填進日期欄（如 初步接洽 = '08/27 mail'），此函式確保「有日期文字即算該里程碑發生」。
+  function coerceDate(value, yearHint){
+    var iso = excelSerialToDate(value);
+    if(iso) return iso;
+    var entries = parseTimeline(value, yearHint);
+    for(var i = 0; i < entries.length; i++){
+      if(entries[i].date) return entries[i].date;
+    }
+    return '';
   }
 
   // 純函式：欄位代號（如 "AC12"）→ 0 起算欄 index
@@ -998,7 +1026,7 @@ var state = {
     var headerRow = matrix[idx];
     var headers = [];
     for(var j = 0; j < headerRow.length; j++){
-      headers.push((headerRow[j] === undefined || headerRow[j] === null) ? '' : String(headerRow[j]));
+      headers.push((headerRow[j] === undefined || headerRow[j] === null) ? '' : String(headerRow[j]).trim());
     }
     return { headers: headers, dataMatrix: matrix.slice(idx + 1) };
   }
@@ -1014,9 +1042,17 @@ var state = {
       for(var i = 0; i < hlen; i++){
         var h = headers[i];
         if(h === '') continue;
-        var v = (cells && cells[i] !== undefined && cells[i] !== null) ? String(cells[i]) : '';
+        var v = (cells && cells[i] !== undefined && cells[i] !== null) ? String(cells[i]).trim() : '';
         raw[h] = v;
-        row[h] = DATE_COLS.has(h) ? excelSerialToDate(v) : v;
+      }
+      var fillYear = '';
+      var fy = excelSerialToDate(raw['填單日期']);
+      if(fy) fillYear = fy.slice(0, 4);
+      for(var i2 = 0; i2 < hlen; i2++){
+        var h2 = headers[i2];
+        if(h2 === '') continue;
+        var v2 = (cells && cells[i2] !== undefined && cells[i2] !== null) ? String(cells[i2]).trim() : '';
+        row[h2] = DATE_COLS.has(h2) ? coerceDate(v2, fillYear) : v2;
       }
       row._raw = raw;
       rows.push(row);
@@ -1874,6 +1910,30 @@ var state = {
       });
     }
 
+    var missingDev = [], missingCont = [], missingSta = [];
+    for(var d2 = 0; d2 < rows.length; d2++){
+      var rm = rows[d2];
+      if(classifyStatus(rm) === '未啟動') continue;
+      if(fieldStr(rm, '開發者') === '') missingDev.push(rm);
+      if(fieldStr(rm, '聯絡窗口') === '') missingCont.push(rm);
+      if(stationNamesOf(rm).length === 0) missingSta.push(rm);
+    }
+    if(missingDev.length || missingCont.length || missingSta.length){
+      var mp = [];
+      if(missingDev.length){
+        var devNames = missingDev.slice(0, ALERT_MAX).map(nameOf);
+        if(missingDev.length > ALERT_MAX) devNames.push('等');
+        mp.push('開發者未填 ' + missingDev.length + ' 筆（' + devNames.join('、') + '）');
+      }
+      if(missingCont.length) mp.push('聯絡窗口未填 ' + missingCont.length + ' 筆');
+      if(missingSta.length) mp.push('收貨站所未填 ' + missingSta.length + ' 筆');
+      items.push({
+        sev: 'low',
+        title: '資料缺漏 ' + (missingDev.length + missingCont.length + missingSta.length) + ' 筆（非未啟動案件）',
+        detail: '影響排行與追蹤完整度，建議補齊：' + mp.join('；')
+      });
+    }
+
     if(!items.length){
       var ok = document.createElement('p');
       ok.className = 'note';
@@ -2545,6 +2605,23 @@ var state = {
     return '(空白)';
   }
 
+  // 純函式：站所代碼展開——一客戶可能跨多站所（以 換行／斜線 分隔）。
+  // 回傳去首尾空白、內部去重後的站所清單；無站所 → 空陣列。供排行計入各站所各 1 筆。
+  function stationNamesOf(row){
+    var v = (row && row['收貨站所'] !== undefined && row['收貨站所'] !== null)
+      ? String(row['收貨站所']) : '';
+    if(v.trim() === '') return [];
+    var seen = {}, out = [];
+    var parts = v.split(/[\n/]+/);
+    for(var i = 0; i < parts.length; i++){
+      var s = parts[i].trim();
+      if(!s || seen[s]) continue;
+      seen[s] = 1;
+      out.push(s);
+    }
+    return out;
+  }
+
   var RANK_METRICS = { total: '案件總數', coop: '合作結案數', import: '導入完成數', sign: '簽約數' };
 
   // 排行：依 field 分組，計 total／coop（合作成功）／import（結案含「導入完成」）／sign（簽約有值）；
@@ -2557,9 +2634,7 @@ var state = {
       : (field === '開發者') ? ['開發者']
       : [field];
     var groups = {};
-    for(var i = 0; i < rows.length; i++){
-      var r = rows[i];
-      var name = fieldValue(r, keys);
+    function bump(name, r){
       if(!groups[name]) groups[name] = { name: name, total: 0, coop: 0, import: 0, sign: 0 };
       var g = groups[name];
       g.total++;
@@ -2568,6 +2643,17 @@ var state = {
       if(j !== undefined && j !== null && String(j).indexOf('導入完成') !== -1) g.import++;
       var s = r['簽約'];
       if(s !== undefined && s !== null && String(s).trim() !== '') g.sign++;
+    }
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var names;
+      if(field === '站所'){
+        names = stationNamesOf(r);
+        if(!names.length) names = ['(空白)'];
+      } else {
+        names = [fieldValue(r, keys)];
+      }
+      for(var ni = 0; ni < names.length; ni++) bump(names[ni], r);
     }
     var arr = [];
     for(var k in groups) arr.push(groups[k]);
@@ -2842,13 +2928,18 @@ var state = {
       for(var v = 0; v < cells.length; v++){
         var td = document.createElement('td');
         if(v === 4){
-          var track = document.createElement('span');
-          track.className = 'rank-bar-track';
-          var fill = document.createElement('span');
-          fill.className = 'rank-bar-fill';
-          if(max > 0 && it[metric] > 0) fill.style.width = Math.round(it[metric] / max * 100) + '%';
-          track.appendChild(fill);
-          td.appendChild(track);
+          if(max > 0 && it[metric] > 0){
+            var track = document.createElement('span');
+            track.className = 'rank-bar-track';
+            var fill = document.createElement('span');
+            fill.className = 'rank-bar-fill';
+            fill.style.width = Math.round(it[metric] / max * 100) + '%';
+            track.appendChild(fill);
+            td.appendChild(track);
+          }
+        } else if(v === 2 && it[metric] === 0){
+          td.textContent = cells[v];
+          td.classList.add('muted');
         } else {
           td.textContent = cells[v];
         }
@@ -2979,6 +3070,34 @@ var state = {
     return false;
   }
 
+  // 純函式：洽談內容 → 時序條目（無 DOM 依賴，可於 Node 測試）
+  // 依「換行／全形分號」切成多段；每段取第一個日期 token「M/D」或「M月D日」。
+  // 命中 → { date:'YYYY-MM-DD'（依 yearHint 補年）, label:'8/25'（原始 token）, text }；
+  // 未命中日期 → { date:null, label:'', text }。列表維持原始順序，跨/月邊界不推斷年份。
+  function parseTimeline(text, yearHint){
+    var out = [];
+    var year = /^(\d{4})/.test(String(yearHint || '')) ? Number(String(yearHint).slice(0, 4)) : 0;
+    var segs = String(text || '').split(/[\n；]+/);
+    function pad2(n){ return (n < 10 ? '0' : '') + n; }
+    for(var i = 0; i < segs.length; i++){
+      var seg = String(segs[i] || '').trim();
+      if(!seg) continue;
+      var dm = /(\d{1,2})\/(\d{1,2})|(\d{1,2})月(\d{1,2})日/.exec(seg);
+      if(dm){
+        var mo = Number(dm[1] || dm[3]);
+        var da = Number(dm[2] || dm[4]);
+        if(mo >= 1 && mo <= 12 && da >= 1 && da <= 31){
+          var label = dm[0];
+          var date = (year > 0) ? (year + '-' + pad2(mo) + '-' + pad2(da)) : null;
+          out.push({ date: date, label: label, text: seg });
+          continue;
+        }
+      }
+      out.push({ date: null, label: '', text: seg });
+    }
+    return out;
+  }
+
   // 純函式：下拉選項值比對（''=全部；BLANK_BUCKET=空白桶；其餘精確比對）
   function matchDrop(filterVal, actual){
     if(filterVal === '' || filterVal === undefined || filterVal === null) return true;
@@ -3104,8 +3223,8 @@ var state = {
         return fg[1] + ' 年 ' + Number(fg[2]) + ' 月 ' + Number(fg[3]) + ' 日～' + Number(tg[2]) + ' 月 ' + Number(tg[3]) + ' 日';
       }
     }
-    if(from && !to) return Number(from.slice(5,7)) + ' 月 ' + from.slice(0,4) + '（含）之後';
-    if(!from && to) return Number(to.slice(5,7)) + ' 月 ' + to.slice(0,4) + '（含）以前';
+    if(from && !to) return from.slice(0,4) + ' 年 ' + Number(from.slice(5,7)) + ' 月（含）之後';
+    if(!from && to) return to.slice(0,4) + ' 年 ' + Number(to.slice(5,7)) + ' 月（含）以前';
     if(from === to){
       var fm = /^(\d{4})-(\d{2})/.exec(from);
       return fm[1] + ' 年 ' + Number(fm[2]) + ' 月';
@@ -3422,8 +3541,48 @@ var state = {
         p.appendChild(document.createTextNode(fields[i].empty));
       }
       inner.appendChild(p);
+      if(fields[i].key === '洽談內容' && t){
+        var tl = renderTimelineBlock(r, t);
+        if(tl) inner.appendChild(tl);
+      }
     }
     return inner;
+  }
+
+  // 洽談內容 → 時序卡片層（依 parseTimeline 排序：含日期者依序在前，未註記殿後）
+  function renderTimelineBlock(r, qiantan){
+    var yearHint = /^(\d{4})/.test(fieldStr(r, '填單日期')) ? String(fieldStr(r, '填單日期')).slice(0, 4) : '';
+    var entries = parseTimeline(qiantan, yearHint);
+    if(entries.length < 2) return null;
+    var dated = [], undated = [];
+    for(var i = 0; i < entries.length; i++){
+      (entries[i].date ? dated : undated).push(entries[i]);
+    }
+    dated.sort(function(a, b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    if(!dated.length) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'tl';
+    var cap = document.createElement('div');
+    cap.className = 'tl-cap';
+    cap.textContent = '洽談時間線 · ' + dated.length + ' 個帶日期記錄' +
+      (undated.length ? '（另有 ' + undated.length + ' 則未註記日期）' : '');
+    wrap.appendChild(cap);
+    function addItem(entry, undatedFlag){
+      var item = document.createElement('div');
+      item.className = 'tl-item' + (undatedFlag ? ' tl-undated' : '');
+      var b = document.createElement('span');
+      b.className = 'tl-badge';
+      b.textContent = undatedFlag ? '未註記' : entry.label;
+      item.appendChild(b);
+      var tx = document.createElement('span');
+      tx.className = 'tl-text';
+      tx.textContent = entry.text;
+      item.appendChild(tx);
+      wrap.appendChild(item);
+    }
+    for(var d = 0; d < dated.length; d++) addItem(dated[d], false);
+    for(var u = 0; u < undated.length; u++) addItem(undated[u], true);
+    return wrap;
   }
 
   // 渲染明細表（摘要 + 可排序表 + 分頁控制）；onSort/onPage 供外部接線
@@ -3873,6 +4032,7 @@ var state = {
   if(typeof module !== 'undefined' && module.exports){
     module.exports = {
       excelSerialToDate: excelSerialToDate,
+      coerceDate: coerceDate,
       colIndexFromRef: colIndexFromRef,
       isTemplateRow: isTemplateRow,
       filterTemplateRows: filterTemplateRows,
@@ -3921,6 +4081,8 @@ var state = {
       computeKeBars: computeKeBars,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
+      stationNamesOf: stationNamesOf,
+      parseTimeline: parseTimeline,
       RANK_METRICS: RANK_METRICS,
       computeRanking: computeRanking,
       chartDefaultColor: chartDefaultColor,
