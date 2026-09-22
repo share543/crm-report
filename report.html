@@ -305,6 +305,9 @@
     border-radius:8px; padding:7px 18px; font-size:13px; cursor:pointer; }
   .top-actions button:hover:not(:disabled){ border-color:var(--accent); color:var(--text); }
   .top-actions button:disabled{ opacity:.4; cursor:default; }
+  .mini-btn{ background:none; border:none; padding:0; color:var(--accent);
+    text-decoration:underline; cursor:pointer; font-size:12px; }
+  .mini-btn:hover{ color:var(--text); }
   /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
   button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .list-row:focus-visible, .do-node:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
@@ -402,6 +405,7 @@
   <div class="top-actions no-print">
     <button type="button" id="themeBtn" aria-pressed="false">切換到淺色</button>
     <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
+    <button type="button" id="saveBtn" disabled>存檔（含資料）</button>
     <button type="button" id="printBtn" disabled>列印</button>
   </div>
 </header>
@@ -414,6 +418,10 @@
       <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
     </div>
     <p id="fileName" hidden aria-live="polite"></p>
+    <p id="memoryRow" hidden>
+      <span class="muted">已自動記憶本次資料，下次開啟會直接載入。</span>
+      <button type="button" class="mini-btn" id="forgetBtn">清除記憶</button>
+    </p>
     <div id="importProgress" hidden aria-live="polite">
       <div class="progress-track" role="progressbar" aria-label="匯入進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div id="importProgressFill" class="progress-fill"></div>
@@ -3898,27 +3906,7 @@ var state = {
       updateImportProgress(100, '完成');
       importDoneTimer = setTimeout(function(){ hideImportProgress(); }, 900);
 
-      state.model = model;
-      state.fileName = name;
-      state.filters = defaultFilters();
-      state.period = { preset: 'all', from: '', to: '' };
-      state.sortCol = '序號';
-      state.sortDir = 'asc';
-      state.page = 1;
-      clearError();
-      if(csvWarning) showError(csvWarning, true);
-      var fn = document.getElementById('fileName');
-      if(fn){ fn.className = ''; fn.textContent = '已載入：' + name; fn.hidden = false; }
-      var pc = document.getElementById('periodCard');
-      if(pc) pc.hidden = false;
-      syncPeriodControls();
-      renderRawTable(model);
-      initListControls();
-      rebuild();
-      var expBtn = document.getElementById('exportCsvBtn');
-      if(expBtn) expBtn.disabled = false;
-      var pBtn = document.getElementById('printBtn');
-      if(pBtn) pBtn.disabled = false;
+      applyModel(model, name, { source: '檔案' });
       return model;
     }catch(err){
       if(importDoneTimer){ clearTimeout(importDoneTimer); importDoneTimer = null; }
@@ -3971,7 +3959,138 @@ var state = {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // 資料存檔：自動記憶（localStorage）＋「存檔（含資料）」內嵌副本
+  // ---------------------------------------------------------------------------
+
+  var DATA_STORAGE_KEY = 'crm-data';
+  var ORIGINAL_SHELL = '';
+
+  // 純函式：把資料副本 JSON 嵌入 HTML 快照（含既有 crm-embedded 時先移除，避免重疊巢狀）。
+  // 資料 script 必須放在 <body> 之後、app script 之前（app 在解析期即執行 tryRestoreData，
+  // 若資料元素在 app script 之後才出現會找不到）。json 應先做好「關閉標籤」跳脫。
+  function buildEmbeddedHtml(shellHtml, json){
+    var s = String(shellHtml || '');
+    s = s.replace(/<script\b[^>]*id="crm-embedded"[^>]*>[\s\S]*?<\/script>/gi, '');
+    var block = '<script' + ' id="' + 'crm-embedded' + '" type="application/json">' + json + '<\/script>';
+    var bm = /<body[^>]*>/i.exec(s);
+    if(bm) return s.slice(0, bm.index + bm[0].length) + block + s.slice(bm.index + bm[0].length);
+    var idx = s.toLowerCase().lastIndexOf('</body>');
+    if(idx === -1) return s + block;
+    return s.slice(0, idx) + block + s.slice(idx);
+  }
+
+  // 現在可序列化的資料副本（含跳脫，避免含「結束標籤」字串的字串破壞 HTML）
+  function currentDataPayload(){
+    var data = {
+      v: 1,
+      savedAt: new Date().toISOString(),
+      name: state.fileName || '資料',
+      model: state.model
+    };
+    return JSON.stringify(data).replace(/<\//g, '<\\/');
+  }
+
+  // 應用模型：把載入結果套進整個報表（手動載入／記憶還原／內嵌副本共用同一路徑）
+  function applyModel(model, name, opts){
+    opts = opts || {};
+    state.model = model;
+    state.fileName = name;
+    state.filters = defaultFilters();
+    state.period = { preset: 'all', from: '', to: '' };
+    state.sortCol = '序號';
+    state.sortDir = 'asc';
+    state.page = 1;
+    clearError();
+    if(csvWarning) showError(csvWarning, true);
+    persistData();
+    var fn = document.getElementById('fileName');
+    if(fn){
+      fn.className = '';
+      var srcNote = opts.source ? '（' + opts.source + '）' : '';
+      fn.textContent = '已載入：' + name + srcNote;
+      fn.hidden = false;
+    }
+    var mr = document.getElementById('memoryRow');
+    if(mr) mr.hidden = false;
+    var pc = document.getElementById('periodCard');
+    if(pc) pc.hidden = false;
+    syncPeriodControls();
+    renderRawTable(model);
+    initListControls();
+    rebuild();
+    var enabled = ['exportCsvBtn', 'saveBtn', 'printBtn'];
+    for(var b = 0; b < enabled.length; b++){
+      var el = document.getElementById(enabled[b]);
+      if(el) el.disabled = false;
+    }
+  }
+
+  // 記憶／讀取／清除 localStorage 資料（file:// 或容量異常時靜默降級）
+  function persistData(){
+    try{
+      if(!state.model) return;
+      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model });
+      localStorage.setItem(DATA_STORAGE_KEY, payload);
+    }catch(_){}
+  }
+
+  function readStoredData(){
+    try{
+      var raw = localStorage.getItem(DATA_STORAGE_KEY);
+      if(!raw) return null;
+      var d = JSON.parse(raw);
+      if(!d || !d.model || !Array.isArray(d.model.headers) || !Array.isArray(d.model.rows)) return null;
+      return d;
+    }catch(err){
+      try{ localStorage.removeItem(DATA_STORAGE_KEY); }catch(_){}
+      return null;
+    }
+  }
+
+  function clearStoredData(){
+    try{ localStorage.removeItem(DATA_STORAGE_KEY); }catch(_){}
+    var mr = document.getElementById('memoryRow');
+    if(mr) mr.hidden = true;
+  }
+
+  // 「存檔（含資料）」：輸出內嵌目前資料的 report.html 副本，可在任意裝置/瀏覽器離線開啟。
+  // ORIGINAL_SHELL 於 initApp 開始時捕捉（尚未渲染任何資料的原始外殼）。
+  function saveSelfContained(){
+    if(!state.model || !state.model.rows) return;
+    var html = buildEmbeddedHtml(ORIGINAL_SHELL, currentDataPayload());
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'report-含資料.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  }
+
+  // 還原上次資料：優先採內嵌副本（可攜檔優先），否則採 localStorage 記憶
+  function tryRestoreData(){
+    var emb = document.getElementById('crm-embedded');
+    if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
+      try{
+        var payload = JSON.parse(String(emb.textContent));
+        if(payload && payload.model && Array.isArray(payload.model.headers) && Array.isArray(payload.model.rows)){
+          applyModel(payload.model, payload.name || '內嵌資料', { source: '內嵌副本' });
+          return true;
+        }
+      }catch(_){}
+    }
+    var stored = readStoredData();
+    if(stored){
+      applyModel(stored.model, stored.name || '記憶資料', { source: '記憶' });
+      return true;
+    }
+    return false;
+  }
+
   function initApp(){
+    ORIGINAL_SHELL = document.documentElement.outerHTML;
     var dropzone = document.getElementById('dropzone');
     var fileInput = document.getElementById('fileInput');
     var pickBtn = document.getElementById('pickBtn');
@@ -4017,6 +4136,16 @@ var state = {
     if(printBtn){
       printBtn.addEventListener('click', function(){ window.print(); });
     }
+    var saveBtn = document.getElementById('saveBtn');
+    if(saveBtn){
+      saveBtn.addEventListener('click', saveSelfContained);
+    }
+    var forgetBtn = document.getElementById('forgetBtn');
+    if(forgetBtn){
+      forgetBtn.addEventListener('click', clearStoredData);
+    }
+
+    tryRestoreData();
   }
 
   // ---------------------------------------------------------------------------
@@ -4033,6 +4162,7 @@ var state = {
     module.exports = {
       excelSerialToDate: excelSerialToDate,
       coerceDate: coerceDate,
+      buildEmbeddedHtml: buildEmbeddedHtml,
       colIndexFromRef: colIndexFromRef,
       isTemplateRow: isTemplateRow,
       filterTemplateRows: filterTemplateRows,
@@ -4083,6 +4213,7 @@ var state = {
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
       parseTimeline: parseTimeline,
+      coerceDate: coerceDate,
       RANK_METRICS: RANK_METRICS,
       computeRanking: computeRanking,
       chartDefaultColor: chartDefaultColor,
