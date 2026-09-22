@@ -308,6 +308,49 @@
   .mini-btn{ background:none; border:none; padding:0; color:var(--accent);
     text-decoration:underline; cursor:pointer; font-size:12px; }
   .mini-btn:hover{ color:var(--text); }
+  /* 簡報議題（開場亮點頂部） */
+  .agenda-block{ padding:12px 16px; border:1px solid var(--border); border-radius:10px;
+    background:var(--card-2); margin:8px 0 14px; }
+  .agenda-block ol{ margin:6px 0 10px; padding-left:22px; }
+  .agenda-block li{ font-size:16px; line-height:1.8; color:var(--text); }
+  .agenda-editor{ padding:12px 16px; border:1px dashed var(--border); border-radius:10px;
+    background:var(--card-2); margin:8px 0 14px; }
+  .agenda-editor textarea{ width:100%; box-sizing:border-box; background:var(--card); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit;
+    font-size:14px; line-height:1.6; resize:vertical; }
+  .agenda-actions{ display:flex; gap:8px; margin-top:10px; }
+  .agenda-empty-btn{ display:block; width:100%; margin:8px 0 14px; padding:10px; font-size:14px;
+    background:transparent; color:var(--muted); border:1px dashed var(--border); border-radius:10px;
+    cursor:pointer; text-align:left; }
+  .agenda-empty-btn:hover{ color:var(--text); border-color:var(--accent); }
+  /* 簡報模式：全螢幕覆蓋層，一個區段一頁 */
+  #presentOverlay{ position:fixed; inset:0; z-index:1000; background:var(--bg);
+    display:flex; flex-direction:column; overflow:hidden; }
+  #presentOverlay[hidden]{ display:none; }
+  #presentOverlay .pv-top{ display:flex; align-items:baseline; gap:12px; justify-content:space-between;
+    padding:14px 22px 8px; border-bottom:1px solid var(--border); }
+  #presentOverlay .pv-title{ font-size:22px; font-weight:700; color:var(--text); }
+  #presentOverlay .pv-count{ font-size:13px; color:var(--muted); }
+  #presentOverlay .pv-body{ flex:1; overflow:auto; padding:18px 24px; display:flex;
+    justify-content:center; align-items:flex-start; zoom:1.2; }
+  #presentOverlay .pv-body > .card{ width:100%; max-width:1250px; margin:0; }
+  #presentOverlay .pv-dock{ display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+    padding:10px 22px; border-top:1px solid var(--border); background:var(--card); }
+  #presentOverlay .pv-dock b{ font-size:13px; color:var(--muted); font-weight:600; }
+  #presentOverlay .pv-dock select{ background:var(--card-2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px; }
+  #presentOverlay .pv-dock button{ background:var(--card-2); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:6px 16px; font-size:13px; cursor:pointer; }
+  #presentOverlay .pv-dock button:hover{ border-color:var(--accent); }
+  #presentOverlay .pv-exit{ margin-left:auto; }
+  #presentOverlay .pv-hint{ font-size:12px; color:var(--muted); margin-left:auto; }
+  @media print{ #presentOverlay{ display:none !important; } }
+  /* 簡報中議題卡只讀：隱藏編輯入口與編輯器 */
+  body.pv-mode #agendaBlock .mini-btn,
+  body.pv-mode #addAgendaEmptyBtn,
+  body.pv-mode #agendaEditor{ display:none; }
+  /* 議題第一頁大字：投影片就是大綱，便於近距與投影遠讀 */
+  body.pv-mode #agendaList li{ font-size:30px; line-height:2.1; }
   /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
   button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .list-row:focus-visible, .do-node:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
@@ -406,6 +449,7 @@
     <button type="button" id="themeBtn" aria-pressed="false">切換到淺色</button>
     <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
     <button type="button" id="saveBtn" disabled>存檔（含資料）</button>
+    <button type="button" id="presentBtn" disabled>開始簡報</button>
     <button type="button" id="printBtn" disabled>列印</button>
   </div>
 </header>
@@ -452,6 +496,23 @@
     </div>
     <p id="periodBadge" class="note" aria-live="polite"></p>
     <p id="periodBlankNote" class="note muted" hidden></p>
+  </section>
+  <section class="card" id="agendaSection" hidden>
+    <h2>本日議題 <span class="muted">開會大綱／議題 · 隨記憶與存檔副本一併保存</span></h2>
+    <div class="agenda-block" id="agendaBlock" hidden>
+      <ol id="agendaList"></ol>
+      <button type="button" class="mini-btn" id="editAgendaBtn">✎ 編輯議題</button>
+    </div>
+    <button type="button" class="agenda-empty-btn" id="addAgendaEmptyBtn" hidden>＋ 新增本日議題（簡報第 1 頁）</button>
+    <div class="agenda-editor" id="agendaEditor" hidden>
+      <h3 class="subtitle">編輯本日議題 <span class="muted">每行一項</span></h3>
+      <textarea id="agendaText" rows="6" placeholder="例：&#10;1. 本季開發狀況總覽&#10;2. 需討論的轉換流失案&#10;3. 待確認里程碑"></textarea>
+      <div class="agenda-actions">
+        <button type="button" class="mini-btn" id="saveAgendaBtn">儲存</button>
+        <button type="button" class="mini-btn" id="clearAgendaBtn">清除議題</button>
+        <button type="button" class="mini-btn" id="cancelAgendaBtn">取消</button>
+      </div>
+    </div>
   </section>
   <section class="card" id="highlightSection" hidden>
     <h2>開場亮點摘要</h2>
@@ -518,7 +579,8 @@
 var state = {
     model: null,      // { headers:[], rows:[], sheetName:string }
     fileName: null,
-    period: { preset: 'all', from: '', to: '' }
+    period: { preset: 'all', from: '', to: '' },
+    agenda: []        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
   };
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
@@ -1812,6 +1874,48 @@ var state = {
     if(!sec || !box || !model || !model.rows) return;
     renderHighlights(box, model);
     sec.hidden = false;
+  }
+
+  // 簡報議題：把使用者的多行文字正規化成項目陣列（移除空行）；純函式。
+  function normalizeAgenda(lines){
+    if(!Array.isArray(lines)) return [];
+    var out = [];
+    for(var ai = 0; ai < lines.length; ai++){
+      var s = String(lines[ai] == null ? '' : lines[ai]).trim();
+      if(s) out.push(s);
+    }
+    return out;
+  }
+
+  // 渲染議題卡：有資料才顯示區段；有內容時顯示清單，否則顯示「＋新增議題」入口；
+  // 以 createTextNode 產生 <li>（沿用專案防 XSS 慣例）
+  function renderAgenda(){
+    var sec = document.getElementById('agendaSection');
+    var block = document.getElementById('agendaBlock');
+    var list = document.getElementById('agendaList');
+    if(!block || !list || !sec) return;
+    var editor = document.getElementById('agendaEditor');
+    var emptyBtn = document.getElementById('addAgendaEmptyBtn');
+    if(!state.model || !state.model.rows){
+      sec.hidden = true;
+      return;
+    }
+    sec.hidden = false;
+    if(!state.agenda || state.agenda.length === 0){
+      block.hidden = true;
+      list.textContent = '';
+      if(editor) editor.hidden = true;
+      if(emptyBtn) emptyBtn.hidden = false;
+      return;
+    }
+    list.textContent = '';
+    for(var i = 0; i < state.agenda.length; i++){
+      var li = document.createElement('li');
+      li.appendChild(document.createTextNode(state.agenda[i]));
+      list.appendChild(li);
+    }
+    block.hidden = false;
+    if(emptyBtn) emptyBtn.hidden = true;
   }
 
   // ---------------------------------------------------------------------------
@@ -3986,7 +4090,8 @@ var state = {
       v: 1,
       savedAt: new Date().toISOString(),
       name: state.fileName || '資料',
-      model: state.model
+      model: state.model,
+      agenda: state.agenda
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -4019,7 +4124,8 @@ var state = {
     renderRawTable(model);
     initListControls();
     rebuild();
-    var enabled = ['exportCsvBtn', 'saveBtn', 'printBtn'];
+    renderAgenda();
+    var enabled = ['exportCsvBtn', 'saveBtn', 'presentBtn', 'printBtn'];
     for(var b = 0; b < enabled.length; b++){
       var el = document.getElementById(enabled[b]);
       if(el) el.disabled = false;
@@ -4030,7 +4136,7 @@ var state = {
   function persistData(){
     try{
       if(!state.model) return;
-      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model });
+      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model, agenda: state.agenda });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
     }catch(_){}
   }
@@ -4050,8 +4156,10 @@ var state = {
 
   function clearStoredData(){
     try{ localStorage.removeItem(DATA_STORAGE_KEY); }catch(_){}
+    state.agenda = [];
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
+    renderAgenda();
   }
 
   // 「存檔（含資料）」：輸出內嵌目前資料的 report.html 副本，可在任意裝置/瀏覽器離線開啟。
@@ -4069,7 +4177,172 @@ var state = {
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
   }
 
+  // 簡報模式（開會投影片）：全螢幕覆蓋層一次顯示一個區段，方向鍵/空白/Digit 換頁、Esc 結束。
+  // 投影片＝現有各 section（不含 載入卡 與 原始資料），切頁採「移動真實節點」以保留事件綁定；
+  // 結束時將所有被移動的 section 依原位置歸位。
+  var PRESENT_SLIDES = [
+    { id: 'agendaSection', title: '本日議題' },
+    { id: 'highlightSection', title: '開場亮點摘要' },
+    { id: 'statSection', title: '案件狀態統計' },
+    { id: 'keQuickSection', title: '各課追蹤簡表' },
+    { id: 'progressSection', title: '進度追蹤表' },
+    { id: 'typeSection', title: '案件類型分析' },
+    { id: 'funnelSection', title: '里程碑漏斗' },
+    { id: 'rankSection', title: '排行分析' },
+    { id: 'timingSection', title: '開發時間分析' },
+    { id: 'dropoffSection', title: '轉換流失分析' },
+    { id: 'alertSection', title: '待留意事項' },
+    { id: 'listSection', title: '案件清單' }
+  ];
+  var PRESENT_PERIOD_LABELS = { all:'全部期間', thisWeek:'本週', lastWeek:'上週', thisMonth:'本月', lastMonth:'上月', thisQuarter:'本季', thisYear:'今年', lastYear:'去年' };
+  var presentState = { on:false, index:0, origins:null, moved:null, overlay:null };
+
+  function buildPresentOverlay(){
+    var ov = document.createElement('div');
+    ov.id = 'presentOverlay';
+    ov.hidden = true;
+    var top = document.createElement('div'); top.className = 'pv-top';
+    var title = document.createElement('div'); title.className = 'pv-title'; title.id = 'pvTitle';
+    var count = document.createElement('div'); count.className = 'pv-count'; count.id = 'pvCount';
+    top.appendChild(title); top.appendChild(count);
+    var body = document.createElement('div'); body.className = 'pv-body'; body.id = 'pvBody';
+    var dock = document.createElement('div'); dock.className = 'pv-dock';
+    var b = document.createElement('b'); b.textContent = '分析期間';
+    var sel = document.createElement('select'); sel.id = 'pvPeriod';
+    for(var p = 0; p < PERIOD_PRESETS.length; p++){
+      var o = document.createElement('option');
+      o.value = PERIOD_PRESETS[p];
+      o.textContent = PRESENT_PERIOD_LABELS[PERIOD_PRESETS[p]] || PERIOD_PRESETS[p];
+      sel.appendChild(o);
+    }
+    var prevBtn = buttonEl('pvPrev', '← 上一頁');
+    var nextBtn = buttonEl('pvNext', '下一頁 →');
+    var hint = document.createElement('span'); hint.className = 'pv-hint'; hint.id = 'pvHint';
+    hint.textContent = '←/→ 或空白換頁 · D 切到期間下拉 · Esc 結束';
+    var exitBtn = buttonEl('pvExit', '結束簡報（Esc）');
+    exitBtn.className = 'pv-exit';
+    dock.appendChild(b); dock.appendChild(sel);
+    dock.appendChild(prevBtn); dock.appendChild(nextBtn);
+    dock.appendChild(hint); dock.appendChild(exitBtn);
+    ov.appendChild(top); ov.appendChild(body); ov.appendChild(dock);
+
+    var handlePeriod = function(){ setPeriod({ preset: sel.value || 'all', from:'', to:'' }); };
+    sel.addEventListener('change', handlePeriod);
+    prevBtn.addEventListener('click', function(){ showPresentSlide(presentState.index - 1); });
+    nextBtn.addEventListener('click', function(){ showPresentSlide(presentState.index + 1); });
+    exitBtn.addEventListener('click', leavePresent);
+    document.body.appendChild(ov);
+    presentState.overlay = ov;
+    return ov;
+  }
+
+  function buttonEl(id, text){
+    var el = document.createElement('button');
+    el.type = 'button';
+    el.id = id;
+    el.textContent = text;
+    return el;
+  }
+
+  function enterPresent(){
+    if(!state.model || !state.model.rows || presentState.on) return;
+    var per = document.getElementById('periodCard');
+    if(per) per.hidden = false;
+    var overlay = presentState.overlay || buildPresentOverlay();
+    var origins = {};
+    var i, el;
+    for(i = 0; i < PRESENT_SLIDES.length; i++){
+      el = document.getElementById(PRESENT_SLIDES[i].id);
+      if(el) origins[PRESENT_SLIDES[i].id] = { parent: el.parentNode, ref: el.nextSibling };
+    }
+    presentState.on = true;
+    presentState.origins = origins;
+    presentState.moved = null;
+    presentState.index = 0;
+    overlay.hidden = false;
+    document.body.classList.add('pv-mode');
+    document.addEventListener('keydown', presentOnKey);
+    showPresentSlide(0);
+  }
+
+  function leavePresent(){
+    if(!presentState.on) return;
+    if(presentState.moved){
+      restorePresentSlide(presentState.moved);
+      presentState.moved = null;
+    }
+    presentState.origins = null;
+    presentState.on = false;
+    if(presentState.overlay) presentState.overlay.hidden = true;
+    document.body.classList.remove('pv-mode');
+    document.removeEventListener('keydown', presentOnKey);
+  }
+
+  function restorePresentSlide(id){
+    var el = document.getElementById(id);
+    var origin = presentState.origins && presentState.origins[id];
+    if(el && origin && origin.parent){
+      origin.parent.insertBefore(el, origin.ref);
+    }
+  }
+
+  function showPresentSlide(i){
+    if(!presentState.on) return;
+    var n = PRESENT_SLIDES.length;
+    if(i < 0) i = 0;
+    if(i >= n) i = n - 1;
+    presentState.index = i;
+    if(presentState.moved){
+      restorePresentSlide(presentState.moved);
+      presentState.moved = null;
+    }
+    var slide = PRESENT_SLIDES[i];
+    var el = document.getElementById(slide.id);
+    if(el){
+      var body = document.getElementById('pvBody');
+      body.appendChild(el);
+      presentState.moved = slide.id;
+    }
+    var title = document.getElementById('pvTitle');
+    if(title) title.textContent = slide.title;
+    var count = document.getElementById('pvCount');
+    if(count) count.textContent = (i + 1) + ' / ' + n;
+    var sel = document.getElementById('pvPeriod');
+    if(sel) sel.value = state.period.preset || 'all';
+  }
+
+  function presentOnKey(e){
+    var t = e.target;
+    if(t && (t.tagName === 'SELECT' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')){
+      if(e.key === 'Escape'){ leavePresent(); e.preventDefault(); }
+      return;
+    }
+    var k = e.key;
+    if(k === 'Escape'){ leavePresent(); e.preventDefault(); return; }
+    if(k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' '){
+      e.preventDefault();
+      showPresentSlide(presentState.index + 1);
+    } else if(k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp'){
+      e.preventDefault();
+      showPresentSlide(presentState.index - 1);
+    } else if(k === 'Home'){
+      e.preventDefault();
+      showPresentSlide(0);
+    } else if(k === 'End'){
+      e.preventDefault();
+      showPresentSlide(PRESENT_SLIDES.length - 1);
+    } else if(k === 'd' || k === 'D'){
+      var sel = document.getElementById('pvPeriod');
+      if(sel) sel.focus();
+    }
+  }
+
   // 還原上次資料：優先採內嵌副本（可攜檔優先），否則採 localStorage 記憶
+  function restoreAgenda(d){
+    state.agenda = normalizeAgenda(d && d.agenda);
+    renderAgenda();
+    persistData();
+  }
   function tryRestoreData(){
     var emb = document.getElementById('crm-embedded');
     if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
@@ -4077,6 +4350,7 @@ var state = {
         var payload = JSON.parse(String(emb.textContent));
         if(payload && payload.model && Array.isArray(payload.model.headers) && Array.isArray(payload.model.rows)){
           applyModel(payload.model, payload.name || '內嵌資料', { source: '內嵌副本' });
+          restoreAgenda(payload);
           return true;
         }
       }catch(_){}
@@ -4084,6 +4358,7 @@ var state = {
     var stored = readStoredData();
     if(stored){
       applyModel(stored.model, stored.name || '記憶資料', { source: '記憶' });
+      restoreAgenda(stored);
       return true;
     }
     return false;
@@ -4140,12 +4415,60 @@ var state = {
     if(saveBtn){
       saveBtn.addEventListener('click', saveSelfContained);
     }
+    var presentBtn = document.getElementById('presentBtn');
+    if(presentBtn){
+      presentBtn.addEventListener('click', enterPresent);
+    }
     var forgetBtn = document.getElementById('forgetBtn');
     if(forgetBtn){
       forgetBtn.addEventListener('click', clearStoredData);
     }
+    var editAgendaBtn = document.getElementById('editAgendaBtn');
+    var openAgendaEditor = function(){
+      var editor = document.getElementById('agendaEditor');
+      var ta = document.getElementById('agendaText');
+      if(editor && ta){ ta.value = (state.agenda || []).join('\n'); editor.hidden = false; editor.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+    if(editAgendaBtn){
+      editAgendaBtn.addEventListener('click', openAgendaEditor);
+    }
+    var addAgendaEmptyBtn = document.getElementById('addAgendaEmptyBtn');
+    if(addAgendaEmptyBtn){
+      addAgendaEmptyBtn.addEventListener('click', openAgendaEditor);
+    }
+    var saveAgendaBtn = document.getElementById('saveAgendaBtn');
+    if(saveAgendaBtn){
+      saveAgendaBtn.addEventListener('click', function(){
+        var ta = document.getElementById('agendaText');
+        var editor = document.getElementById('agendaEditor');
+        state.agenda = normalizeAgenda(ta ? ta.value.split('\n') : []);
+        if(editor) editor.hidden = true;
+        persistData();
+        renderAgenda();
+      });
+    }
+    var clearAgendaBtn = document.getElementById('clearAgendaBtn');
+    if(clearAgendaBtn){
+      clearAgendaBtn.addEventListener('click', function(){
+        var ta = document.getElementById('agendaText');
+        var editor = document.getElementById('agendaEditor');
+        state.agenda = [];
+        if(ta) ta.value = '';
+        if(editor) editor.hidden = true;
+        persistData();
+        renderAgenda();
+      });
+    }
+    var cancelAgendaBtn = document.getElementById('cancelAgendaBtn');
+    if(cancelAgendaBtn){
+      cancelAgendaBtn.addEventListener('click', function(){
+        var editor = document.getElementById('agendaEditor');
+        if(editor) editor.hidden = true;
+      });
+    }
 
     tryRestoreData();
+    renderAgenda();
   }
 
   // ---------------------------------------------------------------------------
@@ -4182,6 +4505,7 @@ var state = {
       renderStats: renderStats,
       renderHighlights: renderHighlights,
       renderHighlightsSection: renderHighlightsSection,
+      normalizeAgenda: normalizeAgenda,
       SLOW_DAYS: SLOW_DAYS, STALE_DAYS: STALE_DAYS, ALERT_MAX: ALERT_MAX,
       renderAlerts: renderAlerts,
       renderAlertsSection: renderAlertsSection,
@@ -4243,6 +4567,11 @@ var state = {
       describePeriod: describePeriod,
       setPeriod: setPeriod,
       syncPeriodControls: syncPeriodControls,
+      PRESENT_SLIDES: PRESENT_SLIDES,
+      PRESENT_PERIOD_LABELS: PRESENT_PERIOD_LABELS,
+      enterPresent: enterPresent,
+      leavePresent: leavePresent,
+      showPresentSlide: showPresentSlide,
       updatePeriodBadge: updatePeriodBadge,
       initPeriodControls: initPeriodControls,
       sortValue: sortValue,
