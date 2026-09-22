@@ -284,6 +284,30 @@
   .cols-actions button:hover{ border-color:var(--accent); }
   .cols-on{ border-color:var(--accent) !important; color:var(--accent) !important; }
   @media print{ .cols-panel{ display:none !important; } }
+  /* 區塊存成圖片：每卡右上「存圖」按鈕＋輸出 modal＋量測 host */
+  section.card{ position:relative; }
+  .snap-btn{ position:absolute; top:14px; right:14px; }
+  body.pv-mode .snap-btn{ display:none !important; }
+  .snap-modal{ position:fixed; inset:0; z-index:2000; background:rgba(5,8,12,.6);
+    display:flex; align-items:center; justify-content:center; padding:18px; }
+  .snap-modal[hidden]{ display:none; }
+  .snap-box{ background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:18px 20px; width:min(880px, 94vw); max-height:86vh; display:flex;
+    flex-direction:column; box-shadow:0 14px 50px rgba(0,0,0,.5); }
+  .snap-box h3{ margin:0 0 12px; font-size:15px; }
+  .snap-preview{ flex:1; min-height:0; overflow:auto; border:1px solid var(--border);
+    border-radius:8px; background:var(--card-2); padding:8px; }
+  .snap-preview img{ display:block; max-width:100%; height:auto; margin:0 auto; }
+  .snap-opts{ display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:13px; }
+  .snap-opt{ display:flex; align-items:center; gap:6px; color:var(--text); cursor:pointer; }
+  .snap-opt select{ background:var(--card-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:4px 8px; font-size:13px; }
+  .snap-opt input{ width:15px; height:15px; accent-color:var(--accent); }
+  .snap-note{ font-size:12px; color:var(--muted); min-height:16px; margin:8px 0 0; }
+  .snap-actions{ display:flex; gap:8px; margin-top:10px; }
+  .snap-actions button{ cursor:pointer; }
+  #snapHost{ position:fixed; left:-99999px; top:0; visibility:hidden; pointer-events:none; }
+  @media print{ .snap-modal, #snapHost{ display:none !important; } }
   .list-summary{ margin:0 0 10px; font-size:13px; color:var(--muted); }
   table.list-table th.sortable{ cursor:pointer; }
   table.list-table th.sortable:hover{ color:var(--text); }
@@ -631,6 +655,29 @@
     <h2 id="rawTitle">原始資料預覽</h2>
     <div id="rawTable"></div>
   </section>
+  <div id="snapHost" aria-hidden="true"></div>
+  <div class="snap-modal" id="snapModal" hidden role="dialog" aria-modal="true" aria-label="儲存區塊圖片">
+    <div class="snap-box">
+      <h3>儲存區塊圖片：<span id="snapTitle">區塊</span></h3>
+      <div class="snap-preview"><img id="snapPreview" alt="區塊預覽"></div>
+      <div class="snap-opts">
+        <label class="snap-opt"><input type="checkbox" id="snapScale2x" checked> 2x 高解析度</label>
+        <label class="snap-opt">背景
+          <select id="snapBg">
+            <option value="theme" selected>跟隨主題</option>
+            <option value="white">白色</option>
+            <option value="transparent">透明</option>
+          </select>
+        </label>
+      </div>
+      <p class="snap-note" id="snapNote"></p>
+      <div class="snap-actions">
+        <button type="button" class="mini-btn" id="snapDownload">⬇ 下載 PNG</button>
+        <button type="button" class="mini-btn" id="snapCopy">複製圖片</button>
+        <button type="button" class="mini-btn" id="snapClose">關閉</button>
+      </div>
+    </div>
+  </div>
 </main>
 <script>
 'use strict';
@@ -4152,6 +4199,282 @@ var state = {
     exportCsv(sorted);
   }
 
+  // ---------------------------------------------------------------------------
+  // Task 8b：區塊存成圖片（SVG foreignObject → Canvas → PNG；零依賴、離線可用）
+  // ---------------------------------------------------------------------------
+
+  // 純函式：抽掉 @media print 區塊（列印規則會強制白底等，不應進入圖片）
+  function stripPrintBlocks(css){
+    var out = [], i = 0, n = css.length;
+    var head = /@media\s+print\s*\{/gi;
+    while(i < n){
+      head.lastIndex = 0;
+      var m = head.exec(css.slice(i));
+      if(!m){ out.push(css.slice(i)); break; }
+      out.push(css.slice(i, i + m.index));
+      var k = i + m.index + m[0].length;
+      var depth = 1, p = k;
+      while(p < n && depth > 0){
+        if(css.charAt(p) === '{') depth++;
+        else if(css.charAt(p) === '}') depth--;
+        p++;
+      }
+      i = p;
+    }
+    return out.join('');
+  }
+
+  // 純函式：把頁面樣式改寫成可獨立成圖的樣式
+  //   :root → .shot-root（配色變數生效；:root[data-theme="light"]… 改寫後因無此屬性而不匹配，
+  //         正好保住目前主題配色）
+  //   body  → .shot-root（html,body{…} 仍給 .shot-root 生效；pv-body 會變無效 selector 無害）
+  function rewriteSnapshotCss(css){
+    return stripPrintBlocks(String(css || ''))
+      .replace(/:root\b/g, '.shot-root')
+      .replace(/\bbody\b/g, '.shot-root');
+  }
+
+  // 純函式：圖片檔名（區塊名 + 解析度標記 + 期間；清除檔名非法字元）
+  function shotFilename(title, periodText, scale, ext){
+    var slug = String(title || '區塊').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '').trim();
+    if(!slug) slug = '區塊';
+    var s = (scale > 1) ? ('@' + scale + 'x') : '';
+    var p = '';
+    if(periodText && periodText !== '全部數據') p = '-' + String(periodText).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '');
+    return slug + s + p + '.' + (ext || 'png');
+  }
+
+  // 純函式：取標題文字（只取 h2 直接文字節點，排除 <span class="muted"> 副標）
+  function snapshotTitleText(h2){
+    if(!h2) return '';
+    var out = '', kids = h2.childNodes || [];
+    for(var i = 0; i < kids.length; i++){
+      var nd = kids[i];
+      if(!nd) continue;
+      if(nd.nodeType === undefined || nd.nodeType === 3) out += (nd.textContent || '');
+    }
+    return out.replace(/\s+/g, ' ').trim();
+  }
+
+  var snapState = { card: null, title: '', canvas: null, filename: '' };
+
+  // 給每張 .card 卡片（有 h2 標題者）注入右上「⬇ 存圖」按鈕；只做一次、重複呼叫具冪等性
+  function addSnapshotControls(){
+    if(!document.querySelectorAll) return;
+    var cards = document.querySelectorAll('section.card');
+    for(var i = 0; i < cards.length; i++){
+      var card = cards[i];
+      if(!card || !card.querySelector) continue;
+      if(card.querySelector('.snap-btn')) continue;
+      var h2 = card.querySelector('h2');
+      if(!h2) continue;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mini-btn snap-btn';
+      btn.setAttribute('data-snap', snapshotTitleText(h2));
+      btn.textContent = '⬇ 存圖';
+      btn.setAttribute('aria-label', '存成圖片：' + snapshotTitleText(h2));
+      (function(c){
+        btn.addEventListener('click', function(){ openSnapshot(c); });
+      })(card);
+      var host = (h2.parentNode && h2.parentNode.insertBefore) ? h2.parentNode : card;
+      host.insertBefore(btn, h2.nextSibling || null);
+    }
+  }
+
+  // modal 控制事件：元素常駐，僅綁定一次
+  function initSnapshotControls(){
+    var close = document.getElementById('snapClose');
+    if(close) close.addEventListener('click', closeSnapshotModal);
+    var dl = document.getElementById('snapDownload');
+    if(dl) dl.addEventListener('click', function(){ exportSnapshot('download'); });
+    var cp = document.getElementById('snapCopy');
+    if(cp) cp.addEventListener('click', function(){ exportSnapshot('copy'); });
+    var bg = document.getElementById('snapBg');
+    if(bg) bg.addEventListener('change', refreshSnapshotPreview);
+    var sc = document.getElementById('snapScale2x');
+    if(sc) sc.addEventListener('change', refreshSnapshotPreview);
+  }
+
+  function getSnapshotOptions(){
+    var sc = document.getElementById('snapScale2x');
+    var bg = document.getElementById('snapBg');
+    var scale = (sc && sc.checked) ? 2 : 1;
+    var background = bg ? bg.value : 'theme';
+    if(scale !== 1 && scale !== 2) scale = 2;
+    if(['theme', 'white', 'transparent'].indexOf(background) === -1) background = 'theme';
+    return { scale: scale, background: background };
+  }
+
+  function snapBackgroundFill(kind){
+    if(kind === 'white') return '#ffffff';
+    if(kind === 'transparent') return null;
+    try{
+      var cs = document.defaultView && document.defaultView.getComputedStyle
+        ? document.defaultView.getComputedStyle(document.body) : null;
+      var bg = cs ? cs.backgroundColor : (document.body ? document.body.style.backgroundColor : '');
+      if(!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') bg = '';
+      return bg || '';
+    }catch(_){ return ''; }
+  }
+
+  function setSnapNote(t){
+    var note = document.getElementById('snapNote');
+    if(note) note.textContent = t || '';
+  }
+
+  function openSnapshot(card){
+    var modal = document.getElementById('snapModal');
+    if(!modal) return;
+    var title = '區塊';
+    if(card && card.querySelector) title = snapshotTitleText(card.querySelector('h2')) || '區塊';
+    snapState.card = card;
+    snapState.title = title;
+    snapState.canvas = null;
+    snapState.filename = shotFilename(title, describePeriod(state.period), getSnapshotOptions().scale, 'png');
+    var tEl = document.getElementById('snapTitle');
+    if(tEl) tEl.textContent = title;
+    var pv = document.getElementById('snapPreview');
+    if(pv) pv.removeAttribute('src');
+    modal.hidden = false;
+    refreshSnapshotPreview();
+  }
+
+  function closeSnapshotModal(){
+    var modal = document.getElementById('snapModal');
+    if(modal) modal.hidden = true;
+    snapState.card = null;
+    snapState.canvas = null;
+  }
+
+  function refreshSnapshotPreview(){
+    var pv = document.getElementById('snapPreview');
+    if(!snapState.card) return;
+    setSnapNote('產生圖片中…');
+    generateSnapshot(snapState.card, getSnapshotOptions()).then(function(res){
+      snapState.canvas = res.canvas;
+      snapState.filename = res.filename;
+      if(pv) pv.src = res.dataUrl;
+      setSnapNote('預覽完成（' + res.width + '×' + res.height + '）。');
+    }).catch(function(err){
+      snapState.canvas = null;
+      setSnapNote('無法產生圖片：' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // 量測＋SVG foreignObject 生成圖片
+  function generateSnapshot(sectionEl, opts){
+    return new Promise(function(resolve, reject){
+      try{
+        if(!sectionEl) throw new Error('找不到目標區塊');
+        var host = document.getElementById('snapHost');
+        if(!host) throw new Error('缺少量測容器 #snapHost');
+        var styles = document.getElementsByTagName ? document.getElementsByTagName('style') : null;
+        var pageCss = '';
+        if(styles && styles.length) pageCss = styles[0].textContent || '';
+        var snapshotCss = rewriteSnapshotCss(pageCss);
+        // 快照內不顯示「存圖」按鈕本身
+        snapshotCss += '\n.shot-root .snap-btn{ display:none !important; }';
+        var bgKind = opts && opts.background;
+        // 背景選項：white＝套用程式內建的 Light 主題；transparent＝強制上層背景透明
+        if(bgKind === 'white'){
+          snapshotCss += '\n.shot-root{ background:#fff !important; }';
+        } else if(bgKind === 'transparent'){
+          snapshotCss += '\n.shot-root, .shot-root .card{ background:transparent !important; }';
+        }
+        var width = Math.max(320, Math.round(sectionEl.offsetWidth || 960));
+        // 量測：以即時樣式掛一次實際 clone，取得高度（隱藏容器不影響版面）
+        var probe = document.createElement('div');
+        probe.className = 'shot-root';
+        probe.style.width = width + 'px';
+        probe.appendChild(sectionEl.cloneNode(true));
+        host.appendChild(probe);
+        var height = Math.max(80, Math.round(probe.offsetHeight || 0));
+        host.removeChild(probe);
+        // 產生 SVG：以 XHTML 節點建立 foreignObject（XMLSerializer 負責正確序列化）
+        var SVG_NS = 'http://www.w3.org/2000/svg';
+        var XHTML_NS = 'http://www.w3.org/1999/xhtml';
+        var svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('xmlns', SVG_NS);
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+        svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+        var fo = document.createElementNS(SVG_NS, 'foreignObject');
+        fo.setAttribute('x', '0');
+        fo.setAttribute('y', '0');
+        fo.setAttribute('width', String(width));
+        fo.setAttribute('height', String(height));
+        var wrap = document.createElementNS(XHTML_NS, 'div');
+        wrap.setAttribute('class', 'shot-root');
+        if(bgKind === 'white'){
+          wrap.setAttribute('data-theme', 'light');
+        }
+        wrap.setAttribute('style', 'width:' + width + 'px;height:' + height + 'px;');
+        var st = document.createElementNS(XHTML_NS, 'style');
+        st.setAttribute('type', 'text/css');
+        st.appendChild(document.createTextNode(snapshotCss));
+        var clone = sectionEl.cloneNode(true);
+        wrap.appendChild(st);
+        wrap.appendChild(clone);
+        fo.appendChild(wrap);
+        svg.appendChild(fo);
+        var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+        var img = new Image();
+        img.onload = function(){
+          try{
+            var scale = opts && opts.scale > 1 ? opts.scale : 1;
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.round(width * scale);
+            canvas.height = Math.round(height * scale);
+            var ctx = canvas.getContext('2d');
+            var fill = snapBackgroundFill(opts && opts.background);
+            if(fill){ ctx.fillStyle = fill; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+            ctx.drawImage(img, 0, 0, width, height, 0, 0, canvas.width, canvas.height);
+            resolve({
+              canvas: canvas,
+              dataUrl: canvas.toDataURL('image/png'),
+              width: Math.round(width * scale),
+              height: Math.round(height * scale),
+              filename: shotFilename(snapState.title || '區塊', describePeriod(state.period), scale, 'png')
+            });
+          }catch(e){ reject(e); }
+        };
+        img.onerror = function(){ reject(new Error('圖片解碼失敗（瀏覽器限制？請改用 Chrome/Edge）')); };
+        img.src = url;
+      }catch(err){ reject(err); }
+    });
+  }
+
+  function exportSnapshot(action){
+    var canvas = snapState.canvas;
+    if(!canvas){ setSnapNote('尚未產生圖片，請稍候再試。'); return; }
+    if(action === 'download'){
+      try{
+        var a = document.createElement('a');
+        a.download = snapState.filename || shotFilename(snapState.title || '區塊', describePeriod(state.period), 1, 'png');
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+        setSnapNote('已下載 PNG：' + a.download);
+      }catch(e){ setSnapNote('下載失敗：' + (e && e.message ? e.message : e)); }
+      return;
+    }
+    if(action === 'copy'){
+      if(!navigator.clipboard || !window.ClipboardItem){
+        setSnapNote('此瀏覽器不支援複製圖片，請改用「下載 PNG」。');
+        return;
+      }
+      canvas.toBlob(function(blob){
+        if(!blob){ setSnapNote('圖片轉檔失敗。'); return; }
+        try{
+          navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]).then(function(){
+            setSnapNote('已複製到剪貼簿（可直接貼進簡報／訊息）。');
+          }, function(){ setSnapNote('複製被瀏覽器拒絕，改用「下載 PNG」。'); });
+        }catch(e){ setSnapNote('複製失敗：' + (e && e.message ? e.message : e)); }
+      }, 'image/png');
+      return;
+    }
+  }
+
   async function handleFile(file){
     var name = (file && file.name) ? file.name : 'unknown';
     var fnEl = document.getElementById('fileName');
@@ -4688,6 +5011,7 @@ var state = {
     var pickBtn = document.getElementById('pickBtn');
     initTheme();
     initPeriodControls();
+    initSnapshotControls();
     if(!dropzone) return;
 
     window.addEventListener('dragover', function(e){ e.preventDefault(); });
@@ -4785,6 +5109,7 @@ var state = {
     }
 
     buildListColsPanel();
+    addSnapshotControls();
     tryRestoreData();
     renderAgenda();
   }
@@ -4829,6 +5154,17 @@ var state = {
       renderAlertsSection: renderAlertsSection,
       buildMeetingInfo: buildMeetingInfo,
       renderMeetingInfo: renderMeetingInfo,
+      stripPrintBlocks: stripPrintBlocks,
+      rewriteSnapshotCss: rewriteSnapshotCss,
+      shotFilename: shotFilename,
+      snapshotTitleText: snapshotTitleText,
+      addSnapshotControls: addSnapshotControls,
+      initSnapshotControls: initSnapshotControls,
+      openSnapshot: openSnapshot,
+      closeSnapshotModal: closeSnapshotModal,
+      generateSnapshot: generateSnapshot,
+      exportSnapshot: exportSnapshot,
+      refreshSnapshotPreview: refreshSnapshotPreview,
       MILESTONES: MILESTONES,
       computeMilestones: computeMilestones,
       computeFunnel: computeFunnel,
