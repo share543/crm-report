@@ -266,6 +266,24 @@
   #resetFilters{ background:var(--card-2); color:var(--muted); border:1px solid var(--border);
     border-radius:6px; padding:7px 14px; font-size:13px; cursor:pointer; align-self:center; }
   #resetFilters:hover{ border-color:var(--accent); color:var(--text); }
+  /* 案件清單：欄位顯示切換 */
+  .list-head{ display:flex; align-items:center; gap:10px; position:relative; }
+  .list-head h2{ margin:0; }
+  .cols-panel{ position:absolute; left:0; top:calc(100% + 6px); z-index:30;
+    width:252px; background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px; box-shadow:0 8px 28px rgba(0,0,0,.35); }
+  .cols-title{ font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .cols-item{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text);
+    padding:3px 0; cursor:pointer; }
+  .cols-item input{ width:14px; height:14px; accent-color:var(--accent); cursor:pointer; }
+  .cols-actions{ display:flex; gap:6px; margin-top:8px; padding-top:8px;
+    border-top:1px solid var(--border); }
+  .cols-actions button{ flex:1; font-size:12px; padding:4px 6px;
+    background:var(--card-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; cursor:pointer; }
+  .cols-actions button:hover{ border-color:var(--accent); }
+  .cols-on{ border-color:var(--accent) !important; color:var(--accent) !important; }
+  @media print{ .cols-panel{ display:none !important; } }
   .list-summary{ margin:0 0 10px; font-size:13px; color:var(--muted); }
   table.list-table th.sortable{ cursor:pointer; }
   table.list-table th.sortable:hover{ color:var(--text); }
@@ -364,6 +382,20 @@
   body.pv-mode #agendaEditor{ display:none; }
   /* 議題第一頁大字：投影片就是大綱，便於近距與投影遠讀 */
   body.pv-mode #agendaList li{ font-size:30px; line-height:2.1; }
+  /* 本日議題兩欄：左＝議題清單，右＝開會資訊（資料範圍） */
+  .agenda-wrap{ display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:20px; align-items:start; }
+  .agenda-main{ min-width:0; }
+  .agenda-side{ background:var(--card-2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .agenda-side .subtitle{ margin-top:0; }
+  .meeting-info{ margin:0; }
+  .meeting-info dt{ font-size:12px; color:var(--muted); margin-top:10px; }
+  .meeting-info dt:first-child{ margin-top:2px; }
+  .meeting-info dd{ margin:2px 0 0; font-size:14px; color:var(--text); word-break:break-all; line-height:1.45; }
+  @media (max-width:820px){ .agenda-wrap{ grid-template-columns:1fr; } }
+  body.pv-mode .agenda-side{ padding:18px 24px; }
+  body.pv-mode .agenda-side .subtitle{ font-size:17px; }
+  body.pv-mode .meeting-info dt{ font-size:15px; padding-left:6px; }
+  body.pv-mode .meeting-info dd{ font-size:24px; padding-left:6px; line-height:1.35; }
   /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
   button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .list-row:focus-visible, .do-node:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
@@ -512,18 +544,26 @@
   </section>
   <section class="card" id="agendaSection" hidden>
     <h2>本日議題 <span class="muted">開會大綱／議題 · 隨記憶與存檔副本一併保存</span></h2>
-    <div class="agenda-block" id="agendaBlock" hidden>
-      <ol id="agendaList"></ol>
-      <button type="button" class="mini-btn" id="editAgendaBtn">✎ 編輯議題</button>
-    </div>
-    <button type="button" class="agenda-empty-btn" id="addAgendaEmptyBtn" hidden>＋ 新增本日議題（簡報第 1 頁）</button>
-    <div class="agenda-editor" id="agendaEditor" hidden>
-      <h3 class="subtitle">編輯本日議題 <span class="muted">每行一項</span></h3>
-      <textarea id="agendaText" rows="6" placeholder="例：&#10;1. 本季開發狀況總覽&#10;2. 需討論的轉換流失案&#10;3. 待確認里程碑"></textarea>
-      <div class="agenda-actions">
-        <button type="button" class="mini-btn" id="saveAgendaBtn">儲存</button>
-        <button type="button" class="mini-btn" id="clearAgendaBtn">清除議題</button>
-        <button type="button" class="mini-btn" id="cancelAgendaBtn">取消</button>
+    <div class="agenda-wrap">
+      <div class="agenda-main">
+        <div class="agenda-block" id="agendaBlock" hidden>
+          <ol id="agendaList"></ol>
+          <button type="button" class="mini-btn" id="editAgendaBtn">✎ 編輯議題</button>
+        </div>
+        <button type="button" class="agenda-empty-btn" id="addAgendaEmptyBtn" hidden>＋ 新增本日議題（簡報第 1 頁）</button>
+        <div class="agenda-editor" id="agendaEditor" hidden>
+          <h3 class="subtitle">編輯本日議題 <span class="muted">每行一項</span></h3>
+          <textarea id="agendaText" rows="6" placeholder="例：&#10;1. 本季開發狀況總覽&#10;2. 需討論的轉換流失案&#10;3. 待確認里程碑"></textarea>
+          <div class="agenda-actions">
+            <button type="button" class="mini-btn" id="saveAgendaBtn">儲存</button>
+            <button type="button" class="mini-btn" id="clearAgendaBtn">清除議題</button>
+            <button type="button" class="mini-btn" id="cancelAgendaBtn">取消</button>
+          </div>
+        </div>
+      </div>
+      <div class="agenda-side">
+        <h3 class="subtitle">開會資訊 <span class="muted">本份數據的範圍</span></h3>
+        <dl class="meeting-info" id="meetingInfo"></dl>
       </div>
     </div>
   </section>
@@ -572,7 +612,19 @@
     <div id="alerts" class="pending">待產生</div>
   </section>
   <section class="card" id="listSection" hidden>
-    <h2>案件清單</h2>
+    <div class="list-head">
+      <h2>案件清單</h2>
+      <button type="button" class="mini-btn" id="listColsBtn">欄位 ⚙</button>
+      <div id="listColsPanel" class="cols-panel" hidden>
+        <div class="cols-title">顯示欄位（簡報中按 1＝精簡、2＝完整）</div>
+        <div id="listColsItems"></div>
+        <div class="cols-actions">
+          <button type="button" id="colsCore">會議精簡</button>
+          <button type="button" id="colsFull">完整</button>
+          <button type="button" id="colsClose">完成</button>
+        </div>
+      </div>
+    </div>
     <div id="list" class="pending">待產生</div>
   </section>
   <section class="card" id="rawSection" hidden>
@@ -591,7 +643,8 @@ var state = {
     fileName: null,
     period: { preset: 'all', from: '', to: '' },
     agenda: [],        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
-    presentEnabled: {} // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
+    presentEnabled: {}, // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
+    listCols: null      // 案件清單欄位勾選（{欄位key:boolean}；null＝會議精簡 profile）
   };
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
@@ -3116,6 +3169,43 @@ var state = {
     { key: '狀態', label: '狀態' }
   ];
 
+  // 會議精簡 profile：預設核心欄位（寬度可完整塞進一屏，簡報最好讀）
+  var LIST_CORE_IDS = ['序號', '公司名稱', '課別', '開發者', '類別', '收貨站所', '填單日期', '導入', '狀態'];
+  var ALL_LIST_COLS = (function(){
+    var o = {};
+    for(var i = 0; i < LIST_COLUMNS.length; i++) o[LIST_COLUMNS[i].key] = true;
+    return o;
+  })();
+
+  // 會議精簡 profile 的欄位勾選物件（純函式）
+  function defaultListCols(){
+    var o = {};
+    for(var c = 0; c < LIST_CORE_IDS.length; c++) o[LIST_CORE_IDS[c]] = true;
+    return o;
+  }
+
+  // 正規化欄位勾選：null/undefined → 核心 profile；物件則逐欄讀取（缺欄回退該欄預設值）
+  function normalizeListCols(raw){
+    var out = {};
+    var src = (raw && typeof raw === 'object') ? raw : null;
+    var def = defaultListCols();
+    for(var i = 0; i < LIST_COLUMNS.length; i++){
+      var k = LIST_COLUMNS[i].key;
+      out[k] = (src && src[k] !== undefined) ? !!src[k] : !!def[k];
+    }
+    return out;
+  }
+
+  // 依勾選組出實際渲染欄（維持 LIST_COLUMNS 順序；純函式）
+  function visibleListColumns(enabled){
+    var en = normalizeListCols(enabled);
+    var out = [];
+    for(var i = 0; i < LIST_COLUMNS.length; i++){
+      if(en[LIST_COLUMNS[i].key]) out.push(LIST_COLUMNS[i]);
+    }
+    return out;
+  }
+
   // 空值桶（下拉選項用）：資料該欄為空白時以 '__blank__' 代表，顯示 (空白)
   var BLANK_BUCKET = '__blank__';
 
@@ -3579,6 +3669,52 @@ var state = {
     }
   }
 
+  // 純函式：右欄「開會資訊」內容（期間描述＋篩選＋檔案＋存檔時間＋件數）
+  function buildMeetingInfo(opts){
+    var rows = (opts && opts.model && opts.model.rows) || [];
+    var period = opts && opts.period;
+    var periodDesc = describePeriod(period);
+    var f = (opts && opts.filters) || {};
+    var active = [];
+    var FILTER_ORDER = ['課別', '狀態', '開發者', '類別'];
+    for(var i = 0; i < FILTER_ORDER.length; i++){
+      var kv = f[FILTER_ORDER[i]];
+      if(kv) active.push(String(kv).trim());
+    }
+    if(f['關鍵字']) active.push('關鍵字「' + String(f['關鍵字']).trim() + '」');
+    var pr = applyPeriod(rows, period);
+    var savedAt = opts && opts.savedAt;
+    return [
+      { k: '分析期間', v: periodDesc || '全部數據' },
+      { k: '篩選條件', v: active.length ? active.join(' · ') : '無（全部）' },
+      { k: '資料檔案', v: (opts && opts.name) || '—' },
+      { k: '存檔時間', v: savedAt ? String(savedAt).replace('T', ' ').slice(0, 16) : '—' },
+      { k: '案件件數', v: '總 ' + rows.length + ' 筆｜本期 ' + pr.rows.length + ' 筆' }
+    ];
+  }
+
+  // 渲染右欄「開會資訊」；資料或期間／篩選／存檔變動時由重建流程呼叫
+  function renderMeetingInfo(){
+    var info = document.getElementById('meetingInfo');
+    if(!info || !state.model) return;
+    info.replaceChildren();
+    var items = buildMeetingInfo({
+      model: state.model,
+      period: state.period,
+      filters: state.filters,
+      name: state.fileName || '',
+      savedAt: state.savedAt || ''
+    });
+    for(var i = 0; i < items.length; i++){
+      var dt = document.createElement('dt');
+      dt.appendChild(document.createTextNode(items[i].k));
+      var dd = document.createElement('dd');
+      dd.appendChild(document.createTextNode(items[i].v));
+      info.appendChild(dt);
+      info.appendChild(dd);
+    }
+  }
+
   // 建立期間控制事件（元素常駐，僅需綁定一次）
   function initPeriodControls(){
     var chips = document.querySelectorAll('.period-chip');
@@ -3834,13 +3970,78 @@ var state = {
       return;
     }
     renderList(results, {
-      columns: LIST_COLUMNS,
+      columns: visibleListColumns(state.listCols),
       rows: page.rows,
       start: page.start, end: page.end, total: page.total,
       page: page.page, totalPages: page.totalPages,
       sortCol: state.sortCol, sortDir: state.sortDir,
       onSort: sortBy, onPage: gotoPage
     });
+  }
+
+  // 案件清單：欄位顯示切換（勾選→即時重繪＋存檔；純邏輯函式）
+  function applyListCols(enabled){
+    state.listCols = normalizeListCols(enabled);
+    rebuildListResults();
+    persistData();
+  }
+
+  // 建立「欄位 ⚙」面板（checkbox 清單＋精簡/完整快捷）並接線，只做一次
+  function buildListColsPanel(){
+    var panel = document.getElementById('listColsPanel');
+    var items = document.getElementById('listColsItems');
+    if(!panel || !items || items.children.length) return;
+    var i, k, lab, cb;
+    for(i = 0; i < LIST_COLUMNS.length; i++){
+      k = LIST_COLUMNS[i].key;
+      lab = document.createElement('label');
+      lab.className = 'cols-item';
+      cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = k;
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(LIST_COLUMNS[i].label));
+      (function(c){
+        c.addEventListener('change', function(){
+          var en = normalizeListCols(state.listCols);
+          en[c.value] = c.checked;
+          applyListCols(en);
+          syncListColsPanel();
+        });
+      })(cb);
+      items.appendChild(lab);
+    }
+    var btn = document.getElementById('listColsBtn');
+    if(btn){
+      btn.addEventListener('click', function(){
+        syncListColsPanel();
+        panel.hidden = !panel.hidden;
+      });
+    }
+    var closeBtn = document.getElementById('colsClose');
+    if(closeBtn) closeBtn.addEventListener('click', function(){ panel.hidden = true; });
+    var coreBtn = document.getElementById('colsCore');
+    if(coreBtn) coreBtn.addEventListener('click', function(){ applyListCols(defaultListCols()); syncListColsPanel(); });
+    var fullBtn = document.getElementById('colsFull');
+    if(fullBtn) fullBtn.addEventListener('click', function(){ applyListCols(ALL_LIST_COLS); syncListColsPanel(); });
+  }
+
+  // 勾選狀態與 profile 按鈕反饋同步到面板
+  function syncListColsPanel(){
+    var panel = document.getElementById('listColsPanel');
+    if(!panel) return;
+    var en = normalizeListCols(state.listCols);
+    var boxes = panel.querySelectorAll('.cols-item input');
+    var anyOff = false;
+    for(var b = 0; b < boxes.length; b++){
+      boxes[b].checked = !!en[boxes[b].value];
+      if(!en[boxes[b].value]) anyOff = true;
+    }
+    var coreBtn = document.getElementById('colsCore');
+    var fullBtn = document.getElementById('colsFull');
+    var isCore = !anyOff && visibleListColumns(state.listCols).length === LIST_CORE_IDS.length;
+    if(coreBtn) coreBtn.classList.toggle('cols-on', isCore);
+    if(fullBtn) fullBtn.classList.toggle('cols-on', visibleListColumns(state.listCols).length === LIST_COLUMNS.length);
   }
 
   // 案件清單區段（篩選列一次建立；結果每次重建）
@@ -3867,6 +4068,7 @@ var state = {
     var filtered = applyFilters(state.model.rows, state.filters);
     var pr = applyPeriod(filtered, state.period);
     updatePeriodBadge(pr.rows.length, pr.excluded);
+    renderMeetingInfo();
     var m = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
     renderHighlightsSection(m);
     renderStats(m);
@@ -4055,7 +4257,8 @@ var state = {
       name: state.fileName || '資料',
       model: state.model,
       agenda: state.agenda,
-      presentEnabled: state.presentEnabled
+      presentEnabled: state.presentEnabled,
+      listCols: normalizeListCols(state.listCols)
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -4100,8 +4303,10 @@ var state = {
   function persistData(){
     try{
       if(!state.model) return;
-      var payload = JSON.stringify({ v: 1, savedAt: new Date().toISOString(), name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled });
+      state.savedAt = new Date().toISOString();
+      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols) });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
+      renderMeetingInfo();
     }catch(_){}
   }
 
@@ -4122,6 +4327,7 @@ var state = {
     try{ localStorage.removeItem(DATA_STORAGE_KEY); }catch(_){}
     state.agenda = [];
     state.presentEnabled = {};
+    state.listCols = null;
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
     renderAgenda();
@@ -4205,7 +4411,7 @@ var state = {
     var nextBtn = buttonEl('pvNext', '下一頁 →');
     var pagesBtn = buttonEl('pvPagesBtn', '頁面 ✎');
     var hint = document.createElement('span'); hint.className = 'pv-hint'; hint.id = 'pvHint';
-    hint.textContent = '←/→ 或空白換頁 · D 切到期間下拉 · Esc 結束';
+    hint.textContent = '←/→ 或空白換頁 · D 切到期間 · 1/2 切欄位 · Esc 結束';
     var exitBtn = buttonEl('pvExit', '結束簡報（Esc）');
     exitBtn.className = 'pv-exit';
     dock.appendChild(b); dock.appendChild(sel);
@@ -4423,6 +4629,12 @@ var state = {
     } else if(k === 'End'){
       e.preventDefault();
       showPresentSlide((presentState.slides ? presentState.slides.length : 1) - 1);
+    } else if(k === '1'){
+      e.preventDefault();
+      applyListCols(defaultListCols());
+    } else if(k === '2'){
+      e.preventDefault();
+      applyListCols(ALL_LIST_COLS);
     } else if(k === 'd' || k === 'D'){
       var sel = document.getElementById('pvPeriod');
       if(sel) sel.focus();
@@ -4439,6 +4651,11 @@ var state = {
     state.presentEnabled = normalizePresentEnabled(d && d.presentEnabled);
     persistData();
   }
+  function restoreListCols(d){
+    state.listCols = normalizeListCols(d && d.listCols);
+    rebuildListResults();
+    persistData();
+  }
   function tryRestoreData(){
     var emb = document.getElementById('crm-embedded');
     if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
@@ -4448,6 +4665,7 @@ var state = {
           applyModel(payload.model, payload.name || '內嵌資料', { source: '內嵌副本' });
           restoreAgenda(payload);
           restorePresentConfig(payload);
+          restoreListCols(payload);
           return true;
         }
       }catch(_){}
@@ -4457,6 +4675,7 @@ var state = {
       applyModel(stored.model, stored.name || '記憶資料', { source: '記憶' });
       restoreAgenda(stored);
       restorePresentConfig(stored);
+      restoreListCols(stored);
       return true;
     }
     return false;
@@ -4565,6 +4784,7 @@ var state = {
       });
     }
 
+    buildListColsPanel();
     tryRestoreData();
     renderAgenda();
   }
@@ -4607,6 +4827,8 @@ var state = {
       SLOW_DAYS: SLOW_DAYS, STALE_DAYS: STALE_DAYS, ALERT_MAX: ALERT_MAX,
       renderAlerts: renderAlerts,
       renderAlertsSection: renderAlertsSection,
+      buildMeetingInfo: buildMeetingInfo,
+      renderMeetingInfo: renderMeetingInfo,
       MILESTONES: MILESTONES,
       computeMilestones: computeMilestones,
       computeFunnel: computeFunnel,
@@ -4648,6 +4870,13 @@ var state = {
       renderRankSection: renderRankSection,
       PAGE_SIZE: PAGE_SIZE,
       LIST_COLUMNS: LIST_COLUMNS,
+      LIST_CORE_IDS: LIST_CORE_IDS,
+      ALL_LIST_COLS: ALL_LIST_COLS,
+      defaultListCols: defaultListCols,
+      normalizeListCols: normalizeListCols,
+      visibleListColumns: visibleListColumns,
+      applyListCols: applyListCols,
+      buildListColsPanel: buildListColsPanel,
       BLANK_BUCKET: BLANK_BUCKET,
       STATUS_ORDER: STATUS_ORDER,
       defaultFilters: defaultFilters,
@@ -4672,6 +4901,7 @@ var state = {
       enterPresent: enterPresent,
       leavePresent: leavePresent,
       showPresentSlide: showPresentSlide,
+      presentOnKey: presentOnKey,
       updatePeriodBadge: updatePeriodBadge,
       initPeriodControls: initPeriodControls,
       sortValue: sortValue,
