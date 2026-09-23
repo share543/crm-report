@@ -76,6 +76,7 @@
   :root[data-theme="light"] #dropzone{ background:#fff; }
   :root[data-theme="light"] tbody tr:hover td,
   :root[data-theme="light"] .do-node:hover,
+  :root[data-theme="light"] .ts-node:hover,
   :root[data-theme="light"] .list-row:hover td{ background:#e2e7ee; }
   :root[data-theme="light"] .list-row-open td,
   :root[data-theme="light"] .list-detail td,
@@ -267,6 +268,26 @@
   .do-content{ font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.6; margin-top:2px; }
   .do-field-label{ color:var(--accent); font-weight:600; }
   .do-empty{ color:var(--muted); font-style:italic; }
+  .timing-cols{ display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; margin:2px 0 10px; }
+  .timing-col{ min-width:0; }
+  .timing-col .subtitle{ margin-top:2px; }
+  .ts-dist{ display:flex; flex-direction:column; gap:2px; margin:2px 0 10px; }
+  .ts-node{ display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent;
+    font-family:inherit; color:inherit; font-size:13px; padding:7px 8px; border-radius:8px;
+    cursor:pointer; text-align:left; }
+  .ts-node:hover{ background:var(--row-hover); }
+  .ts-node-label{ flex:0 0 84px; white-space:nowrap; font-weight:600; }
+  .ts-node-track{ flex:1 1 auto; max-width:300px; background:var(--card); border:1px solid var(--border);
+    border-radius:5px; height:10px; overflow:hidden; }
+  .ts-node-fill{ display:block; width:0; height:10px; border-radius:5px; min-width:0; background:#5ad98b; }
+  .ts-node-count{ color:var(--muted); font-weight:600; min-width:44px; text-align:right; white-space:nowrap; }
+  .ts-total-chip{ color:var(--accent); border-color:var(--accent); }
+  .ts-mini-wrap{ overflow-x:auto; margin-top:2px; }
+  .ts-mini{ border-collapse:collapse; font-size:12px; width:100%; }
+  .ts-mini td{ padding:2px 8px; border:1px solid var(--border); white-space:nowrap; text-align:center; }
+  .ts-mini-label{ color:var(--muted); font-weight:600; }
+  .ts-mini-total{ color:var(--accent); font-weight:650; }
+  .ts-mini-null{ color:var(--muted); font-style:italic; }
   .state-pie-row{ display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
   .state-pie-wrap{ margin:6px 0 18px; }
   #keBarWrap{ margin-top:14px; }
@@ -443,6 +464,13 @@
     background:var(--card-2); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; }
   #presentOverlay .pv-pages-row button:hover{ border-color:var(--accent); }
   @media print{ #presentOverlay{ display:none !important; } }
+  /* 排行分析拆三張投影片：簡報中只顯示一張 block，且該表只保留前 10 列 */
+  /* 排行分析拆三張投影片：簡報中只顯示一張 block，且該表只保留前 10 列 */
+  body.pv-mode #rankSection .rank-block{ display:none; }
+  body.pv-mode #rankSection[data-rank-part="devs"] #rank-devs,
+  body.pv-mode #rankSection[data-rank-part="kes"] #rank-kes,
+  body.pv-mode #rankSection[data-rank-part="stations"] #rank-stations{ display:block; }
+  body.pv-mode #rankSection .rank-table tbody tr:nth-child(n+11){ display:none; }
   /* 簡報中議題卡只讀：隱藏編輯入口與編輯器 */
   body.pv-mode #agendaBlock .mini-btn,
   body.pv-mode #addAgendaEmptyBtn,
@@ -458,11 +486,17 @@
   .meeting-info dt{ font-size:12px; color:var(--muted); margin-top:10px; }
   .meeting-info dt:first-child{ margin-top:2px; }
   .meeting-info dd{ margin:2px 0 0; font-size:14px; color:var(--text); word-break:break-all; line-height:1.45; }
+  .meeting-spark-cap{ font-size:12px; color:var(--muted); }
+  .meeting-spark{ margin:4px 0 0; }
+  .meeting-spark svg{ display:block; width:100%; height:68px; }
+  .meeting-spark .spark-date text{ fill:var(--muted); font-size:9px; }
   @media (max-width:820px){ .agenda-wrap{ grid-template-columns:1fr; } }
   body.pv-mode .agenda-side{ padding:18px 24px; }
   body.pv-mode .agenda-side .subtitle{ font-size:17px; }
   body.pv-mode .meeting-info dt{ font-size:15px; padding-left:6px; }
   body.pv-mode .meeting-info dd{ font-size:24px; padding-left:6px; line-height:1.35; }
+  body.pv-mode .meeting-spark-cap{ font-size:14px; padding-left:6px; }
+  body.pv-mode .meeting-spark svg{ height:88px; }
   /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
   button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .list-row:focus-visible, .do-node:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
@@ -494,6 +528,7 @@
     .type-analysis, .state-pie-row{ flex-direction:column; }
     .type-bar-track{ max-width:none; }
     .do-node-label{ flex-basis:110px; }
+    .timing-cols{ grid-template-columns:1fr; }
   }
   /* Task 8：列印樣式（深色主題→白底黑字，隱藏操作型 UI，表格避免分頁切欄） */
   @media print{
@@ -550,8 +585,13 @@
     tbody td{ border-bottom:1px solid #ddd; white-space:normal !important; }
     tr{ page-break-inside:avoid; break-inside:avoid; }
     .do-node-track, .type-bar-track, .rank-bar-track{ background:#eee; }
-    .do-node-fill, .type-bar-fill, .rank-bar-fill{
+    .timing-cols{ grid-template-columns:1fr; }
+    .do-node-fill, .type-bar-fill, .rank-bar-fill,
+    .ts-node-fill{
       print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+    .ts-node:hover{ background:#fff; }
+    .ts-mini td{ border-color:#bbb; }
+    .ts-mini-label{ color:#333; }
     svg text{ fill:#000 !important; }
   }
 </style>
@@ -2430,6 +2470,84 @@ var state = {
     return { stages: stages, total: { label: '填單→導入（總時程）', data: totalDays } };
   }
 
+  // 純函式：單一客戶的時程資料（總時程＋各階段天數；缺任一階段為 null）
+  function perCustomerTiming(r){
+    var raw = (r && r._raw) || {};
+    var stages = [];
+    for(var i = 0; i < STAGE_PAIRS.length; i++){
+      var pair = STAGE_PAIRS[i];
+      var s = dateToSerial(raw[pair.from]);
+      var e = dateToSerial(raw[pair.to]);
+      stages.push((s !== null && e !== null && isFinite(e - s) && e - s >= 0) ? e - s : null);
+    }
+    var s2 = dateToSerial(raw['填單日期']);
+    var e2 = dateToSerial(raw['導入']);
+    var total = (s2 !== null && e2 !== null && isFinite(e2 - s2) && e2 - s2 >= 0) ? e2 - s2 : null;
+    return { total: total, stages: stages };
+  }
+
+  // 純函式：總時程分箱（填單→導入）。回傳 { bins:[{lo,hi,label,list:[{row,timing}]}], maxCount, totalCount }
+  // 分箱：0–6、7–13、14–20、21–27、28+ 天（最後一箱開端，容納所有 28 天以上客戶）。
+  function binsFromDays(days){
+    var items = [];
+    for(var i = 0; i < days.length; i++){
+      items.push({ d: days[i] });
+    }
+    var binEdges = [0, 7, 14, 21, 28, Infinity];
+    var binsArr = [];
+    for(var bi = 0; bi < binEdges.length - 1; bi++) binsArr.push({ lo: binEdges[bi], hi: binEdges[bi + 1], list: [] });
+    var maxCount = 1;
+    for(var j = 0; j < items.length; j++){
+      var it = items[j];
+      for(var bk = 0; bk < binsArr.length; bk++){
+        if(it.d >= binsArr[bk].lo && it.d < binsArr[bk].hi){
+          binsArr[bk].list.push({ row: null, timing: null });
+          if(binsArr[bk].list.length > maxCount) maxCount = binsArr[bk].list.length;
+          break;
+        }
+      }
+    }
+    for(var m = 0; m < binsArr.length; m++){
+      var lo = binsArr[m].lo, hi = binsArr[m].hi;
+      binsArr[m].label = (!isFinite(hi)) ? lo + '+ 天' : lo + '–' + (hi - 1) + ' 天';
+    }
+    return { bins: binsArr, maxCount: maxCount, totalCount: items.length };
+  }
+
+  function computeTotalBins(rows){
+    var items = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var raw = r && r._raw;
+      if(!raw) continue;
+      var s = dateToSerial(raw['填單日期']);
+      var e = dateToSerial(raw['導入']);
+      if(s === null || e === null) continue;
+      var d = e - s;
+      if(d < 0 || !isFinite(d)) continue;
+      items.push({ row: r, d: d });
+    }
+    var binEdges = [0, 7, 14, 21, 28, Infinity];
+    var binsArr = [];
+    for(var bi = 0; bi < binEdges.length - 1; bi++) binsArr.push({ lo: binEdges[bi], hi: binEdges[bi + 1], list: [] });
+    var maxCount = 1;
+    for(var j = 0; j < items.length; j++){
+      var it = items[j];
+      for(var bk = 0; bk < binsArr.length; bk++){
+        if(it.d >= binsArr[bk].lo && it.d < binsArr[bk].hi){
+          binsArr[bk].list.push({ row: it.row, timing: perCustomerTiming(it.row) });
+          if(binsArr[bk].list.length > maxCount) maxCount = binsArr[bk].list.length;
+          break;
+        }
+      }
+    }
+    for(var m = 0; m < binsArr.length; m++){
+      var lo = binsArr[m].lo, hi = binsArr[m].hi;
+      binsArr[m].label = (!isFinite(hi)) ? lo + '+ 天' : lo + '–' + (hi - 1) + ' 天';
+    }
+    return { bins: binsArr, maxCount: maxCount, totalCount: items.length };
+  }
+
   // 類別規則檢核 → 中文註記文字
   function buildRuleNote(v){
     function catList(m){
@@ -2473,8 +2591,8 @@ var state = {
     sec.hidden = false;
   }
 
-  // 渲染：時程分析（表格 + 平均天長條圖 + 總時程直方圖）
-  function renderTiming(container, timing){
+  // 渲染：時程分析（總時程分布＋表格＋平均天長條圖）
+  function renderTiming(container, timing, bins){
     container.textContent = '';
     if(!timing || !timing.stages || !timing.stages.length){
       container.className = 'pending';
@@ -2482,6 +2600,178 @@ var state = {
       return;
     }
     container.className = '';
+
+    // --- 總時程分布（可展開客戶明細）---
+    function fieldVal(r, key){
+      return (r && r[key] !== undefined && r[key] !== null && String(r[key]).trim() !== '')
+        ? String(r[key]).trim() : '(空白)';
+    }
+    // 單一客戶卡：公司名＋chips＋各階段落差 mini 表
+    function buildTimingCustomer(c){
+      var r = c.row || {};
+      var t = c.timing || perCustomerTiming(r);
+      var item = document.createElement('div');
+      item.className = 'do-cust';
+      var head = document.createElement('div');
+      head.className = 'do-cust-head';
+      var name = document.createElement('span');
+      name.className = 'do-cust-name';
+      name.textContent = fieldVal(r, '公司名稱');
+      head.appendChild(name);
+      var chipCat = document.createElement('span');
+      chipCat.className = 'do-chip';
+      chipCat.textContent = '類別 ' + fieldVal(r, '類別');
+      var chipKe = document.createElement('span');
+      chipKe.className = 'do-chip';
+      chipKe.textContent = '課別 ' + fieldVal(r, '課別');
+      var chipTotal = document.createElement('span');
+      chipTotal.className = 'do-chip ts-total-chip';
+      chipTotal.textContent = '總 ' + (t.total === null ? '－' : t.total + ' 天');
+      head.appendChild(chipCat);
+      head.appendChild(chipKe);
+      head.appendChild(chipTotal);
+      item.appendChild(head);
+      // 各階段 mini 表
+      var grid = document.createElement('table');
+      grid.className = 'ts-mini';
+      var hr = document.createElement('tr');
+      for(var s = 0; s < t.stages.length; s++){
+        var th = document.createElement('td');
+        th.className = 'ts-mini-label';
+        th.textContent = STAGE_PAIRS[s].label;
+        hr.appendChild(th);
+      }
+      var hTot = document.createElement('td');
+      hTot.className = 'ts-mini-label ts-mini-total';
+      hTot.textContent = '填單→導入';
+      hr.appendChild(hTot);
+      grid.appendChild(hr);
+      var vr = document.createElement('tr');
+      function dayCell(v, isTotal){
+        var td = document.createElement('td');
+        if(isTotal) td.className = 'ts-mini-total';
+        td.textContent = (v === null) ? '－' : v + ' 天';
+        if(v === null) td.className += ' ts-mini-null';
+        return td;
+      }
+      for(var s2 = 0; s2 < t.stages.length; s2++) vr.appendChild(dayCell(t.stages[s2], false));
+      vr.appendChild(dayCell(t.total, true));
+      grid.appendChild(vr);
+      var gridWrap = document.createElement('div');
+      gridWrap.className = 'ts-mini-wrap';
+      gridWrap.appendChild(grid);
+      item.appendChild(gridWrap);
+      return item;
+    }
+    // 每個分箱一列可展開節點（整列可點擊）
+    function buildTimingBin(node, bucket){
+      var rowBtn = document.createElement('button');
+      rowBtn.type = 'button';
+      rowBtn.className = 'ts-node';
+      rowBtn.setAttribute('aria-expanded', 'false');
+      var caret = document.createElement('span');
+      caret.className = 'do-caret';
+      var lab = document.createElement('span');
+      lab.className = 'ts-node-label';
+      lab.textContent = bucket.label;
+      var track = document.createElement('span');
+      track.className = 'ts-node-track';
+      var fill = document.createElement('span');
+      fill.className = 'ts-node-fill';
+      if(bucket.list.length && bins && bins.maxCount > 0){
+        fill.style.width = Math.max(0, Math.min(100, Math.round(bucket.list.length / bins.maxCount * 100))) + '%';
+      }
+      track.appendChild(fill);
+      var cnt = document.createElement('span');
+      cnt.className = 'ts-node-count';
+      cnt.textContent = bucket.list.length + ' 筆';
+      rowBtn.appendChild(caret);
+      rowBtn.appendChild(lab);
+      rowBtn.appendChild(track);
+      rowBtn.appendChild(cnt);
+      var listBox = document.createElement('div');
+      listBox.className = 'do-list';
+      listBox.hidden = true;
+      if(bucket.list.length){
+        for(var i = 0; i < bucket.list.length; i++) listBox.appendChild(buildTimingCustomer(bucket.list[i]));
+      } else {
+        var empty = document.createElement('p');
+        empty.className = 'note do-empty';
+        empty.textContent = '此區間無客戶';
+        listBox.appendChild(empty);
+      }
+      rowBtn.addEventListener('click', function(e){
+        var open = rowBtn.classList.toggle('open');
+        listBox.hidden = !open;
+        rowBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      node.appendChild(rowBtn);
+      node.appendChild(listBox);
+    }
+
+    var totalData = timing.total.data;
+    var barData = timing.stages;
+    var maxAvg = 0;
+    for(var b = 0; b < barData.length; b++){
+      var sAvg = summarize(barData[b].data).avg;
+      if(sAvg > maxAvg) maxAvg = sAvg;
+    }
+
+    // --- 兩欄併排：左＝總時程分布（可展開）、右＝各階段平均天數 ---
+    var gridWrap = document.createElement('div');
+    gridWrap.className = 'timing-cols';
+    var hasCol = false;
+    if(totalData.length){
+      hasCol = true;
+      var colLeft = document.createElement('div');
+      colLeft.className = 'timing-col';
+      var buckets = (bins && Array.isArray(bins.bins) && bins.bins.length) ? bins.bins : binsFromDays(totalData).bins;
+      var title = document.createElement('p');
+      title.className = 'subtitle';
+      title.textContent = '總時程分布（填單→導入，共 ' + totalData.length + ' 筆）· 點選區間可展開客戶明細';
+      colLeft.appendChild(title);
+      var dist = document.createElement('div');
+      dist.className = 'ts-dist';
+      for(var i = 0; i < buckets.length; i++) buildTimingBin(dist, buckets[i]);
+      colLeft.appendChild(dist);
+      gridWrap.appendChild(colLeft);
+    }
+    if(maxAvg > 0){
+      hasCol = true;
+      var colRight = document.createElement('div');
+      colRight.className = 'timing-col';
+      var bw = 700, labelW = 160, barArea = 340, RH = 36, gap = 6;
+      var bH = 30 + barData.length * (RH + gap) + 10;
+      var bSvg = svgEl('svg', { viewBox: '0 0 ' + bw + ' ' + bH, width: '100%' });
+      var bDefs = svgEl('defs', {});
+      var bGrad = svgEl('linearGradient', { id: 'timingBarGrad', x1: '0', y1: '0', x2: '1', y2: '0' });
+      bGrad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff' }));
+      bGrad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#8fb6ff' }));
+      bDefs.appendChild(bGrad);
+      bSvg.appendChild(bDefs);
+      var bTitle = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
+      bTitle.textContent = '各階段平均天數';
+      bSvg.appendChild(bTitle);
+      for(var j = 0; j < barData.length; j++){
+        var smJ = summarize(barData[j].data);
+        var y = 30 + j * (RH + gap);
+        var cy = y + RH / 2;
+        var lab = svgEl('text', { x: labelW - 8, y: cy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
+        lab.textContent = barData[j].label;
+        bSvg.appendChild(lab);
+        var track = svgEl('rect', { x: labelW, y: y + 4, width: barArea, height: RH - 8, rx: 5, fill: '#21262f' });
+        bSvg.appendChild(track);
+        var fw = Math.max(2, Math.round(smJ.avg / maxAvg * barArea));
+        var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: 'url(#timingBarGrad)' });
+        bSvg.appendChild(fill);
+        var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+        val.textContent = smJ.avg.toFixed(1) + ' 天（有效樣本 ' + smJ.n + ' 筆）';
+        bSvg.appendChild(val);
+      }
+      colRight.appendChild(bSvg);
+      gridWrap.appendChild(colRight);
+    }
+    if(hasCol) container.appendChild(gridWrap);
 
     // --- 表格 ---
     var tableWrap = document.createElement('div');
@@ -2515,88 +2805,6 @@ var state = {
     tableWrap.appendChild(table);
     container.appendChild(tableWrap);
 
-    // --- 各階段平均天 SVG 長條圖 ---
-    var barData = timing.stages;
-    var maxAvg = 0;
-    for(var b = 0; b < barData.length; b++){
-      var sAvg = summarize(barData[b].data).avg;
-      if(sAvg > maxAvg) maxAvg = sAvg;
-    }
-    if(maxAvg > 0){
-      var bw = 700, labelW = 160, barArea = 340, RH = 36, gap = 6;
-      var bH = 30 + barData.length * (RH + gap) + 10;
-      var bSvg = svgEl('svg', { viewBox: '0 0 ' + bw + ' ' + bH, width: '100%' });
-      var bDefs = svgEl('defs', {});
-      var bGrad = svgEl('linearGradient', { id: 'timingBarGrad', x1: '0', y1: '0', x2: '1', y2: '0' });
-      bGrad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff' }));
-      bGrad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#8fb6ff' }));
-      bDefs.appendChild(bGrad);
-      bSvg.appendChild(bDefs);
-      var bTitle = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
-      bTitle.textContent = '各階段平均天數';
-      bSvg.appendChild(bTitle);
-      for(var j = 0; j < barData.length; j++){
-        var smJ = summarize(barData[j].data);
-        var y = 30 + j * (RH + gap);
-        var cy = y + RH / 2;
-        var lab = svgEl('text', { x: labelW - 8, y: cy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
-        lab.textContent = barData[j].label;
-        bSvg.appendChild(lab);
-        var track = svgEl('rect', { x: labelW, y: y + 4, width: barArea, height: RH - 8, rx: 5, fill: '#21262f' });
-        bSvg.appendChild(track);
-        var fw = Math.max(2, Math.round(smJ.avg / maxAvg * barArea));
-        var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: 'url(#timingBarGrad)' });
-        bSvg.appendChild(fill);
-        var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
-        val.textContent = smJ.avg.toFixed(1) + ' 天（有效樣本 ' + smJ.n + ' 筆）';
-        bSvg.appendChild(val);
-      }
-      container.appendChild(bSvg);
-    }
-
-    // --- 總時程直方圖 ---
-    var totalData = timing.total.data;
-    if(totalData.length){
-      var tMax = 0;
-      for(var t = 0; t < totalData.length; t++) if(totalData[t] > tMax) tMax = totalData[t];
-      var binEdges = [0, 7, 14, 21, 28, 42, 60];
-      binEdges.push(Math.max(tMax + 1, 61));
-      var bins = [];
-      for(var bi = 0; bi < binEdges.length - 1; bi++) bins.push(0);
-      for(var td2 = 0; td2 < totalData.length; td2++){
-        for(var bj = 0; bj < binEdges.length - 1; bj++){
-          if(totalData[td2] >= binEdges[bj] && totalData[td2] < binEdges[bj + 1]){ bins[bj]++; break; }
-        }
-      }
-      var maxBin = 1;
-      for(var bk = 0; bk < bins.length; bk++) if(bins[bk] > maxBin) maxBin = bins[bk];
-      var hW = 700, hLabelW = 60, hBarArea = 560, hRH = 36, hGap = 6;
-      var hH = 30 + bins.length * (hRH + hGap) + 10;
-      var hSvg = svgEl('svg', { viewBox: '0 0 ' + hW + ' ' + hH, width: '100%' });
-      var hTitle = svgEl('text', { x: 0, y: 18, 'font-size': '14', 'font-weight': '650', fill: '#9aa3b2' });
-      hTitle.textContent = '總時程分布（填單→導入，共 ' + totalData.length + ' 筆）';
-      hSvg.appendChild(hTitle);
-      for(var hi = 0; hi < bins.length; hi++){
-        var hy = 30 + hi * (hRH + hGap);
-        var hcy = hy + hRH / 2;
-        var lo = binEdges[hi], hi2 = binEdges[hi + 1];
-        var binLabel = lo + '–' + (hi2 - 1) + ' 天';
-        if(hi === bins.length - 1 && hi2 > 60) binLabel = lo + '+ 天';
-        var hLab = svgEl('text', { x: hLabelW - 6, y: hcy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
-        hLab.textContent = binLabel;
-        hSvg.appendChild(hLab);
-        var hTrack = svgEl('rect', { x: hLabelW, y: hy + 4, width: hBarArea, height: hRH - 8, rx: 5, fill: '#21262f' });
-        hSvg.appendChild(hTrack);
-        var hFw = Math.max(bins[hi] > 0 ? 4 : 0, Math.round(bins[hi] / maxBin * hBarArea));
-        var hFill = svgEl('rect', { x: hLabelW, y: hy + 4, width: hFw, height: hRH - 8, rx: 5, fill: '#5ad98b' });
-        hSvg.appendChild(hFill);
-        var hVal = svgEl('text', { x: hLabelW + hFw + 8, y: hcy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
-        hVal.textContent = bins[hi] + ' 筆';
-        hSvg.appendChild(hVal);
-      }
-      container.appendChild(hSvg);
-    }
-
     // --- 備註 ---
     var note = document.createElement('p');
     note.className = 'note';
@@ -2609,7 +2817,7 @@ var state = {
     var sec = document.getElementById('timingSection');
     var box = document.getElementById('timing');
     if(!sec || !box || !model || !model.rows) return;
-    renderTiming(box, computeStageDurations(model.rows));
+    renderTiming(box, computeStageDurations(model.rows), computeTotalBins(model.rows));
     sec.hidden = false;
   }
 
@@ -2954,6 +3162,54 @@ var state = {
     if(type === 'hbar' || type === 'hist') return makeHBars(container, data, opts);
     if(type === 'bar') return makeVBars(container, data, opts);
     return makeHBars(container, data, opts);
+  }
+
+  // sparkline：橫向迷你折線（無座標軸、純形狀），尺寸隨容器縮放；用於右欄「本月每日新增案件」
+  function makeSparkline(container, days, opts){
+    container.textContent = '';
+    if(!days || !days.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return null;
+    }
+    container.className = '';
+    opts = opts || {};
+    var w = opts.w || 340, h = opts.h || 52, pad = opts.pad || 3, labH = opts.labH || 16;
+    var max = 1;
+    for(var i = 0; i < days.length; i++) if(days[i].count > max) max = days[i].count;
+    var n = days.length;
+    var stepX = (n > 1) ? ((w - pad * 2) / (n - 1)) : 0;
+    var pts = [];
+    for(var j = 0; j < n; j++){
+      var x = pad + (n > 1 ? j * stepX : w / 2);
+      var y = h - pad - (days[j].count / max) * (h - pad * 2);
+      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    var svg = svgEl('svg', { viewBox: '0 0 ' + w + ' ' + (h + labH), width: '100%', height: h + labH, preserveAspectRatio: 'none' });
+    var g = svgEl('g', {});
+    var grad = svgEl('linearGradient', { id: 'sparkFill', x1: '0', y1: '0', x2: '0', y2: '1' });
+    grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff', 'stop-opacity': '0.30' }));
+    grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#4f8eff', 'stop-opacity': '0.03' }));
+    svg.appendChild(grad);
+    var area = svgEl('polygon', { points: pts.join(' ') + ' ' + (pad + stepX * (n - 1)).toFixed(1) + ',' + (h - pad) + ' ' + pad + ',' + (h - pad), fill: 'url(#sparkFill)', stroke: 'none' });
+    g.appendChild(area);
+    var line = svgEl('polyline', { points: pts.join(' '), fill: 'none', stroke: '#4f8eff', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+    g.appendChild(line);
+    var dot = svgEl('circle', { cx: pts[n - 1].split(',')[0], cy: pts[n - 1].split(',')[1], r: 3, fill: '#5ad98b', stroke: '#0e1013', 'stroke-width': 1 });
+    g.appendChild(dot);
+    svg.appendChild(g);
+    var lg = svgEl('g', { 'class': 'spark-date' });
+    for(var t = 0; t < n; t++){
+      var d = days[t].d;
+      if(!(d === 1 || d % 5 === 1 || t === n - 1)) continue;
+      if(t === n - 1 && (d === 1 || d % 5 === 1)) continue;
+      var tx = svgEl('text', { x: pad + (n > 1 ? t * stepX : w / 2), y: h + labH - 4, 'font-size': '9', 'text-anchor': 'middle' });
+      tx.appendChild(document.createTextNode(String(d)));
+      lg.appendChild(tx);
+    }
+    svg.appendChild(lg);
+    container.appendChild(svg);
+    return svg;
   }
 
   function makePieChart(container, data, opts){
@@ -3470,6 +3726,35 @@ var state = {
     return true;
   }
 
+  // 純函式：右欄開會資訊的 sparkline 月份錨點（單月期間取該月；其餘回退目前月）
+  function periodMonthKey(period, now){
+    var range = periodRange(period, now);
+    if(range && range.from){
+      var m = /^(\d{4})-(\d{2})/.exec(String(range.from));
+      if(m) return m[1] + '-' + m[2];
+    }
+    now = now || new Date();
+    return monthKey(now.getFullYear(), now.getMonth() + 1);
+  }
+
+  // 純函式：指定月份每日新增案件數（依 填單日期，1..月底零填充）
+  function dailyNewCounts(rows, ym){
+    var m = /^(\d{4})-(\d{2})$/.exec(ym || '');
+    if(!m) return [];
+    var y = Number(m[1]), mo = Number(m[2]);
+    var last = new Date(y, mo, 0).getDate();
+    var days = [];
+    for(var d = 1; d <= last; d++) days.push({ d: d, count: 0 });
+    for(var i = 0; i < rows.length; i++){
+      var k = periodKeyDay(rows[i] && rows[i]['填單日期']);
+      if(k && k.length >= 10 && k.slice(0, 7) === ym){
+        var dd = Number(k.slice(8, 10));
+        if(dd >= 1 && dd <= last) days[dd - 1].count++;
+      }
+    }
+    return days;
+  }
+
   // 純函式：依期間過濾 → { rows, excluded }（excluded＝期間有效時無填單日期的列數）
   function applyPeriod(rows, period, now){
     var range = periodRange(period, now);
@@ -3778,27 +4063,17 @@ var state = {
     }
   }
 
-  // 純函式：右欄「開會資訊」內容（期間描述＋篩選＋檔案＋存檔時間＋件數）
+  // 純函式：右欄「開會資訊」內容（期間描述＋件數＋本月每日新增 sparkline 資料）
   function buildMeetingInfo(opts){
     var rows = (opts && opts.model && opts.model.rows) || [];
     var period = opts && opts.period;
     var periodDesc = describePeriod(period);
-    var f = (opts && opts.filters) || {};
-    var active = [];
-    var FILTER_ORDER = ['課別', '狀態', '開發者', '類別'];
-    for(var i = 0; i < FILTER_ORDER.length; i++){
-      var kv = f[FILTER_ORDER[i]];
-      if(kv) active.push(String(kv).trim());
-    }
-    if(f['關鍵字']) active.push('關鍵字「' + String(f['關鍵字']).trim() + '」');
     var pr = applyPeriod(rows, period);
-    var savedAt = opts && opts.savedAt;
+    var ym = periodMonthKey(period);
     return [
       { k: '分析期間', v: periodDesc || '全部數據' },
-      { k: '篩選條件', v: active.length ? active.join(' · ') : '無（全部）' },
-      { k: '資料檔案', v: (opts && opts.name) || '—' },
-      { k: '存檔時間', v: savedAt ? String(savedAt).replace('T', ' ').slice(0, 16) : '—' },
-      { k: '案件件數', v: '總 ' + rows.length + ' 筆｜本期 ' + pr.rows.length + ' 筆' }
+      { k: '案件件數', v: pr.rows.length + ' 筆' },
+      { k: '本月每日新增', spark: true, ym: ym, days: dailyNewCounts(rows, ym) }
     ];
   }
 
@@ -3817,9 +4092,20 @@ var state = {
     for(var i = 0; i < items.length; i++){
       var dt = document.createElement('dt');
       dt.appendChild(document.createTextNode(items[i].k));
-      var dd = document.createElement('dd');
-      dd.appendChild(document.createTextNode(items[i].v));
       info.appendChild(dt);
+      var dd = document.createElement('dd');
+      if(items[i].spark){
+        var cap = document.createElement('span');
+        cap.className = 'meeting-spark-cap';
+        cap.textContent = items[i].ym.replace('-', ' 年 ') + ' 月';
+        dd.appendChild(cap);
+        var host = document.createElement('div');
+        host.className = 'meeting-spark';
+        makeSparkline(host, items[i].days);
+        dd.appendChild(host);
+      } else {
+        dd.appendChild(document.createTextNode(items[i].v));
+      }
       info.appendChild(dd);
     }
   }
@@ -4806,7 +5092,11 @@ var state = {
     { id: 'progressSection', title: '進度追蹤表' },
     { id: 'typeSection', title: '案件類型分析' },
     { id: 'funnelSection', title: '里程碑漏斗' },
-    { id: 'rankSection', title: '排行分析' },
+    { id: 'rankSection', title: '排行分析', parts: [
+        { key: 'devs', title: '排行分析：開發者（前 10 名）' },
+        { key: 'kes',  title: '排行分析：課別（前 10 名）' },
+        { key: 'stations', title: '排行分析：站所（前 10 名）' }
+    ] },
     { id: 'timingSection', title: '開發時間分析' },
     { id: 'dropoffSection', title: '轉換流失分析' },
     { id: 'alertSection', title: '待留意事項' },
@@ -4828,7 +5118,15 @@ var state = {
     var en = normalizePresentEnabled(enabled);
     var out = [];
     for(var pi = 0; pi < PRESENT_SLIDES.length; pi++){
-      if(en[PRESENT_SLIDES[pi].id]) out.push(PRESENT_SLIDES[pi]);
+      var s = PRESENT_SLIDES[pi];
+      if(!en[s.id]) continue;
+      if(s.parts && s.parts.length){
+        for(var q = 0; q < s.parts.length; q++){
+          out.push({ id: s.id, title: s.parts[q].title, part: s.parts[q].key });
+        }
+      } else {
+        out.push(s);
+      }
     }
     return out;
   }
@@ -5015,6 +5313,7 @@ var state = {
 
   function restorePresentSlide(id){
     var el = document.getElementById(id);
+    if(el && el.id === 'rankSection' && el.removeAttribute) el.removeAttribute('data-rank-part');
     var origin = presentState.origins && presentState.origins[id];
     if(el && origin && origin.parent){
       origin.parent.insertBefore(el, origin.ref);
@@ -5036,6 +5335,8 @@ var state = {
     var el = document.getElementById(slide.id);
     if(el){
       var body = document.getElementById('pvBody');
+      if(slide.part) el.setAttribute('data-rank-part', slide.part);
+      else if(el.getAttribute) el.removeAttribute('data-rank-part');
       body.appendChild(el);
       presentState.moved = slide.id;
     }
@@ -5310,6 +5611,9 @@ var state = {
       summarize: summarize,
       STAGE_PAIRS: STAGE_PAIRS,
       computeStageDurations: computeStageDurations,
+      perCustomerTiming: perCustomerTiming,
+      binsFromDays: binsFromDays,
+      computeTotalBins: computeTotalBins,
       renderTiming: renderTiming,
       renderTimingSection: renderTimingSection,
       computeStatusBuckets: computeStatusBuckets,
@@ -5352,7 +5656,11 @@ var state = {
       periodRange: periodRange,
       periodMatches: periodMatches,
       applyPeriod: applyPeriod,
+      periodMonthKey: periodMonthKey,
+      dailyNewCounts: dailyNewCounts,
+      makeSparkline: makeSparkline,
       describePeriod: describePeriod,
+      buildMeetingInfo: buildMeetingInfo,
       setPeriod: setPeriod,
       syncPeriodControls: syncPeriodControls,
       PRESENT_SLIDES: PRESENT_SLIDES,

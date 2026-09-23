@@ -40,6 +40,13 @@
 - 此表只套用 課別／開發者／關鍵字 篩選；不套用 類別（已是欄位維度）與 狀態 篩選。
 - 「已導入累計」＝`導入` 日期欄非空；底部每第一層欄位一格（甲指/甲配/零擔）。
 
+## 開會資訊 sparkline（2026-09 新增）
+
+- `buildMeetingInfo` 末項 `本月每日新增`（`spark:true`、`ym`、`days`）＝`periodMonthKey(period)`＋`dailyNewCounts(rows, ym)` 純函式。
+- `periodMonthKey` 月份錨點：單月期間（thisMonth/lastMonth/自訂月）取該月；其餘（本週/上週/季度/年度/all）回退目前自然月。
+- `makeSparkline`（純 SVG polyline＋面積漸層＋末點綠點，viewBox 340×68、preserveAspectRatio=none、底部日期數字每 5 天一標＋月底）為 DOM helper，不屬 Node 純函式但照 export。
+- 右欄只在有資料月份顯示；空集合顯示 `無資料`。
+
 ## 區塊存成圖片（2026-09 新增）
 
 - 每張 `section.card` 右上角注入 `.snap-btn`（`addSnapshotControls()`，冪等；僅有 h2 的卡）。
