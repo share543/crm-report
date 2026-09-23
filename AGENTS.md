@@ -13,6 +13,13 @@
 - 無測試框架、無建置步驟。唯一驗證方式：用 Node stub 掉 `document` 後 `_compile` 檔案尾端 `<script>`，呼叫匯出的純函式。
 - 注意：Node 無 `DOMParser`，`parseXlsx` 在 Node 跑不起來；要拿資料改用 python/openpyxl 讀 xlsx 產 JSON，再餵給純函式。
 - 不要用 CSV 轉檔驗證：`parseCsv` 用純逗號分欄，含引號/逗號的欄位會錯位（產品已知限制，不是 bug）。
+- **DOM/E2E 級驗證**用真實 Chromium headless（`/usr/local/bin/chromium --headless=new --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=15000 --dump-dom`）：取 customer.xlsx 前 N 筆（python/openpyxl）組 model 檔，注入頁面後用 `localStorage.setItem('crm-data', JSON.stringify(payload))` seed、再 `localStorage.setItem('crm-theme','light')` 固定主題，寫結果到 `document.title` 再 grep。
+
+## E2E seed 的踩雷（2026-09）
+
+- seed 參數**必須包 `JSON.stringify(...)`**：直接插 raw JSON 物件字面值會被 `localStorage.setItem` 字串化成 `[object Object]`（15 字元），`readStoredData` 解析失敗後會**靜默移除 key 回 null**（無 console error，看似「未還原」）。先懷疑測試 harness 再懷疑產品。
+- `.snap-btn[data-snap="…"]` 取按鈕的文字要用 `\uXXXX` 跳脫（避免字面非 ASCII 干擾）。
+- 量測類驗證（PNG 像素）：頁內 decode preview `img.src` 到 offscreen canvas 後逐像素統計（近黑 `#242a36`、淺色 `#dce2ea` 係數），把摘要寫回 `document.title`。
 
 ## 核心領域規則（務必遵守）
 
@@ -32,6 +39,18 @@
 - `computeKeQuick(scopeRows, periodRows)` 純函式：`新增`＝periodRows（隨期間）、`開發累計`/`已導入累計`＝scopeRows（全量）。
 - 此表只套用 課別／開發者／關鍵字 篩選；不套用 類別（已是欄位維度）與 狀態 篩選。
 - 「已導入累計」＝`導入` 日期欄非空；底部每第一層欄位一格（甲指/甲配/零擔）。
+
+## 區塊存成圖片（2026-09 新增）
+
+- 每張 `section.card` 右上角注入 `.snap-btn`（`addSnapshotControls()`，冪等；僅有 h2 的卡）。
+- 核心 `generateSnapshot(sectionEl, opts)`：`#snapHost` 離屏量測 → XHTML NS `<foreignObject>` SVG ＋ 內嵌改寫過的整份 CSS（`rewriteSnapshotCss`：`:root`→`.shot-root`、`body`→`.shot-root`、抽掉 `@media print`）→ dataURL → Canvas（scale 1/2）→ PNG。
+- 背景選項語意：`theme`＝**把頁面實際 `data-theme` 掛在 `.shot-root` 上**（Light 頁才輸出淺色圖）；`white`＝吐 `data-theme="light"`；`transparent`＝對 `.shot-root, .card` 強制 `background:transparent`（內容仍深/淺主題原樣）。純函式 `snapBackgroundFill` 只負責 canvas 底層。
+- 快照固定隱藏 `.snap-btn`（`display:none`），圖內不會出現存圖按鈕。
+- 對應純函式/匯出：`stripPrintBlocks`、`rewriteSnapshotCss`、`shotFilename`、`snapshotTitleText` 等（exports 逾 140）。
+
+## 表格背景色階
+
+- `.pg-table`（進度追蹤表）與 `.qk-table`（各課簡表）的列 hover／合計／已導入列背景與 `td` 邊框一律用主題變數 `--row-hover`／`--row-hover-strong`／`--row-hover-strong-2`／`--row-hover-3`／`--cell-border`（深/淺各一組），**不要再寫死** `#1b202a`/`#242a36`/`#2a3140`/`#20242c`（Light 主題會反黑）。
 
 ## 已了解的需求語氣
 

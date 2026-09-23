@@ -34,6 +34,16 @@
     --row-hover-strong-2:#2a3140;
     --row-hover-3:#21262f;
     --cell-border:#20242c;
+    --qk-l1-甲指:#145651;
+    --qk-l1-甲配:#4a3568;
+    --qk-l1-零擔:#1b3c6a;
+    --qk-l2-新增:#62e58c;
+    --qk-l2-開發累計:#b8a2ee;
+    --qk-l3-1P:#5ad98b;
+    --qk-l3-3P:#f7c948;
+    --qk-body-甲指:rgba(56,190,178,.12);
+    --qk-body-甲配:rgba(166,128,228,.12);
+    --qk-body-零擔:rgba(96,140,255,.13);
   }
   :root[data-theme="light"]{
     --bg:#f5f6f8;
@@ -51,6 +61,16 @@
     --row-hover-strong-2:#d2d9e3;
     --row-hover-3:#e6e9ef;
     --cell-border:#d5dae2;
+    --qk-l1-甲指:#b9e2db;
+    --qk-l1-甲配:#ddd4f0;
+    --qk-l1-零擔:#cadef4;
+    --qk-l2-新增:#147a3b;
+    --qk-l2-開發累計:#5f47a8;
+    --qk-l3-1P:#1e8a52;
+    --qk-l3-3P:#9a7100;
+    --qk-body-甲指:rgba(80,190,176,.12);
+    --qk-body-甲配:rgba(140,110,210,.13);
+    --qk-body-零擔:rgba(96,140,225,.12);
   }
   :root[data-theme="light"] svg text{ fill:#1a1d23; }
   :root[data-theme="light"] #dropzone{ background:#fff; }
@@ -66,7 +86,6 @@
   :root[data-theme="light"] svg rect[fill="#3a4150"]{ fill:#c3cad6; }
   :root[data-theme="light"] svg path[stroke="#0e1013"]{ stroke:#f5f6f8; }
   :root[data-theme="light"] svg text[fill="#9aa3b2"]{ fill:#5d6875; }
-  :root[data-theme="light"] .qk-table th.qk-l1{ background:#e1e5ec; }
   :root[data-theme="light"] .qk-table td.qk-ke,
   :root[data-theme="light"] .qk-table th.qk-corner{ background:#eef0f4; }
   :root[data-theme="light"] .qk-table tbody tr:hover td{ background:#e2e7ee; }
@@ -159,11 +178,25 @@
   .qk-table th{ position:static; background:var(--card-2); color:var(--muted);
     font-weight:600; text-align:center; padding:8px 10px; border-bottom:1px solid var(--border);
     border-left:1px solid var(--border); white-space:nowrap; }
-  .qk-table th.qk-l1{ background:#21262f; color:var(--text); font-weight:700; }
-  .qk-table th.qk-l3{ color:var(--text); }
+  .qk-table th.qk-l1{ color:var(--text); font-weight:700; font-size:14px; }
+  .qk-table th.qk-l1.qk-g0{ background:var(--qk-l1-甲指); }
+  .qk-table th.qk-l1.qk-g1{ background:var(--qk-l1-甲配); }
+  .qk-table th.qk-l1.qk-g2{ background:var(--qk-l1-零擔); }
+  .qk-table th.qk-l2{ background:var(--row-hover-strong); color:var(--text); font-weight:650; }
+  .qk-table th.qk-l2.qk-l2-new{ color:var(--qk-l2-新增); font-weight:700; }
+  .qk-table th.qk-l2.qk-l2-cum{ color:var(--qk-l2-開發累計); font-weight:700; }
+  .qk-table th.qk-l3{ background:var(--row-hover); color:var(--text); font-weight:600; }
+  .qk-table th.qk-l3.qk-l3-1p{ color:var(--qk-l3-1P); font-weight:700; }
+  .qk-table th.qk-l3.qk-l3-3p{ color:var(--qk-l3-3P); font-weight:700; }
+  .qk-table th.qk-empty{ background:var(--row-hover); }
   .qk-table th.qk-corner{ position:sticky; left:0; z-index:3; background:var(--card-2); }
-  .qk-table td{ padding:7px 10px; border-bottom:1px solid var(--cell-border); white-space:nowrap;
-    vertical-align:middle; text-align:center; }
+  .qk-table th.qk-gstart, .qk-table td.qk-gstart{ border-left:2px solid var(--border); }
+  .qk-table td{ padding:7px 10px; border-bottom:1px solid var(--cell-border); border-left:1px solid var(--cell-border);
+    white-space:nowrap; vertical-align:middle; text-align:center; }
+  .qk-table td.qk-ke{ border-left:0; }
+  .qk-table td.qk-g0{ background:var(--qk-body-甲指); }
+  .qk-table td.qk-g1{ background:var(--qk-body-甲配); }
+  .qk-table td.qk-g2{ background:var(--qk-body-零擔); }
   .qk-table tbody tr:last-child td{ border-bottom:0; }
   .qk-table td.qk-ke{ position:sticky; left:0; background:var(--card-2); color:var(--text);
     font-weight:650; text-align:left; z-index:1; }
@@ -487,11 +520,14 @@
     .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
     .pg-table th, .pg-table td, .pg-table td.pg-ke, .pg-table tr.pg-total td,
     .pg-table tr.pg-total td.pg-ke{ background:#fff; border-color:#ccc; }
-    .qk-table th, .qk-table th.qk-l1, .qk-table td, .qk-table td.qk-ke,
+    .qk-table th, .qk-table th.qk-l1, .qk-table th.qk-l2, .qk-table th.qk-l3,
+    .qk-table th.qk-empty, .qk-table th.qk-g0, .qk-table th.qk-g1, .qk-table th.qk-g2,
+    .qk-table td, .qk-table td.qk-ke,
+    .qk-table td.qk-g0, .qk-table td.qk-g1, .qk-table td.qk-g2,
     .qk-table tr.qk-total td, .qk-table tr.qk-total td.qk-ke,
     .qk-table tr.qk-import td, .qk-table tr.qk-import td.qk-ke{ background:#fff; border-color:#ccc; }
-    .qk-table tbody tr:hover td{ background:#fff; }
     .qk-table tr.qk-total td, .qk-table tr.qk-import td{ border-top:1px solid #999; }
+    .qk-table tbody tr:hover td{ background:#fff; }
     .qk-table th{ position:static; }
     .pg-table tbody tr:hover td{ background:#fff; }
     .pg-table tr.pg-total td{ border-top:1px solid #999; }
@@ -1514,6 +1550,8 @@ var state = {
       var th1 = document.createElement('th');
       th1.className = 'qk-l1';
       if(l1Runs[a].count > 1) th1.setAttribute('colspan', String(l1Runs[a].count));
+      if(a > 0) th1.classList.add('qk-gstart');
+      th1.classList.add(l1Runs[a].l1 === '甲配' ? 'qk-g1' : (l1Runs[a].l1 === '零擔' ? 'qk-g2' : 'qk-g0'));
       th1.textContent = l1Runs[a].l1;
       r1.appendChild(th1);
     }
@@ -1525,14 +1563,17 @@ var state = {
       var col = data.cols[c2];
       var prev = data.cols[c2 - 1];
       if(!c2 || col.l1 !== prev.l1 || col.l2 !== prev.l2){
-        l2Runs.push({ l2: col.l2, count: 1 });
+        l2Runs.push({ l1: col.l1, l2: col.l2, count: 1 });
       } else {
         l2Runs[l2Runs.length - 1].count++;
       }
     }
     for(var b = 0; b < l2Runs.length; b++){
       var th2 = document.createElement('th');
+      th2.className = 'qk-l2';
       if(l2Runs[b].count > 1) th2.setAttribute('colspan', String(l2Runs[b].count));
+      if(b > 0 && l2Runs[b].l1 !== l2Runs[b - 1].l1) th2.classList.add('qk-gstart');
+      th2.classList.add(l2Runs[b].l2 === '新增' ? 'qk-l2-new' : 'qk-l2-cum');
       th2.textContent = l2Runs[b].l2;
       r2.appendChild(th2);
     }
@@ -1543,8 +1584,12 @@ var state = {
       var th3 = document.createElement('th');
       if(data.cols[c3].l3){
         th3.className = 'qk-l3';
+        th3.classList.add(data.cols[c3].l3 === '1P(SCM)' ? 'qk-l3-1p' : 'qk-l3-3p');
         th3.textContent = data.cols[c3].l3;
+      } else {
+        th3.className = 'qk-empty';
       }
+      if(c3 > 0 && data.cols[c3].l1 !== data.cols[c3 - 1].l1) th3.classList.add('qk-gstart');
       r3.appendChild(th3);
     }
     thead.appendChild(r3);
@@ -1561,6 +1606,10 @@ var state = {
       for(var c4 = 0; c4 < data.cols.length; c4++){
         var td = document.createElement('td');
         td.textContent = String(data.cells[ke][c4]);
+        if(data.cols[c4].l1 === '甲指') td.classList.add('qk-g0');
+        else if(data.cols[c4].l1 === '甲配') td.classList.add('qk-g1');
+        else td.classList.add('qk-g2');
+        if(c4 > 0 && data.cols[c4].l1 !== data.cols[c4 - 1].l1) td.classList.add('qk-gstart');
         tr.appendChild(td);
       }
       tbody.appendChild(tr);
@@ -1575,6 +1624,7 @@ var state = {
     for(var c5 = 0; c5 < data.cols.length; c5++){
       var tdT = document.createElement('td');
       tdT.textContent = String(data.totals[c5]);
+      if(c5 > 0 && data.cols[c5].l1 !== data.cols[c5 - 1].l1) tdT.classList.add('qk-gstart');
       trTotal.appendChild(tdT);
     }
     tbody.appendChild(trTotal);
@@ -1589,6 +1639,7 @@ var state = {
       var tdImp = document.createElement('td');
       tdImp.className = 'qk-import-val';
       tdImp.setAttribute('colspan', String(l1Runs[d].count));
+      if(d > 0) tdImp.classList.add('qk-gstart');
       tdImp.textContent = String(data.importCum[l1Runs[d].l1] || 0);
       trImp.appendChild(tdImp);
     }
