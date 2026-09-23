@@ -1588,6 +1588,7 @@ var state = {
         th3.textContent = data.cols[c3].l3;
       } else {
         th3.className = 'qk-empty';
+        th3.textContent = '－';
       }
       if(c3 > 0 && data.cols[c3].l1 !== data.cols[c3 - 1].l1) th3.classList.add('qk-gstart');
       r3.appendChild(th3);
