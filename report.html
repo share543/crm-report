@@ -4424,6 +4424,56 @@ var state = {
     });
   }
 
+  // 表單控制項（select／text 類 input）在 SVG foreignObject→<img> 快照中不會
+  // 繪出「已選取／已輸入」狀態；先依目前值把控件換成顯示文字的 span 再拍。
+  // cloneNode 不會複製使用者互動後的值，故從原 section 即時讀取 value 後對應替換。
+  function snapshotSafeClone(sectionEl){
+    function isTextInput(el){
+      var t = (el.getAttribute && el.getAttribute('type')) || 'text';
+      t = String(t).toLowerCase();
+      return t === '' || t === 'text' || t === 'search' || t === 'number' ||
+        t === 'email' || t === 'tel' || t === 'url';
+    }
+    var liveSel = [], liveIn = [];
+    if(sectionEl.querySelectorAll){
+      var allSel = sectionEl.querySelectorAll('select');
+      var allIn = sectionEl.querySelectorAll('input');
+      for(var i = 0; i < allSel.length; i++) liveSel.push(allSel[i].value);
+      for(var j = 0; j < allIn.length; j++){ if(isTextInput(allIn[j])) liveIn.push(allIn[j].value); }
+    }
+    var clone = sectionEl.cloneNode(true);
+    if(!clone.querySelectorAll) return clone;
+    var cSel = clone.querySelectorAll('select');
+    for(var k = 0; k < cSel.length && k < liveSel.length; k++){
+      var s = cSel[k];
+      var span = document.createElement('span');
+      span.className = 'snap-field';
+      span.textContent = optionLabel(s, liveSel[k]);
+      if(s.parentNode) s.parentNode.replaceChild(span, s);
+    }
+    var cIn = clone.querySelectorAll('input');
+    var ti = 0;
+    for(var m = 0; m < cIn.length; m++){
+      var inp = cIn[m];
+      if(isTextInput(inp) && ti < liveIn.length){
+        var span2 = document.createElement('span');
+        span2.className = 'snap-field';
+        span2.textContent = liveIn[ti] || '（無）';
+        if(inp.parentNode) inp.parentNode.replaceChild(span2, inp);
+        ti++;
+      }
+    }
+    return clone;
+  }
+  function optionLabel(sel, val){
+    if(!sel || !sel.querySelectorAll) return '全部';
+    var opts = sel.querySelectorAll('option');
+    for(var i = 0; i < opts.length; i++){
+      if(String(opts[i].value) === String(val)) return opts[i].textContent || '全部';
+    }
+    return '全部';
+  }
+
   // 量測＋SVG foreignObject 生成圖片
   function generateSnapshot(sectionEl, opts){
     return new Promise(function(resolve, reject){
@@ -4437,6 +4487,10 @@ var state = {
         var snapshotCss = rewriteSnapshotCss(pageCss);
         // 快照內不顯示「存圖」按鈕本身
         snapshotCss += '\n.shot-root .snap-btn{ display:none !important; }';
+        // 取代表單控件的偵測用 span 樣式（仿 .list-field select/input 外觀，高度近似）
+        snapshotCss += '\n.shot-root .snap-field{ display:inline-block; background:var(--card-2); color:var(--text);' +
+          ' border:1px solid var(--border); border-radius:6px; padding:6px 10px;' +
+          ' font-size:13px; min-width:110px; font-family:inherit; }';
         var bgKind = opts && opts.background;
         // 背景選項：white＝套用程式內建的 Light 主題；transparent＝強制上層背景透明
         if(bgKind === 'white'){
@@ -4445,11 +4499,14 @@ var state = {
           snapshotCss += '\n.shot-root, .shot-root .card{ background:transparent !important; }';
         }
         var width = Math.max(320, Math.round(sectionEl.offsetWidth || 960));
+        // 表單控件先換成顯示文字的 span（select 已選值／input 目前值），
+        // 量測與最終輸出共用同一份 safe clone，確保高度一致
+        var safeClone = snapshotSafeClone(sectionEl);
         // 量測：以即時樣式掛一次實際 clone，取得高度（隱藏容器不影響版面）
         var probe = document.createElement('div');
         probe.className = 'shot-root';
         probe.style.width = width + 'px';
-        probe.appendChild(sectionEl.cloneNode(true));
+        probe.appendChild(safeClone);
         host.appendChild(probe);
         var height = Math.max(80, Math.round(probe.offsetHeight || 0));
         host.removeChild(probe);
@@ -4481,9 +4538,8 @@ var state = {
         var st = document.createElementNS(XHTML_NS, 'style');
         st.setAttribute('type', 'text/css');
         st.appendChild(document.createTextNode(snapshotCss));
-        var clone = sectionEl.cloneNode(true);
         wrap.appendChild(st);
-        wrap.appendChild(clone);
+        wrap.appendChild(safeClone);
         fo.appendChild(wrap);
         svg.appendChild(fo);
         var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
@@ -5226,6 +5282,7 @@ var state = {
       rewriteSnapshotCss: rewriteSnapshotCss,
       shotFilename: shotFilename,
       snapshotTitleText: snapshotTitleText,
+      snapshotSafeClone: snapshotSafeClone,
       addSnapshotControls: addSnapshotControls,
       initSnapshotControls: initSnapshotControls,
       openSnapshot: openSnapshot,
