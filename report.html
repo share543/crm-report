@@ -486,7 +486,6 @@
   .meeting-info dt{ font-size:12px; color:var(--muted); margin-top:10px; }
   .meeting-info dt:first-child{ margin-top:2px; }
   .meeting-info dd{ margin:2px 0 0; font-size:14px; color:var(--text); word-break:break-all; line-height:1.45; }
-  .meeting-spark-cap{ font-size:12px; color:var(--muted); }
   .meeting-spark{ margin:4px 0 0; }
   .meeting-spark svg{ display:block; width:100%; height:68px; }
   .meeting-spark .spark-date text{ fill:var(--muted); font-size:9px; }
@@ -495,7 +494,6 @@
   body.pv-mode .agenda-side .subtitle{ font-size:17px; }
   body.pv-mode .meeting-info dt{ font-size:15px; padding-left:6px; }
   body.pv-mode .meeting-info dd{ font-size:24px; padding-left:6px; line-height:1.35; }
-  body.pv-mode .meeting-spark-cap{ font-size:14px; padding-left:6px; }
   body.pv-mode .meeting-spark svg{ height:88px; }
   /* UI/UX 打磨：鍵盤焦點、載入狀態、行動版 */
   button:focus-visible, select:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
@@ -3164,10 +3162,11 @@ var state = {
     return makeHBars(container, data, opts);
   }
 
-  // sparkline：橫向迷你折線（無座標軸、純形狀），尺寸隨容器縮放；用於右欄「本月每日新增案件」
-  function makeSparkline(container, days, opts){
+  // sparkline：橫向迷你折線（無座標軸、純形狀），尺寸隨容器縮放；用於「開會資訊」新增動向
+  // pts：[{ count, label, tick }]；tick 為真時在底部繪製該點標籤
+  function makeSparkline(container, pts, opts){
     container.textContent = '';
-    if(!days || !days.length){
+    if(!pts || !pts.length){
       container.className = 'pending';
       container.textContent = '無資料';
       return null;
@@ -3176,14 +3175,15 @@ var state = {
     opts = opts || {};
     var w = opts.w || 340, h = opts.h || 52, pad = opts.pad || 3, labH = opts.labH || 16;
     var max = 1;
-    for(var i = 0; i < days.length; i++) if(days[i].count > max) max = days[i].count;
-    var n = days.length;
+    for(var i = 0; i < pts.length; i++) if(pts[i].count > max) max = pts[i].count;
+    var n = pts.length;
     var stepX = (n > 1) ? ((w - pad * 2) / (n - 1)) : 0;
-    var pts = [];
+    var xy = [];
     for(var j = 0; j < n; j++){
       var x = pad + (n > 1 ? j * stepX : w / 2);
-      var y = h - pad - (days[j].count / max) * (h - pad * 2);
-      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+      var y = h - pad - (pts[j].count / max) * (h - pad * 2);
+      var xS = x.toFixed(1), yS = y.toFixed(1);
+      xy.push([xS, yS]);
     }
     var svg = svgEl('svg', { viewBox: '0 0 ' + w + ' ' + (h + labH), width: '100%', height: h + labH, preserveAspectRatio: 'none' });
     var g = svgEl('g', {});
@@ -3191,20 +3191,20 @@ var state = {
     grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#4f8eff', 'stop-opacity': '0.30' }));
     grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#4f8eff', 'stop-opacity': '0.03' }));
     svg.appendChild(grad);
-    var area = svgEl('polygon', { points: pts.join(' ') + ' ' + (pad + stepX * (n - 1)).toFixed(1) + ',' + (h - pad) + ' ' + pad + ',' + (h - pad), fill: 'url(#sparkFill)', stroke: 'none' });
+    var ptsStr = [];
+    for(var k = 0; k < n; k++) ptsStr.push(xy[k][0] + ',' + xy[k][1]);
+    var area = svgEl('polygon', { points: ptsStr.join(' ') + ' ' + xy[n - 1][0] + ',' + (h - pad) + ' ' + pad + ',' + (h - pad), fill: 'url(#sparkFill)', stroke: 'none' });
     g.appendChild(area);
-    var line = svgEl('polyline', { points: pts.join(' '), fill: 'none', stroke: '#4f8eff', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+    var line = svgEl('polyline', { points: ptsStr.join(' '), fill: 'none', stroke: '#4f8eff', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
     g.appendChild(line);
-    var dot = svgEl('circle', { cx: pts[n - 1].split(',')[0], cy: pts[n - 1].split(',')[1], r: 3, fill: '#5ad98b', stroke: '#0e1013', 'stroke-width': 1 });
+    var dot = svgEl('circle', { cx: xy[n - 1][0], cy: xy[n - 1][1], r: 3, fill: '#5ad98b', stroke: '#0e1013', 'stroke-width': 1 });
     g.appendChild(dot);
     svg.appendChild(g);
     var lg = svgEl('g', { 'class': 'spark-date' });
     for(var t = 0; t < n; t++){
-      var d = days[t].d;
-      if(!(d === 1 || d % 5 === 1 || t === n - 1)) continue;
-      if(t === n - 1 && (d === 1 || d % 5 === 1)) continue;
-      var tx = svgEl('text', { x: pad + (n > 1 ? t * stepX : w / 2), y: h + labH - 4, 'font-size': '9', 'text-anchor': 'middle' });
-      tx.appendChild(document.createTextNode(String(d)));
+      if(!pts[t].tick) continue;
+      var tx = svgEl('text', { x: xy[t][0], y: h + labH - 4, 'font-size': '9', 'text-anchor': 'middle' });
+      tx.appendChild(document.createTextNode(String(pts[t].label)));
       lg.appendChild(tx);
     }
     svg.appendChild(lg);
@@ -3726,33 +3726,196 @@ var state = {
     return true;
   }
 
-  // 純函式：右欄開會資訊的 sparkline 月份錨點（單月期間取該月；其餘回退目前月）
-  function periodMonthKey(period, now){
-    var range = periodRange(period, now);
-    if(range && range.from){
-      var m = /^(\d{4})-(\d{2})/.exec(String(range.from));
-      if(m) return m[1] + '-' + m[2];
-    }
-    now = now || new Date();
-    return monthKey(now.getFullYear(), now.getMonth() + 1);
+  // ---------------------------------------------------------------------------
+  // 純函式：開會資訊 sparkline 的動態分箱（依期間跨度切換 日/週/月/年 顆粒度）
+  // ---------------------------------------------------------------------------
+  // unit：day（週/單月 → 每日一桶）、week（季/跨月 → 每週一桶）、
+  //       month（年/多年 → 每月一桶）、year（超長 → 每年一桶）。
+  // scope：期間詮釋（week/month/quarter/year/all/custom），決定標籤樣式與標題語氣。
+
+  function parseDateKey(k){
+    var m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(String(k || ''));
+    return m ? { y: Number(m[1]), mo: Number(m[2]), d: m[3] ? Number(m[3]) : 1 } : null;
   }
 
-  // 純函式：指定月份每日新增案件數（依 填單日期，1..月底零填充）
-  function dailyNewCounts(rows, ym){
-    var m = /^(\d{4})-(\d{2})$/.exec(ym || '');
-    if(!m) return [];
-    var y = Number(m[1]), mo = Number(m[2]);
-    var last = new Date(y, mo, 0).getDate();
-    var days = [];
-    for(var d = 1; d <= last; d++) days.push({ d: d, count: 0 });
+  function toDateKey(k){
+    var f = String(k || '');
+    var F = parseDateKey(f);
+    return F ? (f.length >= 10 ? f.slice(0, 10) : f + '-01') : '';
+  }
+
+  // 終點位元組：'YYYY-MM' 展開到該月最後一天（'YYYY-MM-DD' 原樣）
+  function toDateKeyEnd(k){
+    var F = parseDateKey(k);
+    if(!F) return '';
+    var f = String(k);
+    if(f.length >= 10) return f.slice(0, 10);
+    return isoDate(new Date(F.y, F.mo, 0));
+  }
+
+  // 依 填單日期 收集每天的 ms 起點（升冪）
+  function dayStarts(rows){
+    var list = [];
     for(var i = 0; i < rows.length; i++){
       var k = periodKeyDay(rows[i] && rows[i]['填單日期']);
-      if(k && k.length >= 10 && k.slice(0, 7) === ym){
-        var dd = Number(k.slice(8, 10));
-        if(dd >= 1 && dd <= last) days[dd - 1].count++;
-      }
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(k);
+      if(!m) continue;
+      list.push(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime());
     }
-    return days;
+    list.sort(function(a, b){ return a - b; });
+    return list;
+  }
+
+  function lowerBound(arr, x){
+    var lo = 0, hi = arr.length;
+    while(lo < hi){
+      var mid = (lo + hi) >> 1;
+      if(arr[mid] < x) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  }
+  function upperBound(arr, x){
+    var lo = 0, hi = arr.length;
+    while(lo < hi){
+      var mid = (lo + hi) >> 1;
+      if(arr[mid] <= x) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  }
+  function countInRange(starts, a, b){
+    return upperBound(starts, b) - lowerBound(starts, a);
+  }
+
+  // scope：期間 → 週/月/季/年/全部/自訂
+  function sparkScope(period){
+    var p = period && period.preset;
+    var hasRange = !!(period && (period.from || period.to));
+    if(p === 'thisWeek' || p === 'lastWeek') return 'week';
+    if(p === 'thisMonth' || p === 'lastMonth') return 'month';
+    if(p === 'thisQuarter') return 'quarter';
+    if(p === 'thisYear' || p === 'lastYear') return 'year';
+    if(p === 'all' || !p) return hasRange ? 'custom' : 'all';
+    return 'custom';
+  }
+
+  // 跨度天數／月數 → 分箱單位（僅供 自訂/全部 依實際分布挑粒度）
+  function sparkUnit(daysSpan, monthSpan){
+    if(daysSpan <= 31) return 'day';
+    if(daysSpan <= 95) return 'week';
+    if(monthSpan <= 60) return 'month';
+    return 'year';
+  }
+
+  // scope 提示優先決定單位；自訂/全部 才回退依跨度
+  function pickSparkUnit(scope, daysSpan, monthSpan){
+    if(scope === 'week' || scope === 'month') return 'day';
+    if(scope === 'quarter') return 'week';
+    if(scope === 'year') return 'month';
+    return sparkUnit(daysSpan, monthSpan);
+  }
+
+  // 期間 → 動態分箱資料。from/to 可缺（缺則依資料最早 填單日期；終點一律以今日封頂）。
+  // 回傳 { unit, from, to, points:[{count,label,tick}] }；無資料時 points 為空陣列。
+  function buildSparkBuckets(rows, from, to, now, opts){
+    now = now || new Date();
+    opts = opts || {};
+    var scope = opts.scope || 'all';
+    var dayMs = 86400000;
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    var starts = dayStarts(rows);
+    var f = toDateKey(from);
+    var t = toDateKeyEnd(to);
+    if(!f){
+      var minKey = null;
+      for(var s = 0; s < rows.length; s++){
+        var mk = periodKeyDay(rows[s] && rows[s]['填單日期']);
+        if(mk && (!minKey || mk < minKey)) minKey = mk;
+      }
+      f = minKey || isoDate(now);
+    }
+    if(!t) t = isoDate(now);
+    f = toDateKey(f);
+    t = toDateKey(t);
+    if(t > isoDate(now)) t = isoDate(now);
+    var F = parseDateKey(f), T = parseDateKey(t);
+    if(!F || !T || f > t) return { unit: 'day', from: f, to: t, points: [] };
+    var Fms = new Date(F.y, F.mo - 1, F.d).getTime();
+    var Tms = new Date(T.y, T.mo - 1, T.d).getTime();
+    var daysSpan = Math.round((Tms - Fms) / dayMs) + 1;
+    var months = (T.y - F.y) * 12 + (T.mo - F.mo) + 1;
+    var unit = pickSparkUnit(scope, daysSpan, months);
+    var points = [];
+    if(unit === 'day'){
+      for(var d = 0; d < daysSpan; d++){
+        var ms = Fms + d * dayMs;
+        var dd = new Date(ms);
+        var isLast = d === daysSpan - 1;
+        var label, tick;
+        if(scope === 'week'){
+          label = '日一二三四五六'.charAt(dd.getDay());
+          tick = true;
+        } else {
+          var num = dd.getDate();
+          tick = (num === 1 || num % 5 === 1) || isLast;
+          label = String(num);
+        }
+        points.push({ count: countInRange(starts, ms, ms), label: label, tick: tick });
+      }
+      return { unit: unit, from: f, to: t, points: points };
+    }
+    if(unit === 'week'){
+      var marks = [];
+      var my = F.y, mm = F.mo;
+      while(my < T.y || (my === T.y && mm <= T.mo)){
+        marks.push({ ms: new Date(my, mm - 1, 1).getTime(), label: mm + '/1' });
+        mm++; if(mm > 12){ mm = 1; my++; }
+      }
+      var bStart = Fms;
+      while(bStart <= Tms){
+        var bEnd = Math.min(bStart + dayMs * 6, Tms);
+        var cL = '', cTick = false;
+        for(var mk = 0; mk < marks.length; mk++){
+          if(marks[mk].ms >= bStart && marks[mk].ms <= bEnd){ cL = marks[mk].label; cTick = true; }
+        }
+        points.push({ count: countInRange(starts, bStart, bEnd), label: cL, tick: cTick });
+        bStart = bEnd + dayMs;
+      }
+      return { unit: unit, from: f, to: t, points: points };
+    }
+    if(unit === 'month'){
+      var singleYear = F.y === T.y;
+      var spacing = singleYear ? 3 : Math.max(1, Math.round(months / 6));
+      var yy = F.y, mo2 = F.mo;
+      for(var m = 0; m < months; m++){
+        var startMs = new Date(yy, mo2 - 1, 1).getTime();
+        var endDay = new Date(yy, mo2, 0).getDate();
+        var endMs = new Date(yy, mo2 - 1, endDay).getTime();
+        var tck = (m % spacing === 0) || m === months - 1;
+        var lbl = singleYear ? String(mo2) : yy + '/' + mo2;
+        points.push({ count: countInRange(starts, startMs, endMs), label: lbl, tick: tck });
+        mo2++; if(mo2 > 12){ mo2 = 1; yy++; }
+      }
+      return { unit: unit, from: f, to: t, points: points };
+    }
+    for(var yr = F.y; yr <= T.y; yr++){
+      var janS = new Date(yr, 0, 1).getTime();
+      var decE = new Date(yr, 11, 31).getTime();
+      points.push({ count: countInRange(starts, janS, decE), label: String(yr), tick: true });
+    }
+    return { unit: unit, from: f, to: t, points: points };
+  }
+
+  // 純函式：sparkline 動態標題（如「本季每週新增」「本年每月新增」「全部每月新增」）
+  function sparkTitle(period, unit){
+    var scope = sparkScope(period);
+    var p = period && period.preset;
+    var base = { day: '每日', week: '每週', month: '每月', year: '每年' }[unit] + '新增';
+    if(scope === 'week') return (p === 'lastWeek' ? '上週' : '本週') + base;
+    if(scope === 'month') return (p === 'lastMonth' ? '上月' : '本月') + base;
+    if(scope === 'quarter') return '本季' + base;
+    if(scope === 'year') return (p === 'lastYear' ? '去年' : '本年') + base;
+    if(scope === 'all') return '全部' + base;
+    return '自訂期間' + base;
   }
 
   // 純函式：依期間過濾 → { rows, excluded }（excluded＝期間有效時無填單日期的列數）
@@ -4063,17 +4226,19 @@ var state = {
     }
   }
 
-  // 純函式：右欄「開會資訊」內容（期間描述＋件數＋本月每日新增 sparkline 資料）
+  // 純函式：右欄「開會資訊」內容（期間描述＋件數＋動態分箱的新增動向 sparkline 資料）
   function buildMeetingInfo(opts){
     var rows = (opts && opts.model && opts.model.rows) || [];
+    var now = opts && opts.now;
     var period = opts && opts.period;
     var periodDesc = describePeriod(period);
     var pr = applyPeriod(rows, period);
-    var ym = periodMonthKey(period);
+    var range = periodRange(period, now) || {};
+    var buckets = buildSparkBuckets(rows, range.from, range.to, now, { scope: sparkScope(period) });
     return [
       { k: '分析期間', v: periodDesc || '全部數據' },
       { k: '案件件數', v: pr.rows.length + ' 筆' },
-      { k: '本月每日新增', spark: true, ym: ym, days: dailyNewCounts(rows, ym) }
+      { k: sparkTitle(period, buckets.unit), spark: true, points: buckets.points }
     ];
   }
 
@@ -4091,21 +4256,18 @@ var state = {
     });
     for(var i = 0; i < items.length; i++){
       var dt = document.createElement('dt');
-      dt.appendChild(document.createTextNode(items[i].k));
-      info.appendChild(dt);
       var dd = document.createElement('dd');
       if(items[i].spark){
-        var cap = document.createElement('span');
-        cap.className = 'meeting-spark-cap';
-        cap.textContent = items[i].ym.replace('-', ' 年 ') + ' 月';
-        dd.appendChild(cap);
+        if(items[i].points && items[i].points.length) dt.appendChild(document.createTextNode(items[i].k));
         var host = document.createElement('div');
         host.className = 'meeting-spark';
-        makeSparkline(host, items[i].days);
+        makeSparkline(host, items[i].points);
         dd.appendChild(host);
       } else {
+        dt.appendChild(document.createTextNode(items[i].k));
         dd.appendChild(document.createTextNode(items[i].v));
       }
+      info.appendChild(dt);
       info.appendChild(dd);
     }
   }
@@ -5656,8 +5818,10 @@ var state = {
       periodRange: periodRange,
       periodMatches: periodMatches,
       applyPeriod: applyPeriod,
-      periodMonthKey: periodMonthKey,
-      dailyNewCounts: dailyNewCounts,
+      sparkScope: sparkScope,
+      sparkUnit: sparkUnit,
+      buildSparkBuckets: buildSparkBuckets,
+      sparkTitle: sparkTitle,
       makeSparkline: makeSparkline,
       describePeriod: describePeriod,
       buildMeetingInfo: buildMeetingInfo,

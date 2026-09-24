@@ -42,10 +42,12 @@
 
 ## 開會資訊 sparkline（2026-09 新增）
 
-- `buildMeetingInfo` 末項 `本月每日新增`（`spark:true`、`ym`、`days`）＝`periodMonthKey(period)`＋`dailyNewCounts(rows, ym)` 純函式。
-- `periodMonthKey` 月份錨點：單月期間（thisMonth/lastMonth/自訂月）取該月；其餘（本週/上週/季度/年度/all）回退目前自然月。
-- `makeSparkline`（純 SVG polyline＋面積漸層＋末點綠點，viewBox 340×68、preserveAspectRatio=none、底部日期數字每 5 天一標＋月底）為 DOM helper，不屬 Node 純函式但照 export。
-- 右欄只在有資料月份顯示；空集合顯示 `無資料`。
+- `buildMeetingInfo` 末項「新增動向」（`spark:true`、`points`、`k`＝動態標題）＝`buildSparkBuckets(rows, from, to, now, { scope })`＋`sparkTitle(period, unit)`＋`sparkScope(period)` 純函式。
+- 分箱單位隨期間跨度動態切換（`pickSparkUnit`）：`週/月`期間→**每日**（週期間底軸標「一二三四五六日」；月期間每 5 天一標＋末日）；`季`→**每週**（底軸只在月初所在桶標「M/1」）；`年`→**每月**（單年標月份每 3 個月一標、多年標 `YYYY/M` 每約 1/6）；`全部/自訂`依資料實際跨度由 `sparkUnit(daysSpan, months)` 挑（≤31 天→日、≤95 天→週、≤60 個月→月、其餘→年）。
+- **只畫到今天**：`to` 在今日之後一律以今日封頂（本週/本月/本年不再把未來日零填充下拉）。
+- 不套用 課別／開發者／關鍵字 篩選（與「案件件數」同源＝原始列）。
+- `makeSparkline(container, pts)` 吃 `[{count,label,tick}]`（純 SVG polyline＋面積漸層＋末點綠點，viewBox 340×68、preserveAspectRatio=none）為 DOM helper，不屬 Node 純函式但照 export。空集合顯示 `無資料`。
+- 計數一律依 `填單日期`；分箱用 `periodKeyDay`/bisect 對 `dayStarts` 統計（`countInRange`）。
 
 ## 區塊存成圖片（2026-09 新增）
 
