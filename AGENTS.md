@@ -45,6 +45,7 @@
 - 自動偵測：視窗寬度 `<700px` ⇒ `body.mobile`；否則貼 `body.desktop`。手機版只**重排＋額外 DOM helper**，不動任何純函式。
 - 手動覆寫（工具列「版型」鈕，localStorage `crm-view`＝`auto|mobile|desktop`）：cycle `auto→mobile→desktop→auto`，`resolveViewMode(width, override)` 為純函式；`body.mobile`/`body.desktop` 即時套用並**重 render 兩張寬表**（各課簡表＋進度追蹤表），其餘區塊純 CSS 重排。
 - 寬表改卡片（僅 `body.mobile` JS 層，桌面維持 table）：純函式 `groupKeQuickCols(KE_QUICK_COLUMNS)`→`[{l1,groups:[{l2,entries:[{l3,val,col}]}]}]`＋`buildKeQuickMobile(data)`；`progressTotalOf(computeProgress(...))`＋`buildProgressMobile(data)`。稅收快表沿用 `.qk-table`。
+- 手機「分析期間」按鈕（`.period-chips`）一律 `flex-wrap:wrap` **換行**（不捲動、絕不超出卡片），桌面版規則不變。
 - 手機手風琴：`section.card.folded` 由 CSS 隱藏 `> :not(h2):not(.list-head)`；折疊 under `body.mobile`。SVG 一律 `max-width:100%; height:auto`（sparkline 統一 56px 高）。
 
 ## 開會資訊 sparkline（2026-09 新增）
