@@ -528,6 +528,76 @@
     .do-node-label{ flex-basis:110px; }
     .timing-cols{ grid-template-columns:1fr; }
   }
+  /* ===== 寬表改卡片（手機版型用；樣式全域，快照/列印沿用主題變數）===== */
+  .keq-wrap{ display:flex; flex-direction:column; gap:10px; }
+  .keq-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .keq-head{ display:flex; align-items:baseline; gap:8px; margin-bottom:6px; padding-bottom:8px; border-bottom:1px dashed var(--border); }
+  .keq-ke{ font-size:15px; font-weight:700; color:var(--text); }
+  .keq-tag{ margin-left:auto; font-size:11px; color:var(--muted); white-space:nowrap; }
+  .keq-row{ display:flex; align-items:baseline; gap:8px; padding:5px 0 5px 6px; }
+  .keq-l1{ display:flex; align-items:center; gap:6px; flex:0 0 46px; font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; }
+  .keq-l1::before{ content:''; width:8px; height:8px; border-radius:50%; flex:none; }
+  .keq-l1.keq-g0::before{ background:var(--qk-l1-甲指); }
+  .keq-l1.keq-g1::before{ background:var(--qk-l1-甲配); }
+  .keq-l1.keq-g2::before{ background:var(--qk-l1-零擔); }
+  .keq-vals{ display:flex; flex-wrap:wrap; gap:4px 10px; font-size:13px; }
+  .keq-val{ color:var(--text); }
+  .keq-val .vnew{ color:var(--qk-l2-新增); font-weight:650; }
+  .keq-val .vcum{ color:var(--qk-l2-開發累計); font-weight:650; }
+  .keq-val b{ font-weight:600; }
+  .keq-foot{ display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:8px; padding-top:8px;
+    border-top:1px dashed var(--border); font-size:12px; color:var(--muted); }
+  .keq-foot b{ color:var(--text); font-weight:650; }
+  .pgm-wrap{ display:flex; flex-direction:column; gap:10px; }
+  .pgm-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .pgm-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:6px; }
+  .pgm-group{ font-size:15px; font-weight:700; color:var(--text); }
+  .pgm-meta{ margin-left:auto; font-size:12px; color:var(--muted); white-space:nowrap; }
+  .pgm-row{ display:flex; align-items:center; gap:8px; padding:3px 0; }
+  .pgm-label{ flex:0 0 60px; font-size:12.5px; color:var(--muted); white-space:nowrap; }
+  .pgm-track{ flex:1 1 auto; height:8px; min-width:0; background:var(--card); border:1px solid var(--border); border-radius:999px; overflow:hidden; }
+  .pgm-fill{ display:block; height:100%; width:0; border-radius:999px; background:var(--accent); }
+  .pgm-row.coop .pgm-fill{ background:var(--ok); }
+  .pgm-count{ flex:0 0 26px; font-size:12.5px; font-weight:650; color:var(--text); text-align:right; }
+  .pgm-card.total .pgm-group{ color:var(--accent); }
+  .pgm-card.total .pgm-meta{ color:var(--text); font-weight:650; }
+  /* ===== 手機版型（body.mobile：寬度<700px 自動偵測或工具列手動切換）===== */
+  body.mobile{ font-size:14px; }
+  body.mobile .topbar{ position:sticky; top:0; z-index:60; padding:8px 12px;
+    display:flex; align-items:center; gap:10px; }
+  body.mobile .topbar h1{ font-size:16px; white-space:nowrap; }
+  body.mobile .topbar > p{ display:none; }
+  body.mobile .top-actions{ margin-top:0; margin-left:auto; flex-wrap:nowrap;
+    overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+  body.mobile .top-actions button{ flex:none; padding:6px 10px; font-size:12px; white-space:nowrap; }
+  body.mobile main{ padding:12px; }
+  body.mobile .card{ padding:14px; border-radius:10px; margin-bottom:12px; }
+  body.mobile section h2{ font-size:15px; cursor:pointer; user-select:none;
+    padding-right:22px; position:relative; }
+  body.mobile section h2::after{ content:'\25BE'; position:absolute; right:2px; top:-2px;
+    color:var(--muted); font-size:14px; transition:transform .15s ease; }
+  body.mobile section.card.folded h2::after{ transform:rotate(-90deg); }
+  body.mobile section.card.folded > :not(h2):not(.list-head){ display:none; }
+  body.mobile section.card.folded .cols-panel{ display:none; }
+  body.mobile .period-row{ flex-direction:column; align-items:stretch; }
+  body.mobile .period-chips{ flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px;
+    -webkit-overflow-scrolling:touch; }
+  body.mobile .period-chip{ flex:none; }
+  body.mobile .period-custom{ flex-wrap:wrap; }
+  body.mobile .stat-grid{ grid-template-columns:repeat(2,1fr); }
+  body.mobile .ke-grid{ grid-template-columns:repeat(2,1fr); }
+  body.mobile .stat-value{ font-size:24px; }
+  body.mobile .type-analysis, body.mobile .state-pie-row{ flex-direction:column; }
+  body.mobile .timing-cols{ display:grid; grid-template-columns:1fr; }
+  body.mobile .do-node-label{ flex-basis:96px; font-size:12.5px; }
+  body.mobile .do-node-track{ max-width:none; }
+  body.mobile .do-node-count{ min-width:auto; }
+  body.mobile .rank-bar-track{ width:100px; }
+  body.mobile .list-toolbar{ gap:10px; }
+  body.mobile svg{ max-width:100%; height:auto; }
+  body.mobile .meeting-spark svg{ height:56px; }
+  body.mobile .agenda-side{ padding:12px; }
+  body.mobile .sort-arrow{ display:none; }
   /* Task 8：列印樣式（深色主題→白底黑字，隱藏操作型 UI，表格避免分頁切欄） */
   @media print{
     @page{ size:A4; margin:12mm; }
@@ -591,6 +661,11 @@
     .ts-mini td{ border-color:#bbb; }
     .ts-mini-label{ color:#333; }
     svg text{ fill:#000 !important; }
+    /* 手機版型列印還原：摺疊區塊全部輸出、topbar 回靜態 */
+    body.mobile .topbar{ position:static; padding:10px 14px; }
+    body.mobile main{ padding:8px; }
+    body.mobile section.card.folded > :not(h2):not(.list-head){ display:block !important; }
+    body.mobile section.card.folded .cols-panel{ display:none !important; }
   }
 </style>
 </head>
@@ -600,6 +675,7 @@
   <p>載入 <code>customer.xlsx</code> 離線產生報表（零依賴、可經 file:// 開啟）</p>
   <div class="top-actions no-print">
     <button type="button" id="themeBtn" aria-pressed="false">切換到淺色</button>
+    <button type="button" id="viewModeBtn" title="切換手機／桌面版型（寬度 &lt;700px 自動偵測，可手動覆寫並記憶）">版型：自動</button>
     <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
     <button type="button" id="saveBtn" disabled>存檔（含資料）</button>
     <button type="button" id="presentBtn" disabled>開始簡報</button>
@@ -773,6 +849,7 @@ var state = {
     model: null,      // { headers:[], rows:[], sheetName:string }
     fileName: null,
     period: { preset: 'all', from: '', to: '' },
+    viewMode: 'auto',   // 'auto' | 'mobile' | 'desktop'（auto＝依視窗寬度偵測；手動切換會記憶於 localStorage）
     agenda: [],        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
     presentEnabled: {}, // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
     listCols: null      // 案件清單欄位勾選（{欄位key:boolean}；null＝會議精簡 profile）
@@ -1022,6 +1099,42 @@ var state = {
     }
     return { kes: KE_QUICK_ORDER.slice(), cols: KE_QUICK_COLUMNS,
              cells: cells, totals: totals, importCum: importCum };
+  }
+
+  // 純函式：把手機卡片要顯示的欄定義依 l1（甲指/甲配/零擔）分組（無 DOM 依賴，可於 Node 測試）。
+  // 傳入 computeKeQuick 的 cols，回傳 [{ l1, groups:[{ l2, entries:[{ l3, col }] }] }]，
+  // col 為該欄在 cols 的索引，供 buildKeQuickMobile 依課別取 data.cells[ke][col]。
+  function groupKeQuickCols(cols){
+    cols = cols || [];
+    var out = [], cur = null;
+    for(var i = 0; i < cols.length; i++){
+      var c = cols[i];
+      if(!cur || cur.l1 !== c.l1){ cur = { l1: c.l1, groups: [] }; out.push(cur); }
+      var g = null;
+      for(var j = 0; j < cur.groups.length; j++){
+        if(cur.groups[j].l2 === c.l2){ g = cur.groups[j]; break; }
+      }
+      if(!g){ g = { l2: c.l2, entries: [] }; cur.groups.push(g); }
+      g.entries.push({ l3: (c.l3 || null), col: i });
+    }
+    return out;
+  }
+
+  // 純函式：computeProgress 資料 → 各里程碑欄位加總（手機卡片「全體合計」用，可於 Node 測試）
+  function progressTotalOf(data){
+    var t = { stages: {}, coop: 0, total: 0 };
+    var groups = (data && data.groups) || [];
+    var order = (data && data.stageOrder) || [];
+    for(var i = 0; i < groups.length; i++){
+      var g = groups[i];
+      t.total += g.total;
+      t.coop += g.coop;
+      for(var s = 0; s < order.length; s++){
+        var k = order[s];
+        t.stages[k] = (t.stages[k] || 0) + (g.stages[k] || 0);
+      }
+    }
+    return t;
   }
 
   // 純函式：最後到達里程碑（無 DOM 依賴，可於 Node 測試）
@@ -1537,6 +1650,83 @@ var state = {
     sec.hidden = false;
   }
 
+  // DOM：手機版「各課追蹤簡表」→ 每課一張卡（甲指/甲配/零擔直排＋新增/開發累計/已導入累計）
+  // 資料端沿用 computeKeQuick（純函式），只換呈現層；樣式走全域 .keq-*（快照也適用）。
+  function buildKeQuickMobile(data){
+    var wrap = document.createElement('div');
+    wrap.className = 'keq-wrap';
+    var groups = groupKeQuickCols(data.cols);
+    var l1Class = { '甲指': 'keq-g0', '甲配': 'keq-g1', '零擔': 'keq-g2' };
+    for(var k = 0; k < data.kes.length; k++){
+      var ke = data.kes[k];
+      var card = document.createElement('div');
+      card.className = 'keq-card';
+      var head = document.createElement('div');
+      head.className = 'keq-head';
+      var name = document.createElement('span');
+      name.className = 'keq-ke';
+      name.textContent = ke;
+      head.appendChild(name);
+      var tag = document.createElement('span');
+      tag.className = 'keq-tag';
+      tag.textContent = '單位：客戶數';
+      head.appendChild(tag);
+      card.appendChild(head);
+      for(var g = 0; g < groups.length; g++){
+        var gr = groups[g];
+        var row = document.createElement('div');
+        row.className = 'keq-row';
+        var l1 = document.createElement('span');
+        l1.className = 'keq-l1 ' + (l1Class[gr.l1] || '');
+        l1.textContent = gr.l1;
+        row.appendChild(l1);
+        var vals = document.createElement('span');
+        vals.className = 'keq-vals';
+        for(var e2 = 0; e2 < gr.groups.length; e2++){
+          var eg = gr.groups[e2];
+          var span = document.createElement('span');
+          span.className = 'keq-val';
+          var lab = document.createElement('span');
+          lab.className = (eg.l2 === '新增') ? 'vnew' : 'vcum';
+          lab.textContent = eg.l2 + ' ';
+          span.appendChild(lab);
+          var b = document.createElement('b');
+          var parts = [];
+          for(var p = 0; p < eg.entries.length; p++){
+            var en = eg.entries[p];
+            var v = data.cells[ke][en.col];
+            parts.push(en.l3 ? en.l3 + ' ' + v : String(v));
+          }
+          b.textContent = parts.join(' + ');
+          span.appendChild(b);
+          vals.appendChild(span);
+        }
+        row.appendChild(vals);
+        card.appendChild(row);
+      }
+      var foot = document.createElement('div');
+      foot.className = 'keq-foot';
+      foot.textContent = '已導入累計：';
+      var first = true;
+      for(var g2 = 0; g2 < groups.length; g2++){
+        var key = groups[g2].l1;
+        if(!first) foot.appendChild(document.createTextNode(' ｜ '));
+        first = false;
+        var s = document.createElement('span');
+        var lab2 = document.createElement('span');
+        lab2.textContent = key + ' ';
+        s.appendChild(lab2);
+        var b2 = document.createElement('b');
+        b2.textContent = String(data.importCum[key] || 0);
+        s.appendChild(b2);
+        foot.appendChild(s);
+      }
+      card.appendChild(foot);
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
   // ---------------------------------------------------------------------------
   // 渲染：各課追蹤簡表（課別 × 甲指/甲配/零擔 · 新增／開發累計／已導入累計）
   // 新增＝目前分析期間內填單的新進案件；開發累計／已導入累計＝全量累計，不隨期間縮放。
@@ -1563,6 +1753,17 @@ var state = {
     var scope = applyFilters(state.model.rows, f);
     var pr = applyPeriod(scope, state.period);
     var data = computeKeQuick(scope, pr.rows);
+
+    if(isMobileMode()){
+      box.appendChild(buildKeQuickMobile(data));
+      var mnote = document.createElement('p');
+      mnote.className = 'pg-note';
+      mnote.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
+        '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
+      box.appendChild(mnote);
+      sec.hidden = false;
+      return;
+    }
 
     var wrap = document.createElement('div');
     wrap.className = 'qk-wrap';
@@ -1696,6 +1897,82 @@ var state = {
     sec.hidden = false;
   }
 
+  // DOM helper：手機版進度卡片的一列（里程碑 label + 填單數為分母的迷你長條 + 計數）
+  function pgmRow(label, count, denominator, coop){
+    var row = document.createElement('div');
+    row.className = 'pgm-row' + (coop ? ' coop' : '');
+    var lb = document.createElement('span');
+    lb.className = 'pgm-label';
+    lb.textContent = label;
+    row.appendChild(lb);
+    var track = document.createElement('span');
+    track.className = 'pgm-track';
+    var fill = document.createElement('span');
+    fill.className = 'pgm-fill';
+    if(count && denominator) fill.style.width = Math.min(100, Math.max(2, Math.round(count / denominator * 100))) + '%';
+    track.appendChild(fill);
+    row.appendChild(track);
+    var ct = document.createElement('span');
+    ct.className = 'pgm-count';
+    ct.textContent = String(count);
+    row.appendChild(ct);
+    return row;
+  }
+
+  // DOM：手機版「進度追蹤表」→ 每類別/課別一張卡（轉化迷你長條沿用 pg-track 語意）
+  function buildProgressMobile(data){
+    var wrap = document.createElement('div');
+    wrap.className = 'pgm-wrap';
+    var rows = [];
+    for(var s = 0; s < data.stageOrder.length; s++){
+      rows.push({ label: data.stageOrder[s], key: data.stageOrder[s], coop: false });
+    }
+    rows.push({ label: '合作結案', key: '__coop', coop: true });
+    for(var i = 0; i < data.groups.length; i++){
+      var g = data.groups[i];
+      var card = document.createElement('div');
+      card.className = 'pgm-card';
+      var head = document.createElement('div');
+      head.className = 'pgm-head';
+      var gn = document.createElement('span');
+      gn.className = 'pgm-group';
+      gn.textContent = g.group;
+      head.appendChild(gn);
+      var meta = document.createElement('span');
+      meta.className = 'pgm-meta';
+      meta.textContent = '填單 ' + g.total + ' · 結案 ' + g.coop;
+      head.appendChild(meta);
+      card.appendChild(head);
+      for(var r = 0; r < rows.length; r++){
+        var rr = rows[r];
+        var count = rr.coop ? g.coop : (g.stages[rr.key] || 0);
+        card.appendChild(pgmRow(rr.label, count, g.total, rr.coop));
+      }
+      wrap.appendChild(card);
+    }
+    var t = progressTotalOf(data);
+    var tcard = document.createElement('div');
+    tcard.className = 'pgm-card total';
+    var thead = document.createElement('div');
+    thead.className = 'pgm-head';
+    var tg = document.createElement('span');
+    tg.className = 'pgm-group';
+    tg.textContent = '全體合計';
+    thead.appendChild(tg);
+    var tm = document.createElement('span');
+    tm.className = 'pgm-meta';
+    tm.textContent = '填單 ' + t.total + ' · 結案 ' + t.coop;
+    thead.appendChild(tm);
+    tcard.appendChild(thead);
+    for(var r2 = 0; r2 < rows.length; r2++){
+      var rr2 = rows[r2];
+      var count2 = rr2.coop ? t.coop : (t.stages[rr2.key] || 0);
+      tcard.appendChild(pgmRow(rr2.label, count2, t.total, rr2.coop));
+    }
+    wrap.appendChild(tcard);
+    return wrap;
+  }
+
   // ---------------------------------------------------------------------------
   // 渲染：進度追蹤表（類別 + 課別 × 里程碑 → 合作結案，每格計數＋迷你進度條）
   // ---------------------------------------------------------------------------
@@ -1717,8 +1994,13 @@ var state = {
     keBox.hidden = false;
     var showCat = computeCatProgress(model.rows);
     var showKe = computeKeProgress(model.rows);
-    catBox.appendChild(withUnitLabel(buildProgressTable(showCat, '類別'), '單位：客戶數'));
-    keBox.appendChild(withUnitLabel(buildProgressTable(showKe, '課別'), '單位：客戶數'));
+    if(isMobileMode()){
+      catBox.appendChild(buildProgressMobile(showCat));
+      keBox.appendChild(buildProgressMobile(showKe));
+    } else {
+      catBox.appendChild(withUnitLabel(buildProgressTable(showCat, '類別'), '單位：客戶數'));
+      keBox.appendChild(withUnitLabel(buildProgressTable(showKe, '課別'), '單位：客戶數'));
+    }
     if(!showCat.groups.length){ catBox.className = 'pending'; catBox.textContent = '無資料'; }
 
     var note = document.createElement('p');
@@ -5124,6 +5406,111 @@ var state = {
   }
 
   // ---------------------------------------------------------------------------
+  // 版型：手機／桌面（body.mobile）。resolveViewMode 為純函式（Node 可測）。
+  // auto＝依視窗寬度偵測（< MOBILE_BREAKPOINT 進手機版）；手動切換 cycle：auto→mobile→desktop→auto。
+  // 手機版是「響應式重排」：CSS 覆寫 + 寬表（各課簡表／進度追蹤表）換卡片 renderer。
+  // ---------------------------------------------------------------------------
+  var MOBILE_BREAKPOINT = 700;
+  var VIEW_MODE_CYCLE = ['auto', 'mobile', 'desktop'];
+
+  function resolveViewMode(width, override){
+    if(override === 'mobile' || override === 'desktop') return override;
+    return (typeof width === 'number' && width < MOBILE_BREAKPOINT) ? 'mobile' : 'desktop';
+  }
+
+  // 純函式：目前版型設定的下一次（auto→mobile→desktop→auto）
+  function nextViewMode(cur){
+    var i = VIEW_MODE_CYCLE.indexOf(cur);
+    if(i === -1) i = 0;
+    return VIEW_MODE_CYCLE[(i + 1) % VIEW_MODE_CYCLE.length];
+  }
+
+  function isMobileMode(){
+    return typeof document !== 'undefined' && document.body && document.body.classList.contains('mobile');
+  }
+
+  function viewModeLabel(m){
+    return m === 'mobile' ? '版型：手機' : (m === 'desktop' ? '版型：桌面' : '版型：自動');
+  }
+
+  function currentViewMode(){
+    return resolveViewMode((typeof window !== 'undefined' && window.innerWidth !== undefined) ? window.innerWidth : 1024, state.viewMode);
+  }
+
+  // 套用版型到 body；版型切換時重刷「依版型選 renderer」的兩個區塊（寬表）
+  function applyViewMode(){
+    var m = currentViewMode();
+    var prev = document.body.classList.contains('mobile') ? 'mobile' : 'desktop';
+    document.body.classList.remove('mobile', 'desktop');
+    document.body.classList.add(m);
+    var btn = document.getElementById('viewModeBtn');
+    if(btn){
+      btn.textContent = viewModeLabel(state.viewMode);
+      btn.setAttribute('aria-pressed', String(state.viewMode !== 'auto'));
+      btn.title = '點擊切換：' + (viewModeLabel(nextViewMode(state.viewMode))) +
+        '（目前設定：' + (state.viewMode === 'auto' ? '自動偵測，寬度<' + MOBILE_BREAKPOINT + 'px' : state.viewMode) +
+        '）；手機版寬表自動改卡片、點標題可收合';
+    }
+    if(m !== prev && state.model && state.model.rows){
+      var f = {};
+      if(state.filters){
+        f.關鍵字 = state.filters.關鍵字;
+        f.課別 = state.filters.課別;
+        f.開發者 = state.filters.開發者;
+      }
+      var scope = applyFilters(state.model.rows, f);
+      var pr = applyPeriod(scope, state.period);
+      var mObj = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
+      renderKeQuickSection(mObj);
+      renderProgressSection(mObj);
+    }
+  }
+
+  // auto 模式下視窗寬度跨越臨界點時自動切版型
+  function syncViewMode(){
+    if(state.viewMode !== 'auto') return;
+    applyViewMode();
+  }
+
+  function initViewMode(){
+    var stored = null;
+    try{ stored = localStorage.getItem('crm-view'); }catch(_){}
+    state.viewMode = (stored === 'mobile' || stored === 'desktop') ? stored : 'auto';
+    applyViewMode();
+    var btn = document.getElementById('viewModeBtn');
+    if(btn) btn.addEventListener('click', function(){
+      state.viewMode = nextViewMode(state.viewMode);
+      try{
+        if(state.viewMode === 'auto') localStorage.removeItem('crm-view');
+        else localStorage.setItem('crm-view', state.viewMode);
+      }catch(_){}
+      applyViewMode();
+    });
+    var timer = null;
+    window.addEventListener('resize', function(){
+      clearTimeout(timer);
+      timer = setTimeout(syncViewMode, 150);
+    });
+  }
+
+  // 手機版手風琴：點區塊標題（h2）收合/展開該卡片（桌面版無作用）
+  function initMobileFold(){
+    document.addEventListener('click', function(e){
+      if(!isMobileMode()) return;
+      if(document.body.classList.contains('pv-mode')) return;
+      var t = e.target;
+      if(!t || !t.closest) return;
+      if(t.closest('.snap-btn')) return;
+      if(t.closest('.snap-modal')) return;
+      var h2 = t.closest('section.card h2');
+      if(!h2) return;
+      var card = h2.closest('section.card');
+      if(!card) return;
+      card.classList.toggle('folded');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // 資料存檔：自動記憶（localStorage）＋「存檔（含資料）」內嵌副本
   // ---------------------------------------------------------------------------
 
@@ -5597,6 +5984,8 @@ var state = {
     var fileInput = document.getElementById('fileInput');
     var pickBtn = document.getElementById('pickBtn');
     initTheme();
+    initViewMode();
+    initMobileFold();
     initPeriodControls();
     initSnapshotControls();
     if(!dropzone) return;
@@ -5861,6 +6250,21 @@ var state = {
       csvExportFilename: csvExportFilename,
       exportCsv: exportCsv,
       exportFilteredCsv: exportFilteredCsv,
+      MOBILE_BREAKPOINT: MOBILE_BREAKPOINT,
+      resolveViewMode: resolveViewMode,
+      nextViewMode: nextViewMode,
+      viewModeLabel: viewModeLabel,
+      currentViewMode: currentViewMode,
+      isMobileMode: isMobileMode,
+      applyViewMode: applyViewMode,
+      syncViewMode: syncViewMode,
+      initViewMode: initViewMode,
+      initMobileFold: initMobileFold,
+      groupKeQuickCols: groupKeQuickCols,
+      progressTotalOf: progressTotalOf,
+      buildKeQuickMobile: buildKeQuickMobile,
+      buildProgressMobile: buildProgressMobile,
+      pgmRow: pgmRow,
       resolveTheme: resolveTheme,
       applyTheme: applyTheme,
       state: state

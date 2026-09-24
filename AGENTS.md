@@ -40,6 +40,13 @@
 - 此表只套用 課別／開發者／關鍵字 篩選；不套用 類別（已是欄位維度）與 狀態 篩選。
 - 「已導入累計」＝`導入` 日期欄非空；底部每第一層欄位一格（甲指/甲配/零擔）。
 
+## 手機版型（body.mobile，2026-09 新增）
+
+- 自動偵測：視窗寬度 `<700px` ⇒ `body.mobile`；否則貼 `body.desktop`。手機版只**重排＋額外 DOM helper**，不動任何純函式。
+- 手動覆寫（工具列「版型」鈕，localStorage `crm-view`＝`auto|mobile|desktop`）：cycle `auto→mobile→desktop→auto`，`resolveViewMode(width, override)` 為純函式；`body.mobile`/`body.desktop` 即時套用並**重 render 兩張寬表**（各課簡表＋進度追蹤表），其餘區塊純 CSS 重排。
+- 寬表改卡片（僅 `body.mobile` JS 層，桌面維持 table）：純函式 `groupKeQuickCols(KE_QUICK_COLUMNS)`→`[{l1,groups:[{l2,entries:[{l3,val,col}]}]}]`＋`buildKeQuickMobile(data)`；`progressTotalOf(computeProgress(...))`＋`buildProgressMobile(data)`。稅收快表沿用 `.qk-table`。
+- 手機手風琴：`section.card.folded` 由 CSS 隱藏 `> :not(h2):not(.list-head)`；折疊 under `body.mobile`。SVG 一律 `max-width:100%; height:auto`（sparkline 統一 56px 高）。
+
 ## 開會資訊 sparkline（2026-09 新增）
 
 - `buildMeetingInfo` 末項「新增動向」（`spark:true`、`points`、`k`＝動態標題）＝`buildSparkBuckets(rows, from, to, now, { scope })`＋`sparkTitle(period, unit)`＋`sparkScope(period)` 純函式。
