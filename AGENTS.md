@@ -5,6 +5,10 @@
 ## 常用任務語法
 
 - 開新 session 時：告訴我「繼續 CRM 專案，改 report.html，需求：…，有問題先問我」。
+- **工作方式（使用者指定）**：每次動手前從 repo `git clone` 最新版（`github.com/share543/crm-report`），
+  **不要在 `~/` 留常態工作副本**；改完 push 回 repo，交付一律以 repo 版本為準。
+  寄檔案也一樣每次重新拉：`~/slide/send_crm_report_email.py` 內建 `git clone --depth 1`，
+  寄送紀錄會印出對應的 commit。
 - 欄位/區塊名稱、期間與篩選行為沿用 README.md 定義，先讀它再動手。
 - 新增純函式（可 Node 測試）比 DOM 渲染優先，並加入 `module.exports`（檔案尾端）。
 
