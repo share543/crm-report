@@ -520,6 +520,40 @@
   .alert-item.low{ border-left-color:var(--accent); }
   .alert-title{ font-weight:650; font-size:14px; }
   .alert-detail{ color:var(--muted); font-size:12.5px; margin-top:4px; line-height:1.7; }
+  /* 待留意事項：可點的案件名稱＝跳到案件清單那一列（螢幕上才裝飾，存圖／列印自動還原純文字） */
+  .alert-lead{ color:var(--muted); }
+  .alert-sep{ color:var(--muted); }
+  .alert-note{ color:var(--muted); }
+  .alert-plain{ color:inherit; }
+  .alert-link{ font:inherit; color:var(--accent); background:none; border:0;
+    border-bottom:1px dotted currentColor; padding:0 1px; margin:0; cursor:pointer; text-align:left; }
+  .alert-link:hover{ color:var(--warning); border-bottom-style:solid; }
+  .alert-link:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .alert-entry.focus{ background:var(--row-hover-strong); border-radius:4px;
+    box-shadow:0 0 0 3px var(--row-hover-strong); }
+  .alert-more{ font:inherit; font-size:12.5px; color:var(--accent); background:none; border:0;
+    border-bottom:1px dotted currentColor; padding:0 2px; margin-left:4px; cursor:pointer; }
+  .alert-more:hover{ color:var(--warning); border-bottom-style:solid; }
+  /* 從待留意事項／進度表跳過來的那一列：短暫高亮（用主題變數，Light 主題才不會反黑） */
+  .list-table .list-row.jump-target td{ background:var(--row-hover-strong); }
+  .row-warn{ font:inherit; font-size:11px; line-height:1; color:var(--warning); background:none;
+    border:0; padding:0 2px; margin-right:2px; cursor:pointer; vertical-align:middle; }
+  .row-warn:hover{ color:var(--text); }
+  .pg-warn{ font:inherit; font-size:11px; color:var(--warning); background:none; border:0;
+    padding:0 2px; margin-left:5px; cursor:pointer; vertical-align:middle; }
+  .pg-warn:hover{ color:var(--text); }
+  /* 列印：名稱要留在紙上（列印樣式會隱藏所有 button），互動元件則收掉 */
+  @media print{
+    .alert-link{ display:inline !important; color:#333; border:0; background:none; padding:0; }
+    .alert-more, .row-warn, .pg-warn{ display:none !important; }
+    .alert-entry.focus{ background:none; box-shadow:none; }
+  }
+  /* 存圖：PNG 內不該出現藍字底線與 ⚠ 按鈕（@media print 會被 stripPrintBlocks 抽掉，故獨立寫） */
+  .shot-root .alert-link{ display:inline; font:inherit; color:inherit; border:0; background:none;
+    padding:0; cursor:default; }
+  .shot-root .alert-more, .shot-root .row-warn, .shot-root .pg-warn{ display:none; }
+  .shot-root .alert-entry.focus{ background:transparent; box-shadow:none; }
+  .shot-root .list-table .list-row.jump-target td{ background:transparent; }
   @media (max-width:640px){
     main{ padding:14px; }
     .top-actions button{ flex:1 1 auto; }
@@ -1229,13 +1263,13 @@ var state = {
       var name = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']) : '';
       if(hasImp && !hasSign){
         importOnly.push(r);
-        if(!is13) mismatches.push({ name: name, cat: cat, note: '導入有日期但簽約空白，類別應為 1P/3P' });
+        if(!is13) mismatches.push({ name: name, cat: cat, note: '導入有日期但簽約空白，類別應為 1P/3P', row: r });
       } else if(hasImp && hasSign){
         both.push(r);
-        if(!isZD) mismatches.push({ name: name, cat: cat, note: '簽約＋導入皆有日期，類別應為 零擔/甲配' });
+        if(!isZD) mismatches.push({ name: name, cat: cat, note: '簽約＋導入皆有日期，類別應為 零擔/甲配', row: r });
       } else if(!hasImp && hasSign){
         signOnly.push(r);
-        if(is13) mismatches.push({ name: name, cat: cat, note: '1P/3P 卻有簽約日期' });
+        if(is13) mismatches.push({ name: name, cat: cat, note: '1P/3P 卻有簽約日期', row: r });
       }
     }
     return {
@@ -1998,7 +2032,7 @@ var state = {
       keBox.appendChild(buildProgressMobile(showKe));
     } else {
       catBox.appendChild(withUnitLabel(buildProgressTable(showCat, '類別'), '單位：客戶數'));
-      keBox.appendChild(withUnitLabel(buildProgressTable(showKe, '課別'), '單位：客戶數'));
+      keBox.appendChild(withUnitLabel(buildProgressTable(showKe, '課別', alertCountsBy('課別')), '單位：客戶數'));
     }
     if(!showCat.groups.length){ catBox.className = 'pending'; catBox.textContent = '無資料'; }
 
@@ -2025,7 +2059,7 @@ var state = {
   }
 
   // 輔助：依 computeProgress 資料建立交叉表（不含表格外註記）
-  function buildProgressTable(data, groupLabel){
+  function buildProgressTable(data, groupLabel, warnMap){
     var wrap = document.createElement('div');
     wrap.className = 'pg-wrap';
     var table = document.createElement('table');
@@ -2065,6 +2099,20 @@ var state = {
       var tdGroup = document.createElement('td');
       tdGroup.className = 'pg-ke';
       tdGroup.textContent = g.group;
+      (function(ke){
+        var n = warnMap ? warnMap[ke] : 0;
+        if(!n) return;
+        var wb = document.createElement('button');
+        wb.type = 'button';
+        wb.className = 'pg-warn';
+        wb.textContent = '⚠' + n;
+        wb.setAttribute('title', '這課有 ' + n + ' 筆列在待留意事項（點擊看說明）');
+        wb.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          focusAlertEntries(function(r){ return fieldStr(r, '課別') === ke; });
+        });
+        tdGroup.appendChild(wb);
+      })(g.group);
       tr.appendChild(tdGroup);
       for(var s2 = 0; s2 < data.stageOrder.length; s2++){
         var key = data.stageOrder[s2];
@@ -2369,16 +2417,14 @@ var state = {
   var STALE_DAYS = 30;
   var ALERT_MAX = 5;
 
-  function renderAlerts(container, model){
-    container.textContent = '';
-    if(!model || !model.rows || !model.rows.length){
-      container.className = 'pending';
-      container.textContent = '無資料';
-      return;
-    }
-    container.className = '';
-    var rows = model.rows;
+  // 純函式：資料 → 警報結構（可於 Node 測試；不碰 DOM）
+  // 回傳 { items:[{ sev, kind, title, sections:[{ lead, entries:[{ row, label, note }] }] }],
+  //        stamps:{ mismatch|slow|stale|missingDev|missingCont|missingSta: [row, …] } }
+  // 每個 entry 都帶 row 參照（＝ state.model.rows 裡同一個物件），供「跳到案件清單」定位。
+  function collectAlerts(rows){
     var items = [];
+    var stamps = { mismatch: [], slow: [], stale: [], missingDev: [], missingCont: [], missingSta: [] };
+    if(!rows || !rows.length) return { items: items, stamps: stamps };
 
     function nameOf(r){
       if(r && r['公司名稱'] !== undefined && r['公司名稱'] !== null && String(r['公司名稱']).trim() !== ''){
@@ -2389,14 +2435,16 @@ var state = {
 
     var vr = validateCategoryRule(rows);
     if(vr.mismatches.length){
-      var names = vr.mismatches.slice(0, ALERT_MAX).map(function(mm){
-        return mm.name + '（' + mm.cat + '）' + mm.note;
-      });
-      if(vr.mismatches.length > ALERT_MAX) names.push('…等 ' + vr.mismatches.length + ' 筆');
+      var mmEntries = [];
+      for(var m1 = 0; m1 < vr.mismatches.length; m1++){
+        var mm = vr.mismatches[m1];
+        stamps.mismatch.push(mm.row);
+        mmEntries.push({ row: mm.row, label: mm.name, note: '（' + mm.cat + '）' + mm.note });
+      }
       items.push({
-        sev: 'high',
+        sev: 'high', kind: 'mismatch',
         title: '類別規則不一致 ' + vr.mismatches.length + ' 筆',
-        detail: '簽約／導入與類別填寫規則不符：' + names.join('；')
+        sections: [{ lead: '簽約／導入與類別填寫規則不符：', entries: mmEntries }]
       });
     }
 
@@ -2423,18 +2471,20 @@ var state = {
       var eJ = dateToSerial(rawJ[endKey]);
       if(eJ === null || eJ < s0) continue;
       var days = eJ - s0;
-      if(days > SLOW_DAYS) slow.push({ name: nameOf(rj), days: days, end: endKey });
+      if(days > SLOW_DAYS) slow.push({ row: rj, name: nameOf(rj), days: days, end: endKey });
     }
     slow.sort(function(a, b){ return b.days - a.days; });
     if(slow.length){
-      var slowNames = slow.slice(0, ALERT_MAX).map(function(o){
-        return o.name + '（' + o.days + ' 天，至' + o.end + '）';
-      });
-      if(slow.length > ALERT_MAX) slowNames.push('…等 ' + slow.length + ' 筆');
+      var slowEntries = [];
+      for(var s2 = 0; s2 < slow.length; s2++){
+        stamps.slow.push(slow[s2].row);
+        slowEntries.push({ row: slow[s2].row, label: slow[s2].name,
+                           note: '（' + slow[s2].days + ' 天，至' + slow[s2].end + '）' });
+      }
       items.push({
-        sev: 'mid',
+        sev: 'mid', kind: 'slow',
         title: '時程過長個案 ' + slow.length + ' 筆（填單→最後里程碑超過 ' + SLOW_DAYS + ' 天）',
-        detail: '建議檢視流程卡關原因：' + slowNames.join('；')
+        sections: [{ lead: '建議檢視流程卡關原因：', entries: slowEntries }]
       });
     }
 
@@ -2450,45 +2500,123 @@ var state = {
         var ls = dateToSerial(rawS[MILESTONES[liS]]);
         if(ls === null) continue;
         var gap = maxLast - ls;
-        if(gap > STALE_DAYS) stale.push({ name: nameOf(rs), gap: gap, at: MILESTONES[liS] });
+        if(gap > STALE_DAYS) stale.push({ row: rs, name: nameOf(rs), gap: gap, at: MILESTONES[liS] });
       }
     }
     stale.sort(function(a, b){ return b.gap - a.gap; });
     if(stale.length){
-      var staleNames = stale.slice(0, ALERT_MAX).map(function(o){
-        return o.name + '（停於' + o.at + '，落後 ' + o.gap + ' 天）';
-      });
-      if(stale.length > ALERT_MAX) staleNames.push('…等 ' + stale.length + ' 筆');
+      var staleEntries = [];
+      for(var s4 = 0; s4 < stale.length; s4++){
+        stamps.stale.push(stale[s4].row);
+        staleEntries.push({ row: stale[s4].row, label: stale[s4].name,
+                            note: '（停於' + stale[s4].at + '，落後 ' + stale[s4].gap + ' 天）' });
+      }
       items.push({
-        sev: 'low',
+        sev: 'low', kind: 'stale',
         title: '進行中停滯可能 ' + stale.length + ' 筆',
-        detail: '最後里程碑較全資料最新進度落後超過 ' + STALE_DAYS + ' 天，建議追蹤：' + staleNames.join('；')
+        sections: [{ lead: '最後里程碑較全資料最新進度落後超過 ' + STALE_DAYS + ' 天，建議追蹤：', entries: staleEntries }]
       });
     }
 
-    var missingDev = [], missingCont = [], missingSta = [];
-    for(var d2 = 0; d2 < rows.length; d2++){
-      var rm = rows[d2];
-      if(classifyStatus(rm) === '未啟動') continue;
-      if(fieldStr(rm, '開發者') === '') missingDev.push(rm);
-      if(fieldStr(rm, '聯絡窗口') === '') missingCont.push(rm);
-      if(stationNamesOf(rm).length === 0) missingSta.push(rm);
-    }
-    if(missingDev.length || missingCont.length || missingSta.length){
-      var mp = [];
-      if(missingDev.length){
-        var devNames = missingDev.slice(0, ALERT_MAX).map(nameOf);
-        if(missingDev.length > ALERT_MAX) devNames.push('等');
-        mp.push('開發者未填 ' + missingDev.length + ' 筆（' + devNames.join('、') + '）');
+    var missSecs = [];
+    var missTotal = 0;
+    var missDefs = [
+      { key: '開發者', stamp: 'missingDev', label: '開發者未填' },
+      { key: '聯絡窗口', stamp: 'missingCont', label: '聯絡窗口未填' },
+      { key: '收貨站所', stamp: 'missingSta', label: '收貨站所未填' }
+    ];
+    for(var md = 0; md < missDefs.length; md++){
+      var def = missDefs[md];
+      var hit = [];
+      for(var d2 = 0; d2 < rows.length; d2++){
+        var rm = rows[d2];
+        if(classifyStatus(rm) === '未啟動') continue;
+        var bad = (def.key === '收貨站所') ? (stationNamesOf(rm).length === 0) : (fieldStr(rm, def.key) === '');
+        if(bad) hit.push(rm);
       }
-      if(missingCont.length) mp.push('聯絡窗口未填 ' + missingCont.length + ' 筆');
-      if(missingSta.length) mp.push('收貨站所未填 ' + missingSta.length + ' 筆');
-      items.push({
-        sev: 'low',
-        title: '資料缺漏 ' + (missingDev.length + missingCont.length + missingSta.length) + ' 筆（非未啟動案件）',
-        detail: '影響排行與追蹤完整度，建議補齊：' + mp.join('；')
-      });
+      if(!hit.length) continue;
+      missTotal += hit.length;
+      var secEntries = [];
+      for(var h2 = 0; h2 < hit.length; h2++){
+        stamps[def.stamp].push(hit[h2]);
+        secEntries.push({ row: hit[h2], label: nameOf(hit[h2]), note: '' });
+      }
+      missSecs.push({ lead: def.label + ' ' + hit.length + ' 筆：', entries: secEntries });
     }
+    if(missSecs.length){
+      items.push({ sev: 'low', kind: 'missing',
+        title: '資料缺漏 ' + missTotal + ' 筆（非未啟動案件）', sections: missSecs });
+    }
+
+    return { items: items, stamps: stamps };
+  }
+
+  // 目前這份資料的警報註記（案件清單／進度表掛 ⚠ 用）；每次重算時更新
+  var alertStamps = null;
+
+  var ALERT_KIND_LABEL = {
+    mismatch: '類別規則不一致', slow: '時程過長', stale: '停滯',
+    missingDev: '開發者未填', missingCont: '聯絡窗口未填', missingSta: '收貨站所未填'
+  };
+
+  // 依物件參照找索引（同一個 row 物件在 state.model.rows 內是唯一實體）
+  function indexOfRef(arr, row){
+    if(!arr || !arr.length || !row) return -1;
+    for(var i = 0; i < arr.length; i++){ if(arr[i] === row) return i; }
+    return -1;
+  }
+
+  // 某列命中的警報種類標籤（空陣列＝沒被點名）
+  function alertKindsOf(row, stamps){
+    var st = stamps || alertStamps;
+    var out = [];
+    if(!st || !row) return out;
+    for(var k in ALERT_KIND_LABEL){
+      if(indexOfRef(st[k], row) >= 0) out.push(ALERT_KIND_LABEL[k]);
+    }
+    return out;
+  }
+
+  // 所有被點名的列（去重，保留首次出現順序）
+  function alertFlaggedRows(stamps){
+    var st = stamps || alertStamps;
+    var out = [];
+    if(!st) return out;
+    for(var k in st){
+      var arr = st[k] || [];
+      for(var i = 0; i < arr.length; i++){ if(indexOfRef(out, arr[i]) < 0) out.push(arr[i]); }
+    }
+    return out;
+  }
+
+  // 依欄位值統計被點名的列數（進度追蹤表掛 ⚠N 用）：回傳 { 課別名: 筆數 }
+  function alertCountsBy(key, stamps){
+    var m = {};
+    var flagged = alertFlaggedRows(stamps);
+    for(var i = 0; i < flagged.length; i++){
+      var v = fieldStr(flagged[i], key);
+      if(v === '') v = '(未填)';
+      m[v] = (m[v] || 0) + 1;
+    }
+    return m;
+  }
+
+  var ALERT_ENTRY_MAX = 5;   // 卡片內每類預設顯示幾筆，其餘折進「…等 N 筆（點開）」
+
+  // 渲染：待留意事項（類別規則不一致 / 時程過長 / 進行中停滯 / 資料缺漏）
+  // 每筆名稱是可點的 .alert-link（跳到案件清單那一列）；超過上限者折進 .alert-rest。
+  function renderAlerts(container, model){
+    container.textContent = '';
+    if(!model || !model.rows || !model.rows.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      alertStamps = null;
+      return;
+    }
+    container.className = '';
+    var data = collectAlerts(model.rows);
+    alertStamps = data.stamps;
+    var items = data.items;
 
     if(!items.length){
       var ok = document.createElement('p');
@@ -2510,12 +2638,76 @@ var state = {
       t.textContent = it.title;
       var d = document.createElement('div');
       d.className = 'alert-detail';
-      d.textContent = it.detail;
+
+      var shown = 0, hidden = 0, restBox = null;
+      for(var s = 0; s < it.sections.length; s++){
+        var section = it.sections[s];
+        if(section.lead){
+          var lead = document.createElement('span');
+          lead.className = 'alert-lead';
+          lead.textContent = section.lead;
+          d.appendChild(lead);
+        }
+        for(var e = 0; e < section.entries.length; e++){
+          var en = section.entries[e];
+          var wrap = document.createElement('span');
+          wrap.className = 'alert-entry';
+          wrap.__row = en.row || null;
+          if(en.row){
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'alert-link';
+            btn.textContent = en.label;
+            btn.setAttribute('title', '跳到案件清單的這一筆');
+            btn.__row = en.row;
+            wrap.appendChild(btn);
+          } else {
+            var plain = document.createElement('span');
+            plain.className = 'alert-plain';
+            plain.textContent = en.label;
+            wrap.appendChild(plain);
+          }
+          if(en.note){
+            var note = document.createElement('span');
+            note.className = 'alert-note';
+            note.textContent = en.note;
+            wrap.appendChild(note);
+          }
+          var sepNeeded = (e < section.entries.length - 1);
+          if(shown < ALERT_ENTRY_MAX){
+            shown++;
+            d.appendChild(wrap);
+            if(sepNeeded) d.appendChild(alertSep());
+          } else {
+            hidden++;
+            if(!restBox){ restBox = document.createElement('span'); restBox.className = 'alert-rest'; restBox.hidden = true; }
+            restBox.appendChild(wrap);
+            if(sepNeeded) restBox.appendChild(alertSep());
+          }
+        }
+        if(s < it.sections.length - 1) d.appendChild(alertSep());
+      }
+      if(restBox) d.appendChild(restBox);
+      if(hidden){
+        var more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'alert-more';
+        more.textContent = '…等 ' + hidden + ' 筆（點開）';
+        d.appendChild(more);
+      }
       item.appendChild(t);
       item.appendChild(d);
       list.appendChild(item);
     }
     container.appendChild(list);
+    initAlertActions();
+  }
+
+  function alertSep(){
+    var sep = document.createElement('span');
+    sep.className = 'alert-sep';
+    sep.textContent = '；';
+    return sep;
   }
 
   function renderAlertsSection(model){
@@ -2524,6 +2716,124 @@ var state = {
     if(!sec || !box || !model || !model.rows) return;
     renderAlerts(box, model);
     sec.hidden = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 交叉跳轉：待留意事項 ↔ 案件清單 / 進度追蹤表
+  // ---------------------------------------------------------------------------
+  // 展開被折疊的區塊（手機手風琴／無資料時被 hidden）
+  function unfoldSection(el){
+    if(!el) return null;
+    if(el.classList && el.classList.contains('folded')) el.classList.remove('folded');
+    el.hidden = false;
+    return el;
+  }
+
+  // 目前簡報頁面清單中某區塊的索引（簡報頁面可勾選，不能用 PRESENT_SLIDES 的位置）
+  function presentSlideIndexOf(id){
+    if(!presentState || !presentState.on || !presentState.slides) return -1;
+    for(var i = 0; i < presentState.slides.length; i++){
+      if(presentState.slides[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  // 案件清單內某一列的 <tr>（靠物件參照比對）
+  function findListRowEl(row){
+    var trs = document.querySelectorAll('#listResults tr.list-row');
+    for(var i = 0; i < trs.length; i++){
+      if(trs[i].__row === row) return trs[i];
+    }
+    return null;
+  }
+
+  // 短暫高亮（重複觸發重新計時）
+  function pulseClass(el, cls, ms){
+    if(!el || !el.classList) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;                     // 強制 reflow，讓樣式重跑
+    el.classList.add(cls);
+    if(el.__pulseTimer) clearTimeout(el.__pulseTimer);
+    el.__pulseTimer = setTimeout(function(){
+      el.classList.remove(cls);
+      el.__pulseTimer = null;
+    }, ms || 2600);
+  }
+
+  // 跳到某筆案件的清單列：算頁碼 → 重繪 → 捲到該列 → 高亮 → 展開洽談內容
+  // 簡報中先切到「案件清單」那一頁（該頁沒被勾選就退出簡報，仍完成跳轉）
+  function jumpToCase(row){
+    if(!row || !state.model || !state.model.rows) return false;
+    if(typeof presentState !== 'undefined' && presentState && presentState.on){
+      var pi = presentSlideIndexOf('listSection');
+      if(pi >= 0) showPresentSlide(pi);
+      else leavePresent();
+    }
+    var filtered = applyFilters(state.model.rows, state.filters);
+    var scoped = applyPeriod(filtered, state.period).rows;
+    var sorted = sortRows(scoped, state.sortCol, state.sortDir);
+    var at = indexOfRef(sorted, row);
+    if(at < 0) return false;
+    unfoldSection(document.getElementById('listSection'));
+    state.page = Math.floor(at / PAGE_SIZE) + 1;
+    rebuildListResults();
+    var tr = findListRowEl(row);
+    if(!tr) return false;
+    if(!tr.classList.contains('list-row-open')) tr.click();
+    // 即時捲動（不用 smooth）：跨頁跳轉距離大，smooth 在部分環境／無障礙設定下不會跑，
+    // 定位感改由高亮脈衝承擔；也讓自動化驗證量得到真的捲動結果。
+    try{ tr.scrollIntoView({ block: 'center', behavior: 'auto' }); }catch(e){ tr.scrollIntoView(); }
+    pulseClass(tr, 'jump-target');
+    return true;
+  }
+
+  // 反向：高亮待留意事項內符合條件的項目並捲過去（回傳命中數）
+  function focusAlertEntries(pred){
+    var sec = document.getElementById('alertSection');
+    var box = document.getElementById('alerts');
+    if(!sec || !box) return 0;
+    unfoldSection(sec);
+    var hits = 0;
+    var entries = box.querySelectorAll('.alert-entry');
+    for(var i = 0; i < entries.length; i++){
+      var hit = false;
+      if(pred){ try{ hit = !!pred(entries[i].__row); }catch(e){ hit = false; } }
+      entries[i].classList.toggle('focus', hit);
+      if(hit){
+        hits++;
+        var rest = entries[i].parentNode;
+        if(rest && rest.classList && rest.classList.contains('alert-rest') && rest.hidden){
+          rest.hidden = false;
+          var more = rest.parentNode ? rest.parentNode.querySelector('.alert-more') : null;
+          if(more) more.hidden = true;
+        }
+      }
+    }
+    try{ sec.scrollIntoView({ block: 'start', behavior: 'auto' }); }catch(e){}
+    return hits;
+  }
+
+  // 掛上待留意事項卡內的跳轉行為（容器層委派，重繪後仍有效；冪等）
+  function initAlertActions(){
+    var box = document.getElementById('alerts');
+    if(!box || box.__wired) return;
+    box.__wired = true;
+    box.addEventListener('click', function(ev){
+      var el = ev.target;
+      if(!el || !el.closest) return;
+      var more = el.closest('.alert-more');
+      if(more){
+        var rest = more.parentNode ? more.parentNode.querySelector('.alert-rest') : null;
+        if(rest) rest.hidden = false;
+        more.hidden = true;
+        return;
+      }
+      var link = el.closest('.alert-link');
+      if(link && link.__row){
+        ev.preventDefault();
+        jumpToCase(link.__row);
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -4729,7 +5039,21 @@ var state = {
     var tr = document.createElement('tr');
     tr.className = 'list-row';
     tr.setAttribute('tabindex', '0');
+    tr.__row = row;                              // 供待留意事項／進度表跳轉定位（物件參照比對）
     var caretTd = document.createElement('td');
+    var warnKinds = alertKindsOf(row);
+    if(warnKinds.length){
+      var warn = document.createElement('button');
+      warn.type = 'button';
+      warn.className = 'row-warn';
+      warn.textContent = '⚠';
+      warn.setAttribute('title', '待留意事項：' + warnKinds.join('、') + '（點擊看說明）');
+      warn.addEventListener('click', function(ev){
+        ev.stopPropagation();                    // 不要連帶展開／收合這一列
+        focusAlertEntries(function(r){ return r === row; });
+      });
+      caretTd.appendChild(warn);
+    }
     var caret = document.createElement('span');
     caret.className = 'list-caret';
     caret.textContent = '▸';
@@ -4908,6 +5232,8 @@ var state = {
     updatePeriodBadge(pr.rows.length, pr.excluded);
     renderMeetingInfo();
     var m = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
+    // 先算一次警報註記：進度追蹤表（排在待留意事項之前渲染）要用它掛 ⚠N
+    alertStamps = collectAlerts(pr.rows).stamps;
     renderHighlightsSection(m);
     renderStats(m);
     renderKeQuickSection(m);
@@ -6129,6 +6455,18 @@ var state = {
       SLOW_DAYS: SLOW_DAYS, STALE_DAYS: STALE_DAYS, ALERT_MAX: ALERT_MAX,
       renderAlerts: renderAlerts,
       renderAlertsSection: renderAlertsSection,
+      collectAlerts: collectAlerts,
+      alertKindsOf: alertKindsOf,
+      alertFlaggedRows: alertFlaggedRows,
+      alertCountsBy: alertCountsBy,
+      alertStampsOf: function(){ return alertStamps; },
+      jumpToCase: jumpToCase,
+      focusAlertEntries: focusAlertEntries,
+      findListRowEl: findListRowEl,
+      presentSlideIndexOf: presentSlideIndexOf,
+      initAlertActions: initAlertActions,
+      unfoldSection: unfoldSection,
+      pulseClass: pulseClass,
       buildMeetingInfo: buildMeetingInfo,
       renderMeetingInfo: renderMeetingInfo,
       stripPrintBlocks: stripPrintBlocks,

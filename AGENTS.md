@@ -20,6 +20,13 @@
 - seed 參數**必須包 `JSON.stringify(...)`**：直接插 raw JSON 物件字面值會被 `localStorage.setItem` 字串化成 `[object Object]`（15 字元），`readStoredData` 解析失敗後會**靜默移除 key 回 null**（無 console error，看似「未還原」）。先懷疑測試 harness 再懷疑產品。
 - `.snap-btn[data-snap="…"]` 取按鈕的文字要用 `\uXXXX` 跳脫（避免字面非 ASCII 干擾）。
 - 量測類驗證（PNG 像素）：頁內 decode preview `img.src` 到 offscreen canvas 後逐像素統計（近黑 `#242a36`、淺色 `#dce2ea` 係數），把摘要寫回 `document.title`。
+- **互動類驗證要跑真實時間**：`--virtual-time-budget` 下 compositor 不跑 ⇒ `scrollIntoView()` 不會 commit，捲動斷言必然失敗（看起來像 bug，其實是環境）。
+  跑法：chromium 開著不關 → 驅動碼跑完用 `fetch('/__result?d=' + encodeURIComponent(JSON))` 把結果送回本機 `python3 -m http.server`
+  → 讀它的 access log 解出結果（access log 會記完整 query string）；另發一個 `/__done?n=PASS_FAIL` 圖片請求當完成信號。
+- 驅動碼要呼叫頁面內部函式時，在**驗證副本**注入 `window.__CRM = {…}`；正式檔只留 `module.exports`（瀏覽器拿不到）。
+- 數「可見」元素別用 `querySelectorAll().length`（隱藏節點也算），要用 `getClientRects().length`。
+- 註解文字會誤觸 `indexOf('@media print')` 這類字串檢查，改成測 `/@media\s+print\s*\{/`。
+- 驗「存圖內不出現藍字底線」：在頁面造一個 `<div class="shot-root">` 放 clone，讀 computed style（連結色＝父層色、`border-bottom-width` 為 `0px`）。
 
 ## 核心領域規則（務必遵守）
 
@@ -54,6 +61,35 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
    **寫 `document.title` 會被頁面覆蓋掉**，不要只看 title。
 5. 驗收清單：15 塊 DOM 順序、`#presentBtn` 已 enabled、逐頁 `#pvCount`／`#pvTitle`
    （14 頁）、離開簡報後 15 塊歸位順序與進入前相同、`.snap-btn` 數量＝有 h2 的卡片數。
+
+## 待留意事項的交叉跳轉（2026-10 新增）
+
+- 警報由純函式 `collectAlerts(rows)` 產生，回傳 `items[]`（`{sev, kind, title, sections:[{lead, entries:[{row,label,note}]}]}`）
+  與 `stamps`（`{mismatch|slow|stale|missingDev|missingCont|missingSta: [row…]}`）。
+  **每個 entry 都帶 `row` 參照**（＝ `state.model.rows` 內同一個物件）：跳轉靠物件參照定位，不需要另外加 key。
+  `validateCategoryRule()` 的 `mismatches[]` 已補 `row` 欄位，改它時要保留。
+- `renderAlerts()` 每類預設顯示 `ALERT_ENTRY_MAX`(5) 筆，其餘折進 `.alert-rest` ＋ `.alert-more`（就地展開，不動全域篩選——
+  用篩選做「看全部」會把統計／漏斗／排行一起縮小，副作用太大）。
+- `alertStamps` 是模組層級「目前這份資料的警報註記」，`rebuild()` 在**渲染進度追蹤表之前**就先算好
+  （渲染順序是 progress → alerts → list）。案件清單的 ⚠ 來自 `alertKindsOf(row)`；
+  進度追蹤表的 ⚠N 來自 `alertCountsBy('課別')`，**只掛課別那張表**，類別表不掛。
+- `jumpToCase(row)`：先用 `applyFilters → applyPeriod → sortRows` 重算出與清單完全相同的排序結果，
+  `indexOfRef` 取索引 → `Math.floor(i / PAGE_SIZE) + 1` 設 `state.page` → `rebuildListResults()`
+  → 用 `tr.__row === row` 找列 → 展開 → 捲到 → `pulseClass(tr,'jump-target')`。
+  `buildListRow()` 內的 `tr.__row = row` 是定位依據，不要移除。
+- **捲動一律 `behavior:'auto'`，不要 smooth**：跨頁跳轉距離大，smooth 在無障礙設定／部分環境不跑，
+  而且無法自動化驗證；定位感改由高亮脈動承擔。
+- 反向：清單列 `.row-warn` 與進度表 `.pg-warn` 都呼叫 `focusAlertEntries(pred)`
+  （高亮 `.alert-entry.focus`、必要時展開 `.alert-rest`、捲回卡片）。兩者的 click 都要 `stopPropagation()`，
+  否則清單列會連帶展開／收合。
+- 跳轉前先 `unfoldSection()`：手機版手風琴（`section.card.folded`）與無資料時被 `hidden` 的區塊要先打開才看得到。
+- 簡報中跳轉：`presentState.slides` 是**勾選後**的頁面（與 `PRESENT_SLIDES` 不同），要用 `presentSlideIndexOf('listSection')` 找索引；
+  該頁沒被勾選就 `leavePresent()`，照樣完成跳轉。
+- 裝飾開關**兩套都要寫**，只寫一套會出事：
+  - 列印：列印樣式表有 `button{display:none}`，所以 `.alert-link` 要在 `@media print` 內還原成 `display:inline !important`；
+    `.alert-more/.row-warn/.pg-warn` 才要隱藏。
+  - 存圖：`stripPrintBlocks()` 會把整段 `@media print` 抽掉（print 規則進不了 PNG），所以另寫 `.shot-root …` 規則。
+    `rewriteSnapshotCss()` 只改寫 `:root`/`body`，`.shot-root` 選擇器原樣保留 ⇒ 只寫 print 規則的結果是「PNG 裡照樣有藍字底線」。
 
 ## 各課追蹤簡表（2026-09 新增）
 
