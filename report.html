@@ -750,6 +750,10 @@
       </div>
     </div>
   </section>
+  <section class="card" id="alertSection" hidden>
+    <h2>待留意事項</h2>
+    <div id="alerts" class="pending">待產生</div>
+  </section>
   <section class="card" id="highlightSection" hidden>
     <h2>開場亮點摘要</h2>
     <div id="highlight" class="pending">待產生</div>
@@ -789,10 +793,6 @@
   <section class="card" id="dropoffSection" hidden>
     <h2>轉換流失分析</h2>
     <div id="dropoff" class="pending">待產生</div>
-  </section>
-  <section class="card" id="alertSection" hidden>
-    <h2>待留意事項</h2>
-    <div id="alerts" class="pending">待產生</div>
   </section>
   <section class="card" id="listSection" hidden>
     <div class="list-head">
@@ -5632,8 +5632,11 @@ var state = {
   // 簡報模式（開會投影片）：全螢幕覆蓋層一次顯示一個區段，方向鍵/空白/Digit 換頁、Esc 結束。
   // 投影片＝現有各 section（不含 載入卡 與 原始資料），切頁採「移動真實節點」以保留事件綁定；
   // 結束時將所有被移動的 section 依原位置歸位。
+  // ⚠️ 這個清單的順序必須與 <main> 內的 section 順序一致 —— 改區塊順序時兩邊都要改，
+  //    只改 DOM 會變成「畫面一個順序、投影另一個順序」。
   var PRESENT_SLIDES = [
     { id: 'agendaSection', title: '本日議題' },
+    { id: 'alertSection', title: '待留意事項' },
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection', title: '案件狀態統計' },
     { id: 'keQuickSection', title: '各課追蹤簡表' },
@@ -5647,7 +5650,6 @@ var state = {
     ] },
     { id: 'timingSection', title: '開發時間分析' },
     { id: 'dropoffSection', title: '轉換流失分析' },
-    { id: 'alertSection', title: '待留意事項' },
     { id: 'listSection', title: '案件清單' }
   ];
 
