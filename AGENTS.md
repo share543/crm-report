@@ -38,6 +38,23 @@
 其餘都與順序無關（渲染用 `getElementById`、沒有任何順序常數或依 id 排序的 CSS、
 localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 
+## 改區塊順序（2026-10）
+
+三處要一起改：`<main>` 的 section、`PRESENT_SLIDES`、本檔的「區塊順序」。
+
+驗證怎麼跑（repo 沒有 `customer.xlsx`，自建 seed）：
+
+1. **起本機 http 服務** —— `file://` 下 Chromium 停用 localStorage，直接開檔資料不會
+   還原（畫面全 `hidden`、`#presentBtn` 仍 disabled），看起來像功能壞了，其實是環境。
+2. 在**副本**注入 seed：`localStorage.setItem('crm-data', <JSON 字串>)`。
+   ⚠️ 必須是字串 —— 塞物件字面值會被字串化成 `[object Object]`（15 字元）而靜默失敗。
+3. 驅動碼要插在**最後一個** `</body>` 之前 —— 檔案裡「存檔（含資料）」的序列化字串
+   也含有 `</body>`，插到第一個等於插進 JS 字串裡，整段不會執行。
+4. `--headless=new --dump-dom` 跑完後讀結果：寫進 `documentElement` 屬性會被保留，
+   **寫 `document.title` 會被頁面覆蓋掉**，不要只看 title。
+5. 驗收清單：15 塊 DOM 順序、`#presentBtn` 已 enabled、逐頁 `#pvCount`／`#pvTitle`
+   （14 頁）、離開簡報後 15 塊歸位順序與進入前相同、`.snap-btn` 數量＝有 h2 的卡片數。
+
 ## 各課追蹤簡表（2026-09 新增）
 
 - `computeKeQuick(scopeRows, periodRows)` 純函式：`新增`＝periodRows（隨期間）、`開發累計`/`已導入累計`＝scopeRows（全量）。
