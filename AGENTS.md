@@ -9,9 +9,12 @@
   **不要在 `~/` 留常態工作副本**；改完 push 回 repo，交付一律以 repo 版本為準。
   寄檔案也一樣每次重新拉：`~/slide/send_crm_report_email.py` 內建 `git clone --depth 1`，
   寄送紀錄會印出對應的 commit。
-- ⚠ **刪掉本機副本前必須先確認**：`git status --short` 空白（沒有未提交的改動）＋
+- ⚠ **刪掉本機副本前必須先確認**：**先 `git fetch`**，再確認 `git status --short` 空白（沒有未提交的改動）＋
   `git rev-parse HEAD origin/main` 兩者相同（已推上去）。少了這一步，未推的改動會隨副本一起消失，
   而且不會有任何錯誤訊息。交付前也順手確認一次 HEAD 與遠端相同。
+  **`git fetch` 不可省**：`status` 與 `rev-parse` 只比對「上次 fetch 到的」ref，過期的 `origin/main`
+  會讓根本沒同步的副本看起來完全同步。2026-10-03 兩個實例：一份 clone 顯示無領先/落後，實際已
+  24/24 分岔（靠 tree 逐筆比對才發現內容其實相同）；`crm-report` 同樣顯示無領先/落後，實際靜默落後 6 個 commit。
 - 本機**已有全域身分**（`~/.gitconfig`：`share543` ／ `81697900+share543@users.noreply.github.com`），
   新 clone **不用再設**就能 commit（可用 `git var GIT_AUTHOR_IDENT` 當場驗證）。
   只有在沒有全域設定的環境才需 `git config --local`；一律用 GitHub noreply 位址（ID 前綴形式），
