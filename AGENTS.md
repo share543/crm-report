@@ -12,9 +12,10 @@
 - ⚠ **刪掉本機副本前必須先確認**：`git status --short` 空白（沒有未提交的改動）＋
   `git rev-parse HEAD origin/main` 兩者相同（已推上去）。少了這一步，未推的改動會隨副本一起消失，
   而且不會有任何錯誤訊息。交付前也順手確認一次 HEAD 與遠端相同。
-- 每次 clone 後要先設身分（本機沒設全域，新 clone 會 commit 失敗）：
-  `git config --local user.name "share543"` ＋ `git config --local user.email "share543@users.noreply.github.com"`
-  （此 repo 一貫用 GitHub noreply 位址，不要用私人信箱）。
+- 本機**已有全域身分**（`~/.gitconfig`：`share543` ／ `81697900+share543@users.noreply.github.com`），
+  新 clone **不用再設**就能 commit（可用 `git var GIT_AUTHOR_IDENT` 當場驗證）。
+  只有在沒有全域設定的環境才需 `git config --local`；一律用 GitHub noreply 位址（ID 前綴形式），
+  **不要用私人信箱**——歷史上曾因私人信箱被寫進 commit，導致整條歷史被改寫後 force-push。
 - 欄位/區塊名稱、期間與篩選行為沿用 README.md 定義，先讀它再動手。
 - 新增純函式（可 Node 測試）比 DOM 渲染優先，並加入 `module.exports`（檔案尾端）。
 
