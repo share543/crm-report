@@ -53,10 +53,9 @@
 
 ## 區塊順序（report.html `main` 內）
 
-載入 → **介紹影片** → 分析期間 → 本日議題 → **待留意** → 開場亮點 → 案件狀態統計 → **各課追蹤簡表** → 進度追蹤表 → 案件類型 → 漏斗 → 排行 → 開發時間 → 轉換流失 → 案件清單 → 原始資料（共 16 塊）。
+載入 → 分析期間 → 本日議題 → **待留意** → 開場亮點 → 案件狀態統計 → **各課追蹤簡表** → 進度追蹤表 → 案件類型 → 漏斗 → 排行 → 開發時間 → 轉換流失 → 案件清單 → 原始資料。
 
-改順序要同時改三個地方：`<main>` 內的 section、`PRESENT_SLIDES`（簡報順序，行 ~6025）、本行。
-**介紹影片卡（`#introCard`）刻意不放進 `PRESENT_SLIDES`**（簡報維持 14 頁），也不給「存圖」。
+改順序要同時改三個地方：`<main>` 內的 section、`PRESENT_SLIDES`（簡報順序，行 ~5635）、本行。
 其餘都與順序無關（渲染用 `getElementById`、沒有任何順序常數或依 id 排序的 CSS、
 localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 
@@ -74,11 +73,8 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
    也含有 `</body>`，插到第一個等於插進 JS 字串裡，整段不會執行。
 4. `--headless=new --dump-dom` 跑完後讀結果：寫進 `documentElement` 屬性會被保留，
    **寫 `document.title` 會被頁面覆蓋掉**，不要只看 title。
-5. 驗收清單：16 塊 DOM 順序（`loadCard` → `introCard` → `periodCard` → … → `rawSection`）、`#presentBtn` 已 enabled、逐頁 `#pvCount`／`#pvTitle`
-   （14 頁）、離開簡報後 16 塊歸位順序與進入前相同、`.snap-btn` 數量＝有 h2 的卡片數 **− 1**（介紹影片卡不給存圖）。
-6. 一鍵重跑：`python3 ~/oe-voice/make_verify.py` 產生驗證副本（注入內嵌資料＋檢查器）→ 容器內
-   `/usr/local/bin/chromium --headless=new --no-sandbox --allow-file-access-from-files --virtual-time-budget=9000 --dump-dom`
-   → 讀 `data-verify` 屬性（用 `file://` 即可，因為走的是「內嵌副本」而不是 localStorage）。
+5. 驗收清單：15 塊 DOM 順序、`#presentBtn` 已 enabled、逐頁 `#pvCount`／`#pvTitle`
+   （14 頁）、離開簡報後 15 塊歸位順序與進入前相同、`.snap-btn` 數量＝有 h2 的卡片數。
 
 ## 待留意事項的交叉跳轉（2026-10 新增）
 
@@ -115,20 +111,6 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 此表只套用 課別／開發者／關鍵字 篩選；不套用 類別（已是欄位維度）與 狀態 篩選。
 - 「已導入累計」＝`導入` 日期欄非空；底部每第一層欄位一格（甲指/甲配/零擔）。
 
-## 介紹影片（2026-10 新增）
-
-- 區塊 `#introCard`（「載入」之後、「分析期間」之前），標題「介紹影片」，內容在 `.intro-wrap`。
-- **懶載入是刻意的**：`<video id="introVideo" preload="none">` 且**初始不設 `src`**；按 `#introPlayBtn` 才 `setAttribute('src','media/intro.mp4')`、隱藏按鈕、顯示 `#introFrame`、`play()`（`play()` 的 rejection 要吞掉，自動播放可能被擋）。
-  `#introFallback` 在 `video` 的 `error` 事件時顯示（單檔離線副本、影片缺失時）。
-  驗證重點：點擊前 `video.getAttribute('src') === null`。
-- 影片與封面是 repo 內 `media/`（`intro.mp4` 8.5 MB、`intro-poster.jpg`），**不是**內嵌資料的一部分。
-- 裝飾開關只有**一套**要寫（與「待留意事項」連結不同）：`@media print{ #introCard{ display:none !important; } }`。
-  不需要 `.shot-root` 版本，因為 `addSnapshotControls()` 直接跳過 `#introCard`（`if(card.id === 'introCard') continue;`），它永遠不會被快照。
-- 簡報、列印、存圖都與它無關；`PRESENT_SLIDES` 不含它（頁數維持 14）。
-- 「存檔（含資料）」副本安全：`ORIGINAL_SHELL` 於 `initApp` 開頭捕捉（早於任何點擊），副本裡永遠是未播放狀態。
-- 產生影片的完整流程（動畫頁 → TTS 旁白 → 合成配樂 → 混音）在 `~/oe-voice/`：`build.py`（旁白驅動時間軸，產 `index.html`＋`narration.wav`）、
-  `music.py`（純 Python 合成配樂）、`make_verify.py`（本節的驗證副本）。容器內 OpenEdit render 一律 `--workers 1 --chrome /usr/local/bin/chromium`。
-
 ## 手機版型（body.mobile，2026-09 新增）
 
 - 自動偵測：視窗寬度 `<700px` ⇒ `body.mobile`；否則貼 `body.desktop`。手機版只**重排＋額外 DOM helper**，不動任何純函式。
@@ -157,6 +139,22 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 ## 表格背景色階
 
 - `.pg-table`（進度追蹤表）與 `.qk-table`（各課簡表）的列 hover／合計／已導入列背景與 `td` 邊框一律用主題變數 `--row-hover`／`--row-hover-strong`／`--row-hover-strong-2`／`--row-hover-3`／`--cell-border`（深/淺各一組），**不要再寫死** `#1b202a`/`#242a36`/`#2a3140`/`#20242c`（Light 主題會反黑）。
+
+## 介紹影片素材（media/，2026-10 新增）
+
+- `media/intro.mp4`（1280×720、H.264 + AAC、53.57s、約 8.5 MB）＋ `media/intro-poster.jpg`（封面，取 3.0s 畫面）。
+- **README 用「封面圖連到 mp4」的方式呈現**：GitHub 不渲染 README 裡的 `<video>` 標籤，
+  但連結到 repo 內的 mp4 會進檔案頁（內建播放器）。
+- ⚠ **刻意不嵌進 `report.html`**（使用者 2026-10-03 明確指定）：`report.html` 維持零依賴單檔，
+  區塊順序仍是 15 塊、簡報仍 14 頁；`media/` 只是 repo 內另一份展示素材，
+  **不要把影片區塊加回頁面**（2026-10-03 曾在 commit `2a5e2e2` 加過，隨即依指示還原）。
+- 產生流程全在 `~/oe-voice/`（**不在 repo 內**，不進版控）：
+  - `build.py`：旁白驅動時間軸 —— edge-tts `zh-TW-HsiaoChenNeural`（+8%）產生六幕旁白，
+    以旁白長度決定每幕長度（量化到整數格），輸出動畫頁 `index.html` 與 `narration.wav`。
+  - `music.py`：純 Python（無 numpy）合成配樂 —— Am7→Fmaj7→Cmaj7→G6 弦墊＋音樂盒琶音，
+    再交 ffmpeg 做殘響／立體聲／`sidechaincompress` 對旁白 ducking，母帶 −16 LUFS。
+  - 容器內 OpenEdit render **一律** `--workers 1 --chrome /usr/local/bin/chromium`
+    （見全域 AGENTS 的 phantom process 上限那條）。
 
 ## 已了解的需求語氣
 

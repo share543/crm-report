@@ -352,24 +352,6 @@
   section.card{ position:relative; }
   .snap-btn{ position:absolute; top:14px; right:14px; }
   body.pv-mode .snap-btn{ display:none !important; }
-  /* 介紹影片（區塊順序：載入 → 介紹影片 → 分析期間）
-     刻意不預載影片：不按播放就不會抓 media/intro.mp4，離線單檔使用完全不受影響。 */
-  #introCard .intro-wrap{ display:flex; flex-direction:column; gap:12px; align-items:flex-start; }
-  .intro-play{ display:flex; align-items:center; gap:12px; width:100%; max-width:520px;
-    padding:13px 18px; border:1px solid var(--border); border-radius:12px;
-    background:var(--card-2); color:var(--text); font:inherit; font-size:15px;
-    cursor:pointer; text-align:left; }
-  .intro-play:hover{ border-color:var(--accent); }
-  .intro-play[hidden]{ display:none; }
-  .intro-play .ip-icon{ display:inline-grid; place-items:center; width:34px; height:34px;
-    flex:0 0 auto; border-radius:50%; background:var(--accent); color:#fff; font-size:13px; }
-  .intro-frame{ position:relative; width:100%; max-width:960px; }
-  .intro-frame[hidden]{ display:none; }
-  .intro-frame video{ display:block; width:100%; height:auto; border-radius:12px;
-    border:1px solid var(--border); background:#000; }
-  #introCard .intro-note{ margin:0; font-size:13px; color:var(--muted); }
-  #introCard .intro-fallback{ color:var(--warning); }
-  @media print{ #introCard{ display:none !important; } }
   .snap-modal{ position:fixed; inset:0; z-index:2000; background:rgba(5,8,12,.6);
     display:flex; align-items:center; justify-content:center; padding:18px; }
   .snap-modal[hidden]{ display:none; }
@@ -753,24 +735,6 @@
       <p id="importProgressLabel" class="progress-label"></p>
     </div>
     <p id="errorBox" hidden role="alert"></p>
-  </section>
-  <section class="card" id="introCard">
-    <h2>介紹影片 <span class="muted">53 秒 · 單檔離線工具總覽</span></h2>
-    <div class="intro-wrap">
-      <button type="button" id="introPlayBtn" class="intro-play">
-        <span class="ip-icon" aria-hidden="true">▶</span>
-        <span>播放介紹影片（53 秒 · 中文字幕＋旁白）</span>
-      </button>
-      <div class="intro-frame" id="introFrame" hidden>
-        <video id="introVideo" controls playsinline preload="none" width="1280" height="720"
-               poster="media/intro-poster.jpg"
-               aria-label="CRM 客戶報表工具介紹影片"></video>
-        <p id="introFallback" class="intro-note intro-fallback" hidden>
-          影片載入失敗：影片檔在 repo 的 <code>media/</code>；單檔離線副本不含影片，報表功能不受影響。
-        </p>
-      </div>
-      <p class="intro-note">影片是外加的展示素材（<code>media/intro.mp4</code>）：不按播放就不會下載，離線單檔使用也不受影響。</p>
-    </div>
   </section>
   <section class="card" id="periodCard" hidden>
     <h2>分析期間 <span class="muted">依「填單日期」定位</span></h2>
@@ -5418,7 +5382,6 @@ var state = {
     for(var i = 0; i < cards.length; i++){
       var card = cards[i];
       if(!card || !card.querySelector) continue;
-      if(card.id === 'introCard') continue;   // 介紹影片卡不提供「存圖」（影片本身沒有可快照的意義）
       if(card.querySelector('.snap-btn')) continue;
       var h2 = card.querySelector('h2');
       if(!h2) continue;
@@ -5434,31 +5397,6 @@ var state = {
       var host = (h2.parentNode && h2.parentNode.insertBefore) ? h2.parentNode : card;
       host.insertBefore(btn, h2.nextSibling || null);
     }
-  }
-
-  // 介紹影片：預設完全不載入影片檔（沒有 src、preload=none），按下播放才指向 media/intro.mp4。
-  // 這樣「單檔離線」的使用者不會白下載 8MB，GitHub Pages 首次載入也保持輕量。
-  // 註：ORIGINAL_SHELL 於 initApp 開頭捕捉（早於任何點擊），所以「存檔（含資料）」副本裡
-  //     這一塊永遠回到「未播放」的原始狀態，不會留下壞掉的 <video src>。
-  function initIntroVideo(){
-    var btn = document.getElementById('introPlayBtn');
-    var frame = document.getElementById('introFrame');
-    var video = document.getElementById('introVideo');
-    var fallback = document.getElementById('introFallback');
-    if(!btn || !frame || !video) return;
-    btn.addEventListener('click', function(){
-      if(!video.getAttribute('src')) video.setAttribute('src', 'media/intro.mp4');
-      btn.hidden = true;
-      frame.hidden = false;
-      if(fallback) fallback.hidden = true;
-      try{
-        var p = video.play();
-        if(p && p.catch) p.catch(function(){ /* 自動播放被瀏覽器擋下：使用者按播放鍵即可 */ });
-      }catch(_){}
-    });
-    video.addEventListener('error', function(){
-      if(fallback) fallback.hidden = false;
-    });
   }
 
   // modal 控制事件：元素常駐，僅綁定一次
@@ -6018,7 +5956,7 @@ var state = {
   }
 
   // 簡報模式（開會投影片）：全螢幕覆蓋層一次顯示一個區段，方向鍵/空白/Digit 換頁、Esc 結束。
-  // 投影片＝現有各 section（不含 載入卡、介紹影片 與 原始資料），切頁採「移動真實節點」以保留事件綁定；
+  // 投影片＝現有各 section（不含 載入卡 與 原始資料），切頁採「移動真實節點」以保留事件綁定；
   // 結束時將所有被移動的 section 依原位置歸位。
   // ⚠️ 這個清單的順序必須與 <main> 內的 section 順序一致 —— 改區塊順序時兩邊都要改，
   //    只改 DOM 會變成「畫面一個順序、投影另一個順序」。
@@ -6377,7 +6315,6 @@ var state = {
     initMobileFold();
     initPeriodControls();
     initSnapshotControls();
-    initIntroVideo();
     if(!dropzone) return;
 
     window.addEventListener('dragover', function(e){ e.preventDefault(); });
