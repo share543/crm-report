@@ -8,12 +8,17 @@ GitHub Pages：<https://share543.github.io/crm-report/report.html>
 
 ## 介紹影片
 
-[![CRM 客戶報表工具介紹影片（53 秒）](media/intro-poster.jpg)](media/intro.mp4)
+[![CRM 客戶報表工具介紹影片（53 秒，六幕分鏡）](media/intro-poster.jpg)](https://share543.github.io/crm-report/intro.html)
 
-53 秒的影片導覽（中文字幕＋旁白）—— 點封面圖即可觀看（GitHub 檔案頁內建播放器）。
+53 秒的影片導覽（中文字幕＋旁白）：**點封面圖**到播放頁觀看（有完整播放條）。
 
+- 播放頁：<https://share543.github.io/crm-report/intro.html>
 - 影片檔：`media/intro.mp4`（1280×720、H.264 + AAC、約 8.5 MB）
-- 封面：`media/intro-poster.jpg`
+- 封面：`media/intro-poster.jpg`（六幕分鏡＋播放鍵）
+
+> ⚠️ **為什麼 README 裡沒有播放器？** GitHub 的 README 會把 `<video>` 標籤整段過濾掉
+> （實測：`<video src=…>` 與 `<video><source …></video>` 兩種寫法都只剩空段落），
+> 所以 markdown 只能放圖片連結。要真正的播放條就進上面的播放頁 `intro.html`。
 
 > 影片是**外加的展示素材**，不影響 `report.html`：它仍然是零依賴單檔，完全離線可用、不含任何影片資源。
 

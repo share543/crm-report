@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>介紹影片 · CRM 客戶報表工具</title>
+<style>
+  :root{ --bg:#0e1013; --card:#16191f; --border:#262b33; --text:#e8eaef; --muted:#9aa3b2; --accent:#4f8eff; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{ background:var(--bg); color:var(--text); font-size:16px; line-height:1.6;
+    font-family:system-ui,-apple-system,"Noto Sans CJK TC","Noto Sans CJK","PingFang TC",
+      "Microsoft JhengHei",sans-serif;
+    -webkit-text-size-adjust:100%; }
+  main{ max-width:1000px; margin:0 auto; padding:28px 18px 56px; }
+  .eyebrow{ font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  h1{ font-size:clamp(22px,4.6vw,32px); font-weight:750; margin:8px 0 6px; }
+  .sub{ color:var(--muted); font-size:15px; }
+  .frame{ margin:22px 0 0; border:1px solid var(--border); border-radius:14px; overflow:hidden;
+    background:#000; box-shadow:0 24px 60px -30px rgba(0,0,0,.9); }
+  video{ display:block; width:100%; height:auto; background:#000; }
+  .facts{ list-style:none; display:flex; flex-wrap:wrap; gap:9px; margin:20px 0 0; }
+  .facts li{ font-size:14px; color:#cfe0ff; padding:6px 13px; border-radius:999px;
+    background:rgba(79,142,255,.12); border:1px solid rgba(79,142,255,.28); }
+  .note{ margin-top:22px; font-size:14px; color:var(--muted); }
+  .links{ margin-top:18px; font-size:15px; }
+  a{ color:var(--accent); }
+  a:hover{ text-decoration:none; }
+  .back{ display:inline-block; margin-top:26px; padding:11px 18px; border-radius:10px;
+    background:rgba(79,142,255,.14); border:1px solid rgba(79,142,255,.34);
+    color:#dbe8ff; text-decoration:none; font-weight:600; }
+  .back:hover{ background:rgba(79,142,255,.22); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">share543 · crm-report</p>
+  <h1>CRM 客戶報表工具 · 介紹影片</h1>
+  <p class="sub">53 秒 · 中文字幕＋旁白 · 1280×720</p>
+
+  <div class="frame">
+    <video controls preload="metadata" playsinline width="1280" height="720"
+           poster="media/intro-poster.jpg"
+           aria-label="CRM 客戶報表工具介紹影片">
+      <source src="media/intro.mp4" type="video/mp4">
+      你的瀏覽器不支援影片播放，請直接開啟 <a href="media/intro.mp4">media/intro.mp4</a>。
+    </video>
+  </div>
+
+  <ul class="facts">
+    <li>單一檔案</li><li>完全離線</li><li>期間切換</li>
+    <li>13 個報表區塊</li><li>簡報模式</li><li>手機也開得動</li>
+  </ul>
+
+  <p class="note">
+    這頁只是影片播放頁（外加的展示素材）。報表工具本體仍是零依賴單檔，完全離線可用、不含任何影片資源。
+  </p>
+  <p class="links">
+    影片檔：<a href="media/intro.mp4">media/intro.mp4</a> ·
+    封面：<a href="media/intro-poster.jpg">media/intro-poster.jpg</a> ·
+    原始碼：<a href="https://github.com/share543/crm-report">github.com/share543/crm-report</a>
+  </p>
+
+  <a class="back" href="report.html">開啟報表工具 report.html →</a>
+</main>
+</body>
+</html>

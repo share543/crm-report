@@ -142,9 +142,12 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 
 ## 介紹影片素材（media/，2026-10 新增）
 
-- `media/intro.mp4`（1280×720、H.264 + AAC、53.57s、約 8.5 MB）＋ `media/intro-poster.jpg`（封面，取 3.0s 畫面）。
-- **README 用「封面圖連到 mp4」的方式呈現**：GitHub 不渲染 README 裡的 `<video>` 標籤，
-  但連結到 repo 內的 mp4 會進檔案頁（內建播放器）。
+- `media/intro.mp4`（1280×720、H.264 + AAC、53.57s、約 8.5 MB）＋ `media/intro-poster.jpg`（封面：六幕分鏡＋烤進去的播放鍵）。
+- `intro.html`（repo 根目錄，Pages 上的**播放頁**）：`<video controls>` ＋封面 ＋返回 `report.html` 的連結。
+  README 的封面圖連到這一頁（**不**連到 GitHub 的 blob 頁）。
+- ⚠ **GitHub 的 README 無法內嵌播放器**：實測 `POST /markdown`，`<video src=…>` 與
+  `<video><source …></video>` **兩種寫法都被過濾成空段落**（只有 `<a>` 存活）。
+  所以 README 只能「封面圖（有播放鍵）→ 播放頁」；不要再試 `<video>`。
 - ⚠ **刻意不嵌進 `report.html`**（使用者 2026-10-03 明確指定）：`report.html` 維持零依賴單檔，
   區塊順序仍是 15 塊、簡報仍 14 頁；`media/` 只是 repo 內另一份展示素材，
   **不要把影片區塊加回頁面**（2026-10-03 曾在 commit `2a5e2e2` 加過，隨即依指示還原）。
@@ -153,6 +156,8 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
     以旁白長度決定每幕長度（量化到整數格），輸出動畫頁 `index.html` 與 `narration.wav`。
   - `music.py`：純 Python（無 numpy）合成配樂 —— Am7→Fmaj7→Cmaj7→G6 弦墊＋音樂盒琶音，
     再交 ffmpeg 做殘響／立體聲／`sidechaincompress` 對旁白 ducking，母帶 −16 LUFS。
+  - 封面：容器內 `/root/oe-demo/runs/crm/poster/poster.html`（六張定格 `s1..s6.png` 排 3×2）
+    → OpenEdit render 1 格 → PNG → `ffmpeg -i poster.png -q:v 3 media/intro-poster.jpg`。
   - 容器內 OpenEdit render **一律** `--workers 1 --chrome /usr/local/bin/chromium`
     （見全域 AGENTS 的 phantom process 上限那條）。
 
