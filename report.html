@@ -188,9 +188,9 @@
   .pg-table tr.pg-total:hover td.pg-ke{ background:var(--row-hover-strong-2); }
   .pg-table td.pg-coop{ color:var(--ok); font-weight:650; }
   .pg-table th.pg-coop-head{ color:var(--ok); }
-  /* 未啟動案件追蹤表：一頁式圖表排序（課別 × 類別 × 數量 × 長條） */
+  /* 未啟動案件追蹤表：課別堆疊橫條（課別／類別組成／總計） */
   .ns-table{ border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-  .ns-trow{ display:flex; align-items:center; gap:10px; padding:7px 12px; font-size:13px; }
+  .ns-trow{ display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:13px; }
   .ns-thead{ background:var(--card-2); color:var(--muted); font-weight:650;
     border-bottom:1px solid var(--border); font-size:12.5px; }
   .ns-grp + .ns-grp .ns-grow{ border-top:1px solid var(--border); }
@@ -200,21 +200,23 @@
   .ns-grow:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
   .ns-c-caret{ width:14px; flex:none; }
   .ns-c-ke{ width:86px; flex:none; }
-  .ns-c-cat{ width:110px; flex:none; display:flex; align-items:center; gap:6px; }
-  .ns-c-num{ width:52px; flex:none; text-align:right; font-weight:700; }
-  .ns-c-bar{ flex:1 1 auto; min-width:80px; }
+  .ns-c-num{ width:56px; flex:none; text-align:right; font-weight:700; }
+  .ns-c-bar{ flex:1 1 auto; min-width:120px; }
   .ns-dot{ width:9px; height:9px; border-radius:2px; flex:none; }
-  .ns-dot.c0, .ns-bar-fill.c0{ background:var(--accent); }
-  .ns-dot.c1, .ns-bar-fill.c1{ background:var(--ok); }
-  .ns-dot.c2, .ns-bar-fill.c2{ background:var(--warning); }
-  .ns-dot.c3, .ns-bar-fill.c3{ background:var(--muted); }
-  .ns-bar{ display:block; height:12px; border-radius:6px; background:var(--card-2);
+  .ns-dot.c0, .ns-seg.c0{ background:var(--accent); }
+  .ns-dot.c1, .ns-seg.c1{ background:var(--ok); }
+  .ns-dot.c2, .ns-seg.c2{ background:var(--warning); }
+  .ns-dot.c3, .ns-seg.c3{ background:var(--muted); }
+  .ns-bar{ display:flex; height:20px; border-radius:5px; background:var(--card-2);
     border:1px solid var(--border); overflow:hidden; }
-  .ns-bar-fill{ display:block; height:100%; border-radius:5px 0 0 5px; }
+  .ns-seg{ height:100%; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size:11px; font-weight:700; min-width:0; overflow:hidden; }
   .ns-caret{ color:var(--muted); font-size:11px; }
   .ns-item .ns-caret{ width:12px; flex:none; }
-  /* 展開的案件清單（預設收攏） */
+  /* 展開的案件清單（預設收攏）：以類別分小節 */
   .ns-cases{ padding:4px 12px 8px 36px; background:var(--card-2); }
+  .ns-cat-head{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:650;
+    color:var(--text); margin:6px 0 2px; }
   .ns-list{ display:flex; flex-direction:column; gap:2px; }
   .ns-item{ display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px;
     font-size:13px; cursor:pointer; background:none; border:0; text-align:left; width:100%;
@@ -242,7 +244,7 @@
     .ns-grow{ cursor:default; }
     .ns-item{ cursor:default; }
     /* 長條圖保留底色 */
-    .ns-bar-fill{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .ns-seg{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .ns-bar{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
   .qk-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
@@ -2013,19 +2015,22 @@ var state = {
     return out;
   }
 
-  // 純函式：攤平成 [{ke, cat, count, rows}]，依數量多→少
-  // 同數量時依 KE_BASE_ORDER，再依 NS_CAT_ORDER（確保結果穩定可重現）
-  // 回傳 { total, max, items }（max 供長條圖以最大值為 100% 計算）
+  // 純函式：依課別分組，組內再依類別
+  // 回傳 { total, max, items }
+  //   items = [{ ke, count, cats: [{ cat, count, rows }] }]
+  // 課別依總計多→少（同數依 KE_BASE_ORDER）；類別依 NS_CAT_ORDER
+  // max 為課別總計的最大值（供長條圖以最大值為 100% 計算）
   function notStartedGroups(rows){
     var list = collectNotStarted(rows);
-    var byKey = {};
+    var byKe = {};
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var ke = fieldStr(r, '課別') || '(未填課別)';
       var cat = fieldStr(r, '類別') || '(未填類別)';
-      var k = ke + '\u0000' + cat;
-      if(!byKey[k]) byKey[k] = { ke: ke, cat: cat, rows: [] };
-      byKey[k].rows.push(r);
+      if(!byKe[ke]) byKe[ke] = { total: 0, cats: {} };
+      byKe[ke].total++;
+      if(!byKe[ke].cats[cat]) byKe[ke].cats[cat] = [];
+      byKe[ke].cats[cat].push(r);
     }
     function keRank(ke){
       var i2 = KE_BASE_ORDER.indexOf(ke);
@@ -2035,25 +2040,34 @@ var state = {
       var i3 = NS_CAT_ORDER.indexOf(c);
       return i3 === -1 ? NS_CAT_ORDER.length : i3;
     }
-    var keys = Object.keys(byKey);
-    var items = [];
-    for(var k2 = 0; k2 < keys.length; k2++){
-      var g = byKey[keys[k2]];
-      // 組內案件依填單日期由新到舊，同日依序號
-      g.rows.sort(function(a, b){
-        var da = fieldStr(a, '填單日期'), db = fieldStr(b, '填單日期');
-        if(da !== db) return da < db ? 1 : -1;
-        var na = Number(fieldStr(a, '序號')) || 0, nb = Number(fieldStr(b, '序號')) || 0;
-        return na - nb;
-      });
-      items.push({ ke: g.ke, cat: g.cat, count: g.rows.length, rows: g.rows });
-    }
-    items.sort(function(a, b){
-      if(b.count !== a.count) return b.count - a.count;        // 數量多→少
-      var r = keRank(a.ke) - keRank(b.ke);
-      if(r !== 0) return r;
-      return catRank(a.cat) - catRank(b.cat);
+    var kes = Object.keys(byKe);
+    kes.sort(function(a, b){
+      if(byKe[b].total !== byKe[a].total) return byKe[b].total - byKe[a].total;
+      return keRank(a) - keRank(b);
     });
+    var items = [];
+    for(var k = 0; k < kes.length; k++){
+      var ke = kes[k];
+      var catNames = Object.keys(byKe[ke].cats);
+      catNames.sort(function(a, b){
+        var ra = catRank(a), rb = catRank(b);
+        if(ra !== rb) return ra - rb;
+        return a < b ? -1 : (a > b ? 1 : 0);
+      });
+      var cats = [];
+      for(var c = 0; c < catNames.length; c++){
+        var cat = catNames[c];
+        var rs = byKe[ke].cats[cat].slice();
+        rs.sort(function(a, b){
+          var da = fieldStr(a, '填單日期'), db = fieldStr(b, '填單日期');
+          if(da !== db) return da < db ? 1 : -1;
+          var na = Number(fieldStr(a, '序號')) || 0, nb = Number(fieldStr(b, '序號')) || 0;
+          return na - nb;
+        });
+        cats.push({ cat: cat, count: rs.length, rows: rs });
+      }
+      items.push({ ke: ke, count: byKe[ke].total, cats: cats });
+    }
     var max = 0;
     for(var m = 0; m < items.length; m++) if(items[m].count > max) max = items[m].count;
     return { total: list.length, max: max, items: items };
@@ -2065,8 +2079,8 @@ var state = {
     return { total: g.total, groups: g.items };
   }
 
-  // 一頁式排版：每列＝一個「課別 × 類別」組合（課別／類別／數量／長條圖）
-  // 預設全部收攏，點該列才展開案件清單（案件仍可再點開明細）
+  // 一頁式排版：每列＝一個課別，長條內堆疊類別（課別／長條圖／總計）
+  // 預設全部收攏，點該列才展開該課別的案件清單（案件仍可再點開明細）
   function renderNotStartedSection(){
     var sec = document.getElementById('notStartedSection');
     var box = document.getElementById('notStartedBox');
@@ -2079,12 +2093,12 @@ var state = {
     note.className = 'pg-note';
     note.textContent = '條件：已填「填單日期」但狀態為「未啟動」的案件。' +
       '本表不隨「分析期間」與篩選縮放，固定顯示全部符合條件者。' +
-      '點任一列可展開該組合的案件清單。';
+      '點任一列可展開該課別的案件清單。';
     box.appendChild(note);
 
     var cap = document.createElement('p');
     cap.className = 'list-summary';
-    cap.textContent = '共 ' + data.total + ' 筆・' + data.items.length + ' 個課別／類別組合' +
+    cap.textContent = '共 ' + data.total + ' 筆・' + data.items.length + ' 個課別' +
       '（長條以最大值 ' + data.max + ' 為 100%）';
     box.appendChild(cap);
 
@@ -2105,9 +2119,8 @@ var state = {
     head.className = 'ns-trow ns-thead';
     head.appendChild(nsCell('ns-c-caret', ''));
     head.appendChild(nsCell('ns-c-ke', '課別'));
-    head.appendChild(nsCell('ns-c-cat', '類別'));
-    head.appendChild(nsCell('ns-c-num', '數量'));
-    head.appendChild(nsCell('ns-c-bar', '比例'));
+    head.appendChild(nsCell('ns-c-bar', '類別組成'));
+    head.appendChild(nsCell('ns-c-num', '總計'));
     table.appendChild(head);
 
     for(var i = 0; i < data.items.length; i++){
@@ -2124,7 +2137,7 @@ var state = {
     return d;
   }
 
-  // 一列「課別 × 類別」：可點擊展開該組合的案件清單
+  // 一列課別：長條內堆疊類別，可點擊展開該課別的案件清單
   function buildNotStartedGroupRow(item, max){
     var wrap = document.createElement('div');
     wrap.className = 'ns-grp';
@@ -2143,32 +2156,42 @@ var state = {
 
     row.appendChild(nsCell('ns-c-ke', item.ke));
 
-    var catCell = nsCell('ns-c-cat');
-    var dot = document.createElement('span');
-    dot.className = 'ns-dot c' + (NS_CAT_ORDER.indexOf(item.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(item.cat));
-    catCell.appendChild(dot);
-    catCell.appendChild(document.createTextNode(item.cat));
-    row.appendChild(catCell);
+    var barCell = nsCell('ns-c-bar');
+    var bar = document.createElement('span');
+    bar.className = 'ns-bar';
+    for(var c = 0; c < item.cats.length; c++){
+      var cg = item.cats[c];
+      var seg = document.createElement('span');
+      seg.className = 'ns-seg c' + (NS_CAT_ORDER.indexOf(cg.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(cg.cat));
+      seg.style.width = (max > 0 ? (cg.count / max * 100) : 0) + '%';
+      seg.title = cg.cat + ' ' + cg.count + ' 筆';
+      if(cg.count >= 2){
+        seg.textContent = cg.count;
+      }
+      bar.appendChild(seg);
+    }
+    barCell.appendChild(bar);
+    row.appendChild(barCell);
 
     var numCell = nsCell('ns-c-num');
     numCell.textContent = String(item.count);
     row.appendChild(numCell);
 
-    var barCell = nsCell('ns-c-bar');
-    var bar = document.createElement('span');
-    bar.className = 'ns-bar';
-    var fill = document.createElement('span');
-    fill.className = 'ns-bar-fill c' + (NS_CAT_ORDER.indexOf(item.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(item.cat));
-    fill.style.width = (max > 0 ? Math.round(item.count / max * 100) : 0) + '%';
-    bar.appendChild(fill);
-    barCell.appendChild(bar);
-    row.appendChild(barCell);
-
     var cases = document.createElement('div');
     cases.className = 'ns-cases';
     cases.hidden = true;
-    for(var r = 0; r < item.rows.length; r++){
-      cases.appendChild(buildNotStartedItem(item.rows[r]));
+    for(var c2 = 0; c2 < item.cats.length; c2++){
+      var cg2 = item.cats[c2];
+      var catHead = document.createElement('div');
+      catHead.className = 'ns-cat-head';
+      var dot = document.createElement('span');
+      dot.className = 'ns-dot c' + (NS_CAT_ORDER.indexOf(cg2.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(cg2.cat));
+      catHead.appendChild(dot);
+      catHead.appendChild(document.createTextNode(cg2.cat + '（' + cg2.count + '）'));
+      cases.appendChild(catHead);
+      for(var r = 0; r < cg2.rows.length; r++){
+        cases.appendChild(buildNotStartedItem(cg2.rows[r]));
+      }
     }
 
     row.addEventListener('click', function(){
