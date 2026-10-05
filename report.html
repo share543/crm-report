@@ -960,7 +960,8 @@ var state = {
     presentEnabled: {}, // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
     listCols: null,     // 案件清單欄位勾選（{欄位key:boolean}；null＝會議精簡 profile）
     printEnabled: {},   // 列印區塊勾選（{區段id:boolean}；未列一律視為勾選）— 與簡報勾選各自獨立
-    printView: 'auto'   // 列印版型（'auto'＝跟隨畫面 | 'mobile' | 'desktop'）
+    printView: 'auto',  // 列印版型（'auto'＝跟隨畫面 | 'mobile' | 'desktop'）
+    printList: 'page'   // 案件清單列印範圍（'page'＝當前頁 | 'all'＝全部符合條件的案件）
   };
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
@@ -6056,7 +6057,8 @@ var state = {
       presentEnabled: state.presentEnabled,
       listCols: normalizeListCols(state.listCols),
       printEnabled: normalizePrintEnabled(state.printEnabled),
-      printView: normalizePrintView(state.printView)
+      printView: normalizePrintView(state.printView),
+      printList: normalizePrintList(state.printList)
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -6101,7 +6103,7 @@ var state = {
     try{
       if(!state.model) return;
       state.savedAt = new Date().toISOString();
-      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols), printEnabled: normalizePrintEnabled(state.printEnabled), printView: normalizePrintView(state.printView) });
+      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols), printEnabled: normalizePrintEnabled(state.printEnabled), printView: normalizePrintView(state.printView), printList: normalizePrintList(state.printList) });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
       renderMeetingInfo();
     }catch(_){}
@@ -6127,6 +6129,7 @@ var state = {
     state.listCols = null;
     state.printEnabled = {};
     state.printView = 'auto';
+    state.printList = 'page';
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
     renderAgenda();
@@ -6208,6 +6211,16 @@ var state = {
     { value: 'mobile',  label: '手機' },
     { value: 'desktop', label: '桌面' }
   ];
+
+  // 案件清單列印範圍（僅影響列印；畫面一律維持分頁）
+  var PRINT_LIST_OPTIONS = [
+    { value: 'page', label: '當前頁（與畫面相同）' },
+    { value: 'all',  label: '全部（符合條件的所有案件）' }
+  ];
+
+  function normalizePrintList(v){
+    return (v === 'all') ? 'all' : 'page';
+  }
 
   function normalizePrintView(v){
     return (v === 'mobile' || v === 'desktop') ? v : 'auto';
@@ -6313,6 +6326,21 @@ var state = {
     }
     lab2.appendChild(sel);
     row.appendChild(lab2);
+
+    // 案件清單列印範圍（僅影響列印，畫面維持分頁）
+    var lab3 = document.createElement('label');
+    lab3.className = 'print-opt';
+    lab3.appendChild(document.createTextNode('案件清單'));
+    var selList = document.createElement('select');
+    selList.id = 'printListSel';
+    for(var lv = 0; lv < PRINT_LIST_OPTIONS.length; lv++){
+      var lopt = document.createElement('option');
+      lopt.value = PRINT_LIST_OPTIONS[lv].value;
+      lopt.textContent = PRINT_LIST_OPTIONS[lv].label;
+      selList.appendChild(lopt);
+    }
+    lab3.appendChild(selList);
+    row.appendChild(lab3);
     box.appendChild(row);
 
     // 動作
@@ -6349,6 +6377,8 @@ var state = {
     }
     var sel = document.getElementById('printViewSel');
     if(sel) sel.value = normalizePrintView(state.printView);
+    var selL = document.getElementById('printListSel');
+    if(selL) selL.value = normalizePrintList(state.printList);
     modal.hidden = false;
   }
 
@@ -6363,6 +6393,8 @@ var state = {
     state.printEnabled = normalizePrintEnabled(en);
     var sel = document.getElementById('printViewSel');
     state.printView = normalizePrintView(sel ? sel.value : 'auto');
+    var selL = document.getElementById('printListSel');
+    state.printList = normalizePrintList(selL ? selL.value : 'page');
     persistData();
     return printVisibleIds(state.printEnabled).length > 0;
   }
@@ -6400,6 +6432,37 @@ var state = {
     renderProgressSection(mObj);
   }
 
+  // 列印時把案件清單由「當前頁」改為「全部符合條件的案件」（僅列印期間生效）
+  var printListBackup = null;
+  function expandListForPrint(){
+    if(state.printList !== 'all') return;
+    var box = document.getElementById('list');
+    if(!box || !state.model || !state.model.rows) return;
+    var filtered = applyFilters(state.model.rows, state.filters);
+    filtered = applyPeriod(filtered, state.period).rows;
+    var sorted = sortRows(filtered, state.sortCol, state.sortDir);
+    if(!sorted.length) return;
+    var results = document.getElementById('listResults');
+    if(!results) return;
+    // 備份目前分頁狀態（列印後還原）
+    printListBackup = { page: state.page };
+    // 以「一頁裝完」的方式重繪（不呼叫 onPage，避免影響 state.page）
+    renderList(results, {
+      columns: visibleListColumns(state.listCols),
+      rows: sorted,
+      start: 0, end: sorted.length, total: sorted.length,
+      page: 1, totalPages: 1,
+      sortCol: state.sortCol, sortDir: state.sortDir,
+      onSort: sortBy, onPage: gotoPage
+    });
+  }
+  function restoreListAfterPrint(){
+    if(!printListBackup) return;
+    state.page = printListBackup.page;
+    printListBackup = null;
+    rebuildListResults();
+  }
+
   // 列印流程：寫回設定 → 必要時暫切版型並重繪 → 列印 → 還原
   function doPrint(){
     var hasAny = readPrintPanel();
@@ -6421,11 +6484,13 @@ var state = {
 
     applyPrintSectionFlags();
     document.body.classList.add('printing');
+    expandListForPrint();                       // 案件清單：必要時展開全部
 
     var restore = function(){
       window.removeEventListener('afterprint', restore);
       document.body.classList.remove('printing');
       clearPrintSectionFlags();
+      restoreListAfterPrint();                  // 還原案件清單分頁
       if(needSwitch){
         document.body.classList.remove('mobile', 'desktop');
         document.body.classList.add(screenMode);
@@ -6734,6 +6799,7 @@ var state = {
   function restorePrintConfig(d){
     state.printEnabled = normalizePrintEnabled(d && d.printEnabled);
     state.printView = normalizePrintView(d && d.printView);
+    state.printList = normalizePrintList(d && d.printList);
     persistData();
   }
   function tryRestoreData(){
@@ -7026,6 +7092,10 @@ var state = {
       normalizePresentEnabled: normalizePresentEnabled,
       PRINT_SECTIONS: PRINT_SECTIONS,
       PRINT_VIEW_OPTIONS: PRINT_VIEW_OPTIONS,
+      PRINT_LIST_OPTIONS: PRINT_LIST_OPTIONS,
+      normalizePrintList: normalizePrintList,
+      expandListForPrint: expandListForPrint,
+      restoreListAfterPrint: restoreListAfterPrint,
       normalizePrintView: normalizePrintView,
       normalizePrintEnabled: normalizePrintEnabled,
       printVisibleIds: printVisibleIds,
