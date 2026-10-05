@@ -67,10 +67,12 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 條件：`classifyStatus(r) === '未啟動'` **且** `填單日期` 非空。
 - **不套用分析期間與任何篩選**（`renderNotStartedSection()` 直接吃 `state.model.rows`）。
   與案件清單筆數不一致是預期行為 → 表頭必須保留「本表不隨分析期間與篩選縮放」註記。
-- **一頁式圖表排序**（2026-10-05 改版）：攤平成「課別 × 類別」組合列，
-  依**數量多→少**（同數依 `KE_BASE_ORDER`，再依 `NS_CAT_ORDER`），
-  每列顯示 課別／類別／數量／長條圖（**以最大值為 100%**）；**預設全部收攏**。
-- 純函式：`collectNotStarted(rows)`、`notStartedGroups(rows)` → `{ total, max, items }`；
+- **課別堆疊橫條**（2026-10-05 改版）：一列一課別，長條內堆疊類別（顏色區分），
+  課別依**總計多→少**（同數依 `KE_BASE_ORDER`），長條**以最大值為 100%**；
+  表頭為 課別／類別組成／總計；**預設全部收攏**，點列展開該課別的案件清單
+  （按類別分小節），案件可再點開明細。
+- 純函式：`collectNotStarted(rows)`、`notStartedGroups(rows)` →
+  `{ total, max, items: [{ ke, count, cats: [{ cat, count, rows }] }] }`；
   `NS_CAT_ORDER` 常數。舊 `groupNotStarted(rows)` 保留為相容介面（委派給 `notStartedGroups`）。
 - DOM：`renderNotStartedSection()` / `buildNotStartedGroupRow(item, max)` /
   `buildNotStartedItem()` / `buildNotStartedDetail()`。
