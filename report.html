@@ -372,6 +372,32 @@
   .snap-actions button{ cursor:pointer; }
   #snapHost{ position:fixed; left:-99999px; top:0; visibility:hidden; pointer-events:none; }
   @media print{ .snap-modal, #snapHost{ display:none !important; } }
+  /* 列印設定面板（沿用 snap-modal 外觀語彙） */
+  .print-modal{ position:fixed; inset:0; z-index:2100; background:rgba(5,8,12,.6);
+    display:flex; align-items:center; justify-content:center; padding:18px; }
+  .print-modal[hidden]{ display:none; }
+  .print-box{ background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:18px 20px; width:min(720px, 94vw); max-height:86vh; display:flex;
+    flex-direction:column; box-shadow:0 14px 50px rgba(0,0,0,.5); }
+  .print-box h3{ margin:0 0 4px; font-size:15px; }
+  .print-hint{ font-size:12px; color:var(--muted); margin:0 0 12px; }
+  .print-sec-grid{ flex:1; min-height:0; overflow:auto; border:1px solid var(--border);
+    border-radius:8px; background:var(--card-2); padding:10px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:6px 14px; }
+  .print-sec-item{ display:flex; align-items:center; gap:7px; font-size:13px;
+    color:var(--text); cursor:pointer; }
+  .print-sec-item input{ width:15px; height:15px; accent-color:var(--accent); }
+  .print-sec-row{ display:flex; gap:8px; margin-top:10px; }
+  .print-sec-row button{ cursor:pointer; }
+  .print-row{ display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:13px; }
+  .print-opt{ display:flex; align-items:center; gap:6px; color:var(--text); cursor:pointer; }
+  .print-opt select{ background:var(--card-2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:4px 8px; font-size:13px; }
+  .print-actions{ display:flex; gap:8px; margin-top:12px; }
+  .print-actions button{ cursor:pointer; }
+  @media print{ .print-modal{ display:none !important; } }
+  /* 列印時排除未勾選的區塊（掛 body.printing 才生效，不影響畫面） */
+  @media print{ body.printing section.card.print-off{ display:none !important; } }
   .list-summary{ margin:0 0 10px; font-size:13px; color:var(--muted); }
   table.list-table th.sortable{ cursor:pointer; }
   table.list-table th.sortable:hover{ color:var(--text); }
@@ -885,7 +911,9 @@ var state = {
     viewMode: 'auto',   // 'auto' | 'mobile' | 'desktop'（auto＝依視窗寬度偵測；手動切換會記憶於 localStorage）
     agenda: [],        // 簡報議題（使用者自訂，一字串一項；不屬資料檔案、獨立存檔）
     presentEnabled: {}, // 簡報頁面勾選（{區段id:boolean}；未列一律視為勾選）
-    listCols: null      // 案件清單欄位勾選（{欄位key:boolean}；null＝會議精簡 profile）
+    listCols: null,     // 案件清單欄位勾選（{欄位key:boolean}；null＝會議精簡 profile）
+    printEnabled: {},   // 列印區塊勾選（{區段id:boolean}；未列一律視為勾選）— 與簡報勾選各自獨立
+    printView: 'auto'   // 列印版型（'auto'＝跟隨畫面 | 'mobile' | 'desktop'）
   };
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
@@ -5865,7 +5893,9 @@ var state = {
       model: state.model,
       agenda: state.agenda,
       presentEnabled: state.presentEnabled,
-      listCols: normalizeListCols(state.listCols)
+      listCols: normalizeListCols(state.listCols),
+      printEnabled: normalizePrintEnabled(state.printEnabled),
+      printView: normalizePrintView(state.printView)
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -5911,7 +5941,7 @@ var state = {
     try{
       if(!state.model) return;
       state.savedAt = new Date().toISOString();
-      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols) });
+      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols), printEnabled: normalizePrintEnabled(state.printEnabled), printView: normalizePrintView(state.printView) });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
       renderMeetingInfo();
     }catch(_){}
@@ -5935,6 +5965,8 @@ var state = {
     state.agenda = [];
     state.presentEnabled = {};
     state.listCols = null;
+    state.printEnabled = {};
+    state.printView = 'auto';
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
     renderAgenda();
@@ -5987,6 +6019,265 @@ var state = {
       out[pid] = raw && typeof raw === 'object' && raw[pid] !== undefined ? !!raw[pid] : true;
     }
     return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 列印設定：區塊勾選 + 版型（純函式，Node 可測）
+  // ---------------------------------------------------------------------------
+
+  // 可列印區塊清單（依 main 內 section 順序；載入／分析期間為控制用，不列入）
+  var PRINT_SECTIONS = [
+    { id: 'agendaSection',    title: '本日議題' },
+    { id: 'alertSection',     title: '待留意事項' },
+    { id: 'highlightSection', title: '開場亮點摘要' },
+    { id: 'statSection',      title: '案件狀態統計' },
+    { id: 'keQuickSection',   title: '各課追蹤簡表' },
+    { id: 'progressSection',  title: '進度追蹤表' },
+    { id: 'typeSection',      title: '案件類型分析' },
+    { id: 'funnelSection',    title: '漏斗分析' },
+    { id: 'rankSection',      title: '排行分析' },
+    { id: 'timingSection',    title: '開發時間分析' },
+    { id: 'dropoffSection',   title: '轉換流失分析' },
+    { id: 'listSection',      title: '案件清單' },
+    { id: 'rawSection',       title: '原始資料預覽' }
+  ];
+
+  // 列印版型選項（auto＝跟隨畫面）
+  var PRINT_VIEW_OPTIONS = [
+    { value: 'auto',    label: '跟隨畫面' },
+    { value: 'mobile',  label: '手機' },
+    { value: 'desktop', label: '桌面' }
+  ];
+
+  function normalizePrintView(v){
+    return (v === 'mobile' || v === 'desktop') ? v : 'auto';
+  }
+
+  // 列印區塊勾選正規化（未給定一律視為勾選；純函式）
+  function normalizePrintEnabled(raw){
+    var out = {};
+    for(var i = 0; i < PRINT_SECTIONS.length; i++) out[PRINT_SECTIONS[i].id] = true;
+    if(raw && typeof raw === 'object'){
+      for(var k in raw){ if(Object.prototype.hasOwnProperty.call(out, k)) out[k] = !!raw[k]; }
+    }
+    return out;
+  }
+
+  // 依勾選結果回傳「要列印」的區塊 id 清單（純函式）
+  function printVisibleIds(raw){
+    var en = normalizePrintEnabled(raw);
+    var ids = [];
+    for(var i = 0; i < PRINT_SECTIONS.length; i++){
+      if(en[PRINT_SECTIONS[i].id]) ids.push(PRINT_SECTIONS[i].id);
+    }
+    return ids;
+  }
+
+  // 實際要套用的列印版型（純函式）：auto 時解析為畫面版型
+  function resolvePrintView(sel, screenMode){
+    var v = normalizePrintView(sel);
+    if(v === 'auto') return (screenMode === 'mobile') ? 'mobile' : 'desktop';
+    return v;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 列印設定面板與列印流程
+  // ---------------------------------------------------------------------------
+
+  // 建立列印設定彈窗（只做一次；掛在 body 尾端）
+  function buildPrintPanel(){
+    var modal = document.createElement('div');
+    modal.className = 'print-modal';
+    modal.id = 'printModal';
+    modal.hidden = true;
+
+    var box = document.createElement('div');
+    box.className = 'print-box';
+
+    var h3 = document.createElement('h3');
+    h3.textContent = '列印設定';
+    box.appendChild(h3);
+
+    var hint = document.createElement('p');
+    hint.className = 'print-hint';
+    hint.textContent = '勾選要列印的區塊，並選擇列印版型。設定會自動記憶，下次開啟沿用。';
+    box.appendChild(hint);
+
+    // 區塊勾選
+    var grid = document.createElement('div');
+    grid.className = 'print-sec-grid';
+    grid.id = 'printSecGrid';
+    for(var i = 0; i < PRINT_SECTIONS.length; i++){
+      var s = PRINT_SECTIONS[i];
+      var lab = document.createElement('label');
+      lab.className = 'print-sec-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = s.id;
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(s.title));
+      grid.appendChild(lab);
+    }
+    box.appendChild(grid);
+
+    // 全選／全不選
+    var secRow = document.createElement('div');
+    secRow.className = 'print-sec-row';
+    var allBtn = buttonEl('printSecAll', '全部勾選');
+    allBtn.addEventListener('click', function(){
+      var boxes = grid.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++) boxes[b].checked = true;
+    });
+    var noneBtn = buttonEl('printSecNone', '全部取消');
+    noneBtn.addEventListener('click', function(){
+      var boxes = grid.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++) boxes[b].checked = false;
+    });
+    secRow.appendChild(allBtn);
+    secRow.appendChild(noneBtn);
+    box.appendChild(secRow);
+
+    // 版型選擇
+    var row = document.createElement('div');
+    row.className = 'print-row';
+    var lab2 = document.createElement('label');
+    lab2.className = 'print-opt';
+    lab2.appendChild(document.createTextNode('列印版型'));
+    var sel = document.createElement('select');
+    sel.id = 'printViewSel';
+    for(var v = 0; v < PRINT_VIEW_OPTIONS.length; v++){
+      var opt = document.createElement('option');
+      opt.value = PRINT_VIEW_OPTIONS[v].value;
+      opt.textContent = PRINT_VIEW_OPTIONS[v].label;
+      sel.appendChild(opt);
+    }
+    lab2.appendChild(sel);
+    row.appendChild(lab2);
+    box.appendChild(row);
+
+    // 動作
+    var actions = document.createElement('div');
+    actions.className = 'print-actions';
+    var cancelBtn = buttonEl('printCancelBtn', '取消');
+    cancelBtn.addEventListener('click', function(){ modal.hidden = true; });
+    var goBtn = buttonEl('printGoBtn', '開始列印');
+    goBtn.addEventListener('click', function(){ doPrint(); });
+    actions.appendChild(cancelBtn);
+    actions.appendChild(goBtn);
+    box.appendChild(actions);
+
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+
+    // 點背景關閉
+    modal.addEventListener('click', function(e){
+      if(e.target === modal) modal.hidden = true;
+    });
+    return modal;
+  }
+
+  // 開啟列印面板（帶入目前設定）
+  function openPrintPanel(){
+    var modal = document.getElementById('printModal') || buildPrintPanel();
+    var en = normalizePrintEnabled(state.printEnabled);
+    var grid = document.getElementById('printSecGrid');
+    if(grid){
+      var boxes = grid.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++){
+        boxes[b].checked = !!en[boxes[b].value];
+      }
+    }
+    var sel = document.getElementById('printViewSel');
+    if(sel) sel.value = normalizePrintView(state.printView);
+    modal.hidden = false;
+  }
+
+  // 關閉面板並把設定寫回 state（回傳是否至少勾了一個區塊）
+  function readPrintPanel(){
+    var en = {};
+    var grid = document.getElementById('printSecGrid');
+    if(grid){
+      var boxes = grid.querySelectorAll('input[type="checkbox"]');
+      for(var b = 0; b < boxes.length; b++) en[boxes[b].value] = !!boxes[b].checked;
+    }
+    state.printEnabled = normalizePrintEnabled(en);
+    var sel = document.getElementById('printViewSel');
+    state.printView = normalizePrintView(sel ? sel.value : 'auto');
+    persistData();
+    return printVisibleIds(state.printEnabled).length > 0;
+  }
+
+  // 套用列印樣式類別：未勾選的區塊掛 print-off
+  function applyPrintSectionFlags(){
+    var en = normalizePrintEnabled(state.printEnabled);
+    for(var i = 0; i < PRINT_SECTIONS.length; i++){
+      var el = document.getElementById(PRINT_SECTIONS[i].id);
+      if(!el) continue;
+      el.classList.toggle('print-off', !en[PRINT_SECTIONS[i].id]);
+    }
+  }
+
+  function clearPrintSectionFlags(){
+    for(var i = 0; i < PRINT_SECTIONS.length; i++){
+      var el = document.getElementById(PRINT_SECTIONS[i].id);
+      if(el) el.classList.remove('print-off');
+    }
+  }
+
+  // 依指定版型重繪兩個「依版型選 renderer」的寬表（各課簡表／進度追蹤表）
+  function rerenderViewSensitiveSections(){
+    if(!state.model || !state.model.rows) return;
+    var f = {};
+    if(state.filters){
+      f.關鍵字 = state.filters.關鍵字;
+      f.課別 = state.filters.課別;
+      f.開發者 = state.filters.開發者;
+    }
+    var scope = applyFilters(state.model.rows, f);
+    var pr = applyPeriod(scope, state.period);
+    var mObj = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
+    renderKeQuickSection(mObj);
+    renderProgressSection(mObj);
+  }
+
+  // 列印流程：寫回設定 → 必要時暫切版型並重繪 → 列印 → 還原
+  function doPrint(){
+    var hasAny = readPrintPanel();
+    if(!hasAny) return;                       // 全部取消 → 不列印（面板保持開啟）
+    var modal = document.getElementById('printModal');
+    if(modal) modal.hidden = true;
+
+    var screenMode = currentViewMode();
+    var target = resolvePrintView(state.printView, screenMode);
+    var needSwitch = (target !== screenMode);
+    var prevMode = state.viewMode;
+
+    if(needSwitch){
+      // 暫時切版型（直接操作 body，不動 state.viewMode，避免污染使用者的畫面設定）
+      document.body.classList.remove('mobile', 'desktop');
+      document.body.classList.add(target);
+      rerenderViewSensitiveSections();
+    }
+
+    applyPrintSectionFlags();
+    document.body.classList.add('printing');
+
+    var restore = function(){
+      window.removeEventListener('afterprint', restore);
+      document.body.classList.remove('printing');
+      clearPrintSectionFlags();
+      if(needSwitch){
+        document.body.classList.remove('mobile', 'desktop');
+        document.body.classList.add(screenMode);
+        state.viewMode = prevMode;
+        rerenderViewSensitiveSections();
+      }
+    };
+    window.addEventListener('afterprint', restore);
+
+    try{ window.print(); }catch(_){ restore(); }
+    // 保險：部分環境不觸發 afterprint
+    setTimeout(restore, 2000);
   }
 
   // 依勾選動態組出簡報頁清單（維持固定順序；純函式）
@@ -6280,6 +6571,11 @@ var state = {
     rebuildListResults();
     persistData();
   }
+  function restorePrintConfig(d){
+    state.printEnabled = normalizePrintEnabled(d && d.printEnabled);
+    state.printView = normalizePrintView(d && d.printView);
+    persistData();
+  }
   function tryRestoreData(){
     var emb = document.getElementById('crm-embedded');
     if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
@@ -6290,6 +6586,7 @@ var state = {
           restoreAgenda(payload);
           restorePresentConfig(payload);
           restoreListCols(payload);
+          restorePrintConfig(payload);
           return true;
         }
       }catch(_){}
@@ -6300,6 +6597,7 @@ var state = {
       restoreAgenda(stored);
       restorePresentConfig(stored);
       restoreListCols(stored);
+      restorePrintConfig(stored);
       return true;
     }
     return false;
@@ -6353,7 +6651,7 @@ var state = {
     }
     var printBtn = document.getElementById('printBtn');
     if(printBtn){
-      printBtn.addEventListener('click', function(){ window.print(); });
+      printBtn.addEventListener('click', function(){ openPrintPanel(); });
     }
     var saveBtn = document.getElementById('saveBtn');
     if(saveBtn){
@@ -6558,6 +6856,14 @@ var state = {
       PRESENT_SLIDES: PRESENT_SLIDES,
       PRESENT_PERIOD_LABELS: PRESENT_PERIOD_LABELS,
       normalizePresentEnabled: normalizePresentEnabled,
+      PRINT_SECTIONS: PRINT_SECTIONS,
+      PRINT_VIEW_OPTIONS: PRINT_VIEW_OPTIONS,
+      normalizePrintView: normalizePrintView,
+      normalizePrintEnabled: normalizePrintEnabled,
+      printVisibleIds: printVisibleIds,
+      resolvePrintView: resolvePrintView,
+      applyPrintSectionFlags: applyPrintSectionFlags,
+      clearPrintSectionFlags: clearPrintSectionFlags,
       buildPresentSlides: buildPresentSlides,
       enterPresent: enterPresent,
       leavePresent: leavePresent,
