@@ -188,43 +188,62 @@
   .pg-table tr.pg-total:hover td.pg-ke{ background:var(--row-hover-strong-2); }
   .pg-table td.pg-coop{ color:var(--ok); font-weight:650; }
   .pg-table th.pg-coop-head{ color:var(--ok); }
-  /* 未啟動案件追蹤表：課別分組 → 類別小節 → 案件列（可展開明細） */
-  .ns-wrap{ display:flex; flex-direction:column; gap:12px; }
-  .ns-ke{ border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-  .ns-ke-head{ display:flex; align-items:baseline; gap:8px; padding:8px 12px;
-    background:var(--card-2); border-bottom:1px solid var(--border); font-weight:700; font-size:14px; }
-  .ns-ke-count{ margin-left:auto; font-weight:400; font-size:13px; color:var(--muted); }
-  .ns-cat{ padding:8px 12px 10px; }
-  .ns-cat + .ns-cat{ border-top:1px dashed var(--border); }
-  .ns-cat-head{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:650;
-    color:var(--text); margin-bottom:6px; }
-  .ns-cat-swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
-  .ns-cat-swatch.c0{ background:var(--accent); }
-  .ns-cat-swatch.c1{ background:var(--ok); }
-  .ns-cat-swatch.c2{ background:var(--warning); }
-  .ns-cat-swatch.c3{ background:var(--muted); }
-  .ns-cat-count{ color:var(--muted); font-weight:400; }
+  /* 未啟動案件追蹤表：一頁式圖表排序（課別 × 類別 × 數量 × 長條） */
+  .ns-table{ border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .ns-trow{ display:flex; align-items:center; gap:10px; padding:7px 12px; font-size:13px; }
+  .ns-thead{ background:var(--card-2); color:var(--muted); font-weight:650;
+    border-bottom:1px solid var(--border); font-size:12.5px; }
+  .ns-grp + .ns-grp .ns-grow{ border-top:1px solid var(--border); }
+  .ns-grow{ width:100%; text-align:left; background:none; border:0; color:var(--text);
+    font:inherit; cursor:pointer; }
+  .ns-grow:hover{ background:var(--row-hover); }
+  .ns-grow:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .ns-c-caret{ width:14px; flex:none; }
+  .ns-c-ke{ width:86px; flex:none; }
+  .ns-c-cat{ width:110px; flex:none; display:flex; align-items:center; gap:6px; }
+  .ns-c-num{ width:52px; flex:none; text-align:right; font-weight:700; }
+  .ns-c-bar{ flex:1 1 auto; min-width:80px; }
+  .ns-dot{ width:9px; height:9px; border-radius:2px; flex:none; }
+  .ns-dot.c0, .ns-bar-fill.c0{ background:var(--accent); }
+  .ns-dot.c1, .ns-bar-fill.c1{ background:var(--ok); }
+  .ns-dot.c2, .ns-bar-fill.c2{ background:var(--warning); }
+  .ns-dot.c3, .ns-bar-fill.c3{ background:var(--muted); }
+  .ns-bar{ display:block; height:12px; border-radius:6px; background:var(--card-2);
+    border:1px solid var(--border); overflow:hidden; }
+  .ns-bar-fill{ display:block; height:100%; border-radius:5px 0 0 5px; }
+  .ns-caret{ color:var(--muted); font-size:11px; }
+  .ns-item .ns-caret{ width:12px; flex:none; }
+  /* 展開的案件清單（預設收攏） */
+  .ns-cases{ padding:4px 12px 8px 36px; background:var(--card-2); }
   .ns-list{ display:flex; flex-direction:column; gap:2px; }
   .ns-item{ display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px;
     font-size:13px; cursor:pointer; background:none; border:0; text-align:left; width:100%;
     color:var(--text); font:inherit; }
   .ns-item:hover{ background:var(--row-hover); }
   .ns-item:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
-  .ns-caret{ color:var(--muted); font-size:11px; width:12px; flex:none; }
   .ns-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ns-date{ color:var(--muted); font-size:12px; flex:none; }
   .ns-dev{ color:var(--muted); font-size:12px; flex:none; min-width:60px; text-align:right; }
-  .ns-detail{ padding:10px 12px 12px 28px; background:var(--card-2); border-radius:6px;
+  .ns-detail{ padding:10px 12px 12px 28px; background:var(--card); border-radius:6px;
     margin:2px 0 4px; border-left:3px solid var(--accent); }
   /* 明細欄位標籤：用一般文字色（不用 accent 藍），避免被誤認為可點連結 */
   .ns-detail .do-field-label{ color:var(--muted); font-weight:650; }
-  /* 多行值（如多支電話）逐行呈現 */
+  /* 多行值（如多站所）逐行呈現 */
   .ns-detail .ns-multiline{ white-space:pre-line; }
   .ns-empty{ padding:14px; text-align:center; color:var(--muted); font-size:13px; }
   @media print{
-    /* 列印時一律展開明細（否則紙上看不到內容），並保留分組標題 */
+    /* ⚠ .ns-grow / .ns-item 是 button，列印樣式有 button{display:none} 會把它們藏掉
+       （實測：PDF 只剩表頭與明細，課別/類別/數量/比例與案件名稱全消失）→ 必須還原 */
+    .ns-grow, .ns-item{ display:flex !important; }
+    /* 列印時一律展開案件清單與明細（否則紙上看不到內容），並隱藏收合指示 */
+    .ns-cases[hidden]{ display:block !important; }
+    .ns-detail[hidden]{ display:block !important; }
+    .ns-caret{ display:none !important; }
+    .ns-grow{ cursor:default; }
     .ns-item{ cursor:default; }
-    .ns-caret{ display:none; }
+    /* 長條圖保留底色 */
+    .ns-bar-fill{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .ns-bar{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
   .qk-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
   .qk-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
@@ -1978,7 +1997,7 @@ var state = {
   // 不套用「分析期間」與任何「篩選」（固定顯示全部符合條件者）
   // ---------------------------------------------------------------------------
 
-  // 類別顯示順序（沿用既有慣例）
+  // 類別顯示順序（沿用既有慣例；僅用於同數量時的次要排序）
   var NS_CAT_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
 
   // 純函式：挑出「有填單日期 且 狀態為未啟動」的案件
@@ -1994,19 +2013,19 @@ var state = {
     return out;
   }
 
-  // 純函式：分組 → [{ ke, count, cats:[{ cat, count, rows:[...] }] }]
-  // 課別依案件數多→少（同數時依 KE_BASE_ORDER），類別依 NS_CAT_ORDER
-  function groupNotStarted(rows){
+  // 純函式：攤平成 [{ke, cat, count, rows}]，依數量多→少
+  // 同數量時依 KE_BASE_ORDER，再依 NS_CAT_ORDER（確保結果穩定可重現）
+  // 回傳 { total, max, items }（max 供長條圖以最大值為 100% 計算）
+  function notStartedGroups(rows){
     var list = collectNotStarted(rows);
-    var byKe = {};
+    var byKey = {};
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var ke = fieldStr(r, '課別') || '(未填課別)';
       var cat = fieldStr(r, '類別') || '(未填類別)';
-      if(!byKe[ke]) byKe[ke] = { total: 0, cats: {} };
-      byKe[ke].total++;
-      if(!byKe[ke].cats[cat]) byKe[ke].cats[cat] = [];
-      byKe[ke].cats[cat].push(r);
+      var k = ke + '\u0000' + cat;
+      if(!byKey[k]) byKey[k] = { ke: ke, cat: cat, rows: [] };
+      byKey[k].rows.push(r);
     }
     function keRank(ke){
       var i2 = KE_BASE_ORDER.indexOf(ke);
@@ -2016,57 +2035,57 @@ var state = {
       var i3 = NS_CAT_ORDER.indexOf(c);
       return i3 === -1 ? NS_CAT_ORDER.length : i3;
     }
-    function dateKey(r){ return fieldStr(r, '填單日期'); }
-    var kes = Object.keys(byKe);
-    kes.sort(function(a, b){
-      if(byKe[b].total !== byKe[a].total) return byKe[b].total - byKe[a].total;  // 多→少
-      return keRank(a) - keRank(b);                                              // 同數：固定課序
-    });
-    var groups = [];
-    for(var k = 0; k < kes.length; k++){
-      var ke = kes[k];
-      var catNames = Object.keys(byKe[ke].cats);
-      catNames.sort(function(a, b){
-        var ra = catRank(a), rb = catRank(b);
-        if(ra !== rb) return ra - rb;
-        return a < b ? -1 : (a > b ? 1 : 0);
+    var keys = Object.keys(byKey);
+    var items = [];
+    for(var k2 = 0; k2 < keys.length; k2++){
+      var g = byKey[keys[k2]];
+      // 組內案件依填單日期由新到舊，同日依序號
+      g.rows.sort(function(a, b){
+        var da = fieldStr(a, '填單日期'), db = fieldStr(b, '填單日期');
+        if(da !== db) return da < db ? 1 : -1;
+        var na = Number(fieldStr(a, '序號')) || 0, nb = Number(fieldStr(b, '序號')) || 0;
+        return na - nb;
       });
-      var cats = [];
-      for(var c = 0; c < catNames.length; c++){
-        var cat = catNames[c];
-        var rs = byKe[ke].cats[cat].slice();
-        // 組內案件依填單日期由新到舊，同日依序號
-        rs.sort(function(a, b){
-          var da = dateKey(a), db = dateKey(b);
-          if(da !== db) return da < db ? 1 : -1;
-          var na = Number(fieldStr(a, '序號')) || 0, nb = Number(fieldStr(b, '序號')) || 0;
-          return na - nb;
-        });
-        cats.push({ cat: cat, count: rs.length, rows: rs });
-      }
-      groups.push({ ke: ke, count: byKe[ke].total, cats: cats });
+      items.push({ ke: g.ke, cat: g.cat, count: g.rows.length, rows: g.rows });
     }
-    return { total: list.length, groups: groups };
+    items.sort(function(a, b){
+      if(b.count !== a.count) return b.count - a.count;        // 數量多→少
+      var r = keRank(a.ke) - keRank(b.ke);
+      if(r !== 0) return r;
+      return catRank(a.cat) - catRank(b.cat);
+    });
+    var max = 0;
+    for(var m = 0; m < items.length; m++) if(items[m].count > max) max = items[m].count;
+    return { total: list.length, max: max, items: items };
   }
 
+  // 舊介面保留（相容）；新排版改用 notStartedGroups
+  function groupNotStarted(rows){
+    var g = notStartedGroups(rows);
+    return { total: g.total, groups: g.items };
+  }
+
+  // 一頁式排版：每列＝一個「課別 × 類別」組合（課別／類別／數量／長條圖）
+  // 預設全部收攏，點該列才展開案件清單（案件仍可再點開明細）
   function renderNotStartedSection(){
     var sec = document.getElementById('notStartedSection');
     var box = document.getElementById('notStartedBox');
     if(!sec || !box || !state.model || !state.model.rows) return;
     box.textContent = '';
     box.className = '';
-    var data = groupNotStarted(state.model.rows);
+    var data = notStartedGroups(state.model.rows);
 
     var note = document.createElement('p');
     note.className = 'pg-note';
     note.textContent = '條件：已填「填單日期」但狀態為「未啟動」的案件。' +
-      '本表不隨「分析期間」與篩選縮放，固定顯示全部符合條件者。';
+      '本表不隨「分析期間」與篩選縮放，固定顯示全部符合條件者。' +
+      '點任一列可展開該組合的案件清單。';
     box.appendChild(note);
 
     var cap = document.createElement('p');
     cap.className = 'list-summary';
-    cap.textContent = '共 ' + data.total + ' 筆' +
-      (data.groups.length ? '・' + data.groups.length + ' 個課別' : '');
+    cap.textContent = '共 ' + data.total + ' 筆・' + data.items.length + ' 個課別／類別組合' +
+      '（長條以最大值 ' + data.max + ' 為 100%）';
     box.appendChild(cap);
 
     if(!data.total){
@@ -2078,49 +2097,90 @@ var state = {
       return;
     }
 
-    var wrap = document.createElement('div');
-    wrap.className = 'ns-wrap';
-    for(var g = 0; g < data.groups.length; g++){
-      var grp = data.groups[g];
-      var keBox = document.createElement('div');
-      keBox.className = 'ns-ke';
-      var head = document.createElement('div');
-      head.className = 'ns-ke-head';
-      head.appendChild(document.createTextNode(grp.ke));
-      var cnt = document.createElement('span');
-      cnt.className = 'ns-ke-count';
-      cnt.textContent = grp.count + ' 筆';
-      head.appendChild(cnt);
-      keBox.appendChild(head);
+    var table = document.createElement('div');
+    table.className = 'ns-table';
 
-      for(var c = 0; c < grp.cats.length; c++){
-        var cg = grp.cats[c];
-        var catBox = document.createElement('div');
-        catBox.className = 'ns-cat';
-        var ch = document.createElement('div');
-        ch.className = 'ns-cat-head';
-        var sw = document.createElement('span');
-        sw.className = 'ns-cat-swatch c' + (NS_CAT_ORDER.indexOf(cg.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(cg.cat));
-        ch.appendChild(sw);
-        ch.appendChild(document.createTextNode(cg.cat));
-        var cc = document.createElement('span');
-        cc.className = 'ns-cat-count';
-        cc.textContent = '（' + cg.count + '）';
-        ch.appendChild(cc);
-        catBox.appendChild(ch);
+    // 表頭
+    var head = document.createElement('div');
+    head.className = 'ns-trow ns-thead';
+    head.appendChild(nsCell('ns-c-caret', ''));
+    head.appendChild(nsCell('ns-c-ke', '課別'));
+    head.appendChild(nsCell('ns-c-cat', '類別'));
+    head.appendChild(nsCell('ns-c-num', '數量'));
+    head.appendChild(nsCell('ns-c-bar', '比例'));
+    table.appendChild(head);
 
-        var listEl = document.createElement('div');
-        listEl.className = 'ns-list';
-        for(var r2 = 0; r2 < cg.rows.length; r2++){
-          listEl.appendChild(buildNotStartedItem(cg.rows[r2]));
-        }
-        catBox.appendChild(listEl);
-        keBox.appendChild(catBox);
-      }
-      wrap.appendChild(keBox);
+    for(var i = 0; i < data.items.length; i++){
+      table.appendChild(buildNotStartedGroupRow(data.items[i], data.max));
     }
-    box.appendChild(wrap);
+    box.appendChild(table);
     sec.hidden = false;
+  }
+
+  function nsCell(cls, text){
+    var d = document.createElement('div');
+    d.className = cls;
+    if(text !== undefined && text !== null) d.textContent = text;
+    return d;
+  }
+
+  // 一列「課別 × 類別」：可點擊展開該組合的案件清單
+  function buildNotStartedGroupRow(item, max){
+    var wrap = document.createElement('div');
+    wrap.className = 'ns-grp';
+
+    var row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'ns-trow ns-grow';
+    row.setAttribute('aria-expanded', 'false');
+
+    var caret = nsCell('ns-c-caret');
+    var cSpan = document.createElement('span');
+    cSpan.className = 'ns-caret';
+    cSpan.textContent = '▸';
+    caret.appendChild(cSpan);
+    row.appendChild(caret);
+
+    row.appendChild(nsCell('ns-c-ke', item.ke));
+
+    var catCell = nsCell('ns-c-cat');
+    var dot = document.createElement('span');
+    dot.className = 'ns-dot c' + (NS_CAT_ORDER.indexOf(item.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(item.cat));
+    catCell.appendChild(dot);
+    catCell.appendChild(document.createTextNode(item.cat));
+    row.appendChild(catCell);
+
+    var numCell = nsCell('ns-c-num');
+    numCell.textContent = String(item.count);
+    row.appendChild(numCell);
+
+    var barCell = nsCell('ns-c-bar');
+    var bar = document.createElement('span');
+    bar.className = 'ns-bar';
+    var fill = document.createElement('span');
+    fill.className = 'ns-bar-fill c' + (NS_CAT_ORDER.indexOf(item.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(item.cat));
+    fill.style.width = (max > 0 ? Math.round(item.count / max * 100) : 0) + '%';
+    bar.appendChild(fill);
+    barCell.appendChild(bar);
+    row.appendChild(barCell);
+
+    var cases = document.createElement('div');
+    cases.className = 'ns-cases';
+    cases.hidden = true;
+    for(var r = 0; r < item.rows.length; r++){
+      cases.appendChild(buildNotStartedItem(item.rows[r]));
+    }
+
+    row.addEventListener('click', function(){
+      var open = cases.hidden;
+      cases.hidden = !open;
+      row.setAttribute('aria-expanded', String(open));
+      cSpan.textContent = open ? '▾' : '▸';
+    });
+
+    wrap.appendChild(row);
+    wrap.appendChild(cases);
+    return wrap;
   }
 
   // 未啟動案件的明細：依使用者指定，只顯示 5 個欄位
@@ -7358,8 +7418,10 @@ var state = {
       keQuickNote: keQuickNote,
       NS_CAT_ORDER: NS_CAT_ORDER,
       collectNotStarted: collectNotStarted,
+      notStartedGroups: notStartedGroups,
       groupNotStarted: groupNotStarted,
       renderNotStartedSection: renderNotStartedSection,
+      buildNotStartedGroupRow: buildNotStartedGroupRow,
       buildNotStartedItem: buildNotStartedItem,
       buildNotStartedDetail: buildNotStartedDetail,
       initCollapsible: initCollapsible,
