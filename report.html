@@ -124,6 +124,8 @@
   #errorBox.warning{ color:var(--warning); }
   section h2{ font-size:16px; margin-bottom:12px; color:var(--text); }
   section h2 .muted{ color:var(--muted); font-weight:400; font-size:13px; }
+  /* 列印專用元素：畫面上完全不顯示（僅 @media print 內露出） */
+  .print-only{ display:none; }
   /* 可收合區塊（桌機＋手機通用）：標題列可點，收合時只留 h2 */
   section.card.collapsible > h2{ cursor:pointer; user-select:none; padding-right:22px; position:relative; }
   section.card.collapsible > h2::after{ content:'▾'; position:absolute; right:2px; top:50%;
@@ -673,6 +675,11 @@
   @media print{
     @page{ size:A4; margin:12mm; }
     html, body{ background:#fff; color:#000; }
+    /* 列印只輸出勾選的區塊：topbar（含操作說明）、載入區、分析期間控制項全部隱藏 */
+    .topbar, #loadCard, #periodCard{ display:none !important; }
+    /* 列印專用大標題 */
+    .print-only{ display:block !important; }
+    .print-title{ font-size:20px; font-weight:700; color:#000; margin:0 0 14px; }
     .topbar{ background:#fff; border-bottom:1px solid #999; padding:10px 14px; }
     .topbar h1{ color:#000; font-size:18px; }
     .topbar p{ color:#444; }
@@ -737,6 +744,8 @@
     body.mobile main{ padding:8px; }
     body.mobile section.card.folded > :not(h2):not(.list-head){ display:block !important; }
     body.mobile section.card.folded .cols-panel{ display:none !important; }
+    /* 手機版型的 h2 收合箭頭不可進入列印 */
+    body.mobile section h2::after{ content:none !important; }
   }
 </style>
 </head>
@@ -753,6 +762,8 @@
     <button type="button" id="printBtn" disabled>列印</button>
   </div>
 </header>
+<!-- 列印專用標題（僅列印時顯示；畫面完全不佔空間） -->
+<div class="print-only print-title">業務開發進度報表</div>
 <main id="app">
   <section class="card" id="loadCard">
     <div id="dropzone" tabindex="0" aria-label="拖曳或選擇檔案">
