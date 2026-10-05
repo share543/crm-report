@@ -67,10 +67,17 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 條件：`classifyStatus(r) === '未啟動'` **且** `填單日期` 非空。
 - **不套用分析期間與任何篩選**（`renderNotStartedSection()` 直接吃 `state.model.rows`）。
   與案件清單筆數不一致是預期行為 → 表頭必須保留「本表不隨分析期間與篩選縮放」註記。
-- 純函式：`collectNotStarted(rows)`、`groupNotStarted(rows)`；`NS_CAT_ORDER` 常數。
-  排序：課別**案件數多→少**（同數依 `KE_BASE_ORDER`）→ 類別依 `NS_CAT_ORDER`
-  → 組內案件**填單日期新→舊**（同日依序號）。
-- DOM：`renderNotStartedSection()` / `buildNotStartedItem()` / `buildNotStartedDetail()`。
+- **一頁式圖表排序**（2026-10-05 改版）：攤平成「課別 × 類別」組合列，
+  依**數量多→少**（同數依 `KE_BASE_ORDER`，再依 `NS_CAT_ORDER`），
+  每列顯示 課別／類別／數量／長條圖（**以最大值為 100%**）；**預設全部收攏**。
+- 純函式：`collectNotStarted(rows)`、`notStartedGroups(rows)` → `{ total, max, items }`；
+  `NS_CAT_ORDER` 常數。舊 `groupNotStarted(rows)` 保留為相容介面（委派給 `notStartedGroups`）。
+- DOM：`renderNotStartedSection()` / `buildNotStartedGroupRow(item, max)` /
+  `buildNotStartedItem()` / `buildNotStartedDetail()`。
+- ⚠️ **列印陷阱**：`.ns-grow` 與 `.ns-item` 是 `<button>`，會被列印樣式的
+  `button{display:none}` 藏掉 → PDF 只剩表頭與明細，課別／類別／數量／比例與案件名稱全消失。
+  必須在 `@media print` 內 `.ns-grow,.ns-item{display:flex!important}` 還原
+  （與 `.row-warn`／`.pg-warn` 同類問題）。列印另需展開 `.ns-cases[hidden]` 與 `.ns-detail[hidden]`。
 - 明細**只用 5 欄**（統一編號、公司名稱、站所、開發者、填單日期）——
   不要改回 `buildListDetail()`：這批案件的 `洽談內容`/`結案`/`說明` 填充率是 0/26、0/26、2/26，
   用通用明細只會顯示整片「（無資料）」（實測踩過）。
