@@ -56,11 +56,25 @@
 
 ## 區塊順序（report.html `main` 內）
 
-載入 → 分析期間 → 本日議題 → **待留意** → 開場亮點 → 案件狀態統計 → **各課追蹤簡表** → 進度追蹤表 → 案件類型 → 漏斗 → 排行 → 開發時間 → 轉換流失 → 案件清單 → 原始資料。
+載入 → 分析期間 → 本日議題 → **待留意** → 開場亮點 → 案件狀態統計 → **各課追蹤簡表** → **未啟動案件追蹤表** → 進度追蹤表 → 案件類型 → 漏斗 → 排行 → 開發時間 → 轉換流失 → 案件清單 → 原始資料。
 
-改順序要同時改三個地方：`<main>` 內的 section、`PRESENT_SLIDES`（簡報順序，行 ~5635）、本行。
+新增區塊要同時改**四個**地方：`<main>` 內的 section、`PRESENT_SLIDES`、`PRINT_SECTIONS`（列印勾選清單）、本行。
 其餘都與順序無關（渲染用 `getElementById`、沒有任何順序常數或依 id 排序的 CSS、
 localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
+
+## 未啟動案件追蹤表（2026-10 新增）
+
+- 條件：`classifyStatus(r) === '未啟動'` **且** `填單日期` 非空。
+- **不套用分析期間與任何篩選**（`renderNotStartedSection()` 直接吃 `state.model.rows`）。
+  與案件清單筆數不一致是預期行為 → 表頭必須保留「本表不隨分析期間與篩選縮放」註記。
+- 純函式：`collectNotStarted(rows)`、`groupNotStarted(rows)`；`NS_CAT_ORDER` 常數。
+  排序：課別**案件數多→少**（同數依 `KE_BASE_ORDER`）→ 類別依 `NS_CAT_ORDER`
+  → 組內案件**填單日期新→舊**（同日依序號）。
+- DOM：`renderNotStartedSection()` / `buildNotStartedItem()` / `buildNotStartedDetail()`。
+- 明細**只用 5 欄**（統一編號、公司名稱、站所、開發者、填單日期）——
+  不要改回 `buildListDetail()`：這批案件的 `洽談內容`/`結案`/`說明` 填充率是 0/26、0/26、2/26，
+  用通用明細只會顯示整片「（無資料）」（實測踩過）。
+- 明細標籤用 `--muted` 而非 `--accent`（用藍色會被誤認為可點連結）。
 
 ## 改區塊順序（2026-10）
 
@@ -82,34 +96,60 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 ## 列印設定面板（2026-10 新增）
 
 - 工具列「列印」不再直接 `window.print()`，改開面板（`openPrintPanel()`）。
-- 純函式（已 export）：`PRINT_SECTIONS`（13 項，**不含** `loadCard`／`periodCard`，載入與分析期間為控制用）、
-  `PRINT_VIEW_OPTIONS`、`normalizePrintView`、`normalizePrintEnabled`、`printVisibleIds`、`resolvePrintView`。
-- 狀態：`state.printEnabled`（`{區段id:boolean}`，未列＝true）、`state.printView`（`'auto'|'mobile'|'desktop'`）。
-  **與簡報勾選 `state.presentEnabled` 各自獨立**，不要合併。
+- 純函式（已 export）：`PRINT_SECTIONS`（14 項，**不含** `loadCard`／`periodCard`，載入與分析期間為控制用）、
+  `PRINT_VIEW_OPTIONS`、`PRINT_LIST_OPTIONS`、`normalizePrintView`、`normalizePrintList`、
+  `normalizePrintEnabled`、`printVisibleIds`、`resolvePrintView`。
+- 狀態：`state.printEnabled`（`{區段id:boolean}`，未列＝true）、`state.printView`（`'auto'|'mobile'|'desktop'`）、
+  `state.printList`（`'page'|'all'`）。**與簡報勾選 `state.presentEnabled` 各自獨立**，不要合併。
 - 列印排除用 `@media print{ body.printing section.card.print-off{display:none!important} }`：
   **掛 `body.printing` 才生效**，所以畫面顯示不受勾選影響，不會誤刪 DOM。
 - 版型切換：`doPrint()` 在 `needSwitch` 時**暫時**改 `body.classList` 並 `rerenderViewSensitiveSections()`
   （只重繪各課簡表／進度追蹤表兩個「依版型選 renderer」的寬表），
   **不動 `state.viewMode`**（保留 `prevMode` 供還原），列印後還原。
+- 案件清單範圍：`printList='all'` 時 `expandListForPrint()` 以「一頁裝完」重繪
+  （`renderList` 傳 `start:0, end:全部, totalPages:1`，**不要呼叫 onPage**，否則會改到 `state.page`），
+  並先存 `printListBackup={page}`；列印後 `restoreListAfterPrint()` 還原頁碼並 `rebuildListResults()`。
 - 還原用 `afterprint` ＋ `setTimeout(2000)` **雙重保險**（部分環境不觸發 `afterprint`）；
   `restore` 內先 `removeEventListener` 避免重複執行。
 - 全部取消時 `readPrintPanel()` 回 false → **不列印**且面板保持開啟。
-- 持久化：`persistData()` 與 `currentDataPayload()`（存檔副本）都要帶 `printEnabled`/`printView`；
-  `tryRestoreData()` 的**兩條路徑**（內嵌副本／記憶）都要呼叫 `restorePrintConfig()`。
-  漏掉任一條，存檔副本開啟後設定不會還原。
+- 持久化：`persistData()` 與 `currentDataPayload()`（存檔副本）都要帶
+  `printEnabled`/`printView`/`printList`；`tryRestoreData()` 的**兩條路徑**（內嵌副本／記憶）
+  都要呼叫 `restorePrintConfig()`。漏掉任一條，存檔副本開啟後設定不會還原。
+
+### 列印 PDF 只輸出勾選區塊
+
+- `@media print` 內隱藏 `.topbar`、`#loadCard`、`#periodCard`（操作型 UI 不進 PDF）。
+- 列印專用大標題：`<div class="print-only print-title">業務開發進度報表</div>`
+  ＋ `.print-only{display:none}`（畫面完全不佔空間）→ `@media print` 內 `display:block`。
+- 手機版型列印時要一併隱藏 h2 收合箭頭：`body.mobile section h2::after{content:none!important}`。
+
+### 警示在紙上的可辨識性（2026-10 新增）
+
+- **⚠ 是 `<button>`**，列印樣式有 `button{display:none}` 會把它藏掉 →
+  `@media print` 內 `.row-warn,.pg-warn{display:inline!important; color:#8a6111!important}`。
+- **列印強制淺色主題色票**：`@media print{ :root:root:root{ --error:#c03434; ... } }`。
+  ⚠️ **特異性陷阱**：`:root[data-theme="light"]` 是 (0,2,0)，用 `html`（0,0,1）**會被蓋掉**；
+  必須用 `:root:root:root`（0,3,0）。實測：用 `html` 時深色主題列印仍是 `#FF6B6B` 亮紅。
+- 嚴重度文字標籤：`ALERT_SEV_LABEL = {high:'錯誤', mid:'提醒', low:'資料'}`，
+  卡片標題前插 `.alert-sevtag`，**畫面上 `display:none`、列印才顯示**。
+- 欄位級問題標記：`ALERT_FIELD_MAP = {mismatch:['簽約','導入']}` ＋ `alertFieldsOf(row)`；
+  `buildListRow` 對這些欄位加 `.cell-mismatch`，列印用 `print-color-adjust:exact` 保留底色。
 
 ### 列印驗證怎麼跑
 
 - 純函式：Node stub `document`/`window`/`localStorage` 後 `require` 抽出的主 script（見「驗證方式」）。
 - E2E：**seed 必須插在主 script 之前** —— 主 script 尾端是 `if(typeof document !== 'undefined' && document.getElementById){ initApp(); }`
   **同步執行**，插在它之後的 seed 太晚，`tryRestoreData()` 讀不到 → 畫面全空、`#printBtn` 仍 disabled。
-  （比 AGENTS 舊筆記更嚴格：不只 `</body>` 要挑最後一個，seed 還必須在主 script 前。）
+  （比舊筆記更嚴格：不只 `</body>` 要挑最後一個，seed 還必須在主 script 前。）
 - 攔截 `window.print` 再按「開始列印」，可驗證列印期間的 `body` class、`print-off`、寬表是否改卡片。
-- **真實 PDF 是最強證據**：`--print-to-pdf=<path>` ＋ `pdftotext` 抽文字比對區塊標題。
-  ⚠️ **snap chromium 寫不進 `~/.hermes/...`（AppArmor 擋隱藏目錄，Permission denied 13）**，
-  輸出檔要放家目錄下的非隱藏路徑（如 `~/crm-pdf-test/`），測完刪除。
+- **真實 PDF 是最強證據**：`--print-to-pdf=<path>` ＋ `pdftotext` 抽文字比對區塊標題；
+  再 `pdftoppm -png` 轉圖做像素量測（`PIL` 統計飽和色，可驗證主題色是否被固定）。
+- ⚠️ **snap chromium 寫不進 `~/.hermes/...`（AppArmor 擋隱藏目錄，Permission denied 13）**，
+  輸出檔要放家目錄下的非隱藏路徑（如 `~/crm-print-test/`），測完刪除。
 - 寬表在手機版是 **JS 產生**（`.keq-card`／`buildKeQuickMobile`、`buildProgressMobile`），不是純 CSS；
   驗證時別用 `.ke-card`（那是案件狀態統計的 class）。
+- 驗「案件清單只印當前頁」：用 `pdftotext` 抽出的序號集合判斷
+  （page 模式只出現 50 個序號；all 模式出現全部）。
 
 ## 待留意事項的交叉跳轉（2026-10 新增）
 
