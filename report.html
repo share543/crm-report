@@ -188,6 +188,44 @@
   .pg-table tr.pg-total:hover td.pg-ke{ background:var(--row-hover-strong-2); }
   .pg-table td.pg-coop{ color:var(--ok); font-weight:650; }
   .pg-table th.pg-coop-head{ color:var(--ok); }
+  /* 未啟動案件追蹤表：課別分組 → 類別小節 → 案件列（可展開明細） */
+  .ns-wrap{ display:flex; flex-direction:column; gap:12px; }
+  .ns-ke{ border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .ns-ke-head{ display:flex; align-items:baseline; gap:8px; padding:8px 12px;
+    background:var(--card-2); border-bottom:1px solid var(--border); font-weight:700; font-size:14px; }
+  .ns-ke-count{ margin-left:auto; font-weight:400; font-size:13px; color:var(--muted); }
+  .ns-cat{ padding:8px 12px 10px; }
+  .ns-cat + .ns-cat{ border-top:1px dashed var(--border); }
+  .ns-cat-head{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:650;
+    color:var(--text); margin-bottom:6px; }
+  .ns-cat-swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
+  .ns-cat-swatch.c0{ background:var(--accent); }
+  .ns-cat-swatch.c1{ background:var(--ok); }
+  .ns-cat-swatch.c2{ background:var(--warning); }
+  .ns-cat-swatch.c3{ background:var(--muted); }
+  .ns-cat-count{ color:var(--muted); font-weight:400; }
+  .ns-list{ display:flex; flex-direction:column; gap:2px; }
+  .ns-item{ display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px;
+    font-size:13px; cursor:pointer; background:none; border:0; text-align:left; width:100%;
+    color:var(--text); font:inherit; }
+  .ns-item:hover{ background:var(--row-hover); }
+  .ns-item:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .ns-caret{ color:var(--muted); font-size:11px; width:12px; flex:none; }
+  .ns-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ns-date{ color:var(--muted); font-size:12px; flex:none; }
+  .ns-dev{ color:var(--muted); font-size:12px; flex:none; min-width:60px; text-align:right; }
+  .ns-detail{ padding:10px 12px 12px 28px; background:var(--card-2); border-radius:6px;
+    margin:2px 0 4px; border-left:3px solid var(--accent); }
+  /* 明細欄位標籤：用一般文字色（不用 accent 藍），避免被誤認為可點連結 */
+  .ns-detail .do-field-label{ color:var(--muted); font-weight:650; }
+  /* 多行值（如多支電話）逐行呈現 */
+  .ns-detail .ns-multiline{ white-space:pre-line; }
+  .ns-empty{ padding:14px; text-align:center; color:var(--muted); font-size:13px; }
+  @media print{
+    /* 列印時一律展開明細（否則紙上看不到內容），並保留分組標題 */
+    .ns-item{ cursor:default; }
+    .ns-caret{ display:none; }
+  }
   .qk-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
   .qk-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
   .qk-table th{ position:static; background:var(--card-2); color:var(--muted);
@@ -873,6 +911,10 @@
   <section class="card" id="keQuickSection" hidden>
     <h2>各課追蹤簡表 <span class="muted">課別 × 甲指／甲配／零擔 · 新增／開發累計／已導入累計</span></h2>
     <div id="keQuickTable" class="pending">待產生</div>
+  </section>
+  <section class="card" id="notStartedSection" hidden>
+    <h2>未啟動案件追蹤表 <span class="muted">已填單但尚未啟動 · 依課別（多→少）分組，組內依類別</span></h2>
+    <div id="notStartedBox" class="pending">待產生</div>
   </section>
   <section class="card" id="progressSection" hidden>
     <h2>進度追蹤表 <span class="muted">類別・課別 · 填單日期→結案</span></h2>
@@ -1929,6 +1971,235 @@ var state = {
     p.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
       '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
     return p;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 未啟動案件追蹤表：已填單但尚未啟動的案件，依課別（多→少）分組，組內依類別
+  // 不套用「分析期間」與任何「篩選」（固定顯示全部符合條件者）
+  // ---------------------------------------------------------------------------
+
+  // 類別顯示順序（沿用既有慣例）
+  var NS_CAT_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
+
+  // 純函式：挑出「有填單日期 且 狀態為未啟動」的案件
+  function collectNotStarted(rows){
+    var out = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(!r) continue;
+      if(classifyStatus(r) !== '未啟動') continue;
+      if(fieldStr(r, '填單日期') === '') continue;      // 條件：填單日期有值
+      out.push(r);
+    }
+    return out;
+  }
+
+  // 純函式：分組 → [{ ke, count, cats:[{ cat, count, rows:[...] }] }]
+  // 課別依案件數多→少（同數時依 KE_BASE_ORDER），類別依 NS_CAT_ORDER
+  function groupNotStarted(rows){
+    var list = collectNotStarted(rows);
+    var byKe = {};
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      var ke = fieldStr(r, '課別') || '(未填課別)';
+      var cat = fieldStr(r, '類別') || '(未填類別)';
+      if(!byKe[ke]) byKe[ke] = { total: 0, cats: {} };
+      byKe[ke].total++;
+      if(!byKe[ke].cats[cat]) byKe[ke].cats[cat] = [];
+      byKe[ke].cats[cat].push(r);
+    }
+    function keRank(ke){
+      var i2 = KE_BASE_ORDER.indexOf(ke);
+      return i2 === -1 ? KE_BASE_ORDER.length : i2;
+    }
+    function catRank(c){
+      var i3 = NS_CAT_ORDER.indexOf(c);
+      return i3 === -1 ? NS_CAT_ORDER.length : i3;
+    }
+    function dateKey(r){ return fieldStr(r, '填單日期'); }
+    var kes = Object.keys(byKe);
+    kes.sort(function(a, b){
+      if(byKe[b].total !== byKe[a].total) return byKe[b].total - byKe[a].total;  // 多→少
+      return keRank(a) - keRank(b);                                              // 同數：固定課序
+    });
+    var groups = [];
+    for(var k = 0; k < kes.length; k++){
+      var ke = kes[k];
+      var catNames = Object.keys(byKe[ke].cats);
+      catNames.sort(function(a, b){
+        var ra = catRank(a), rb = catRank(b);
+        if(ra !== rb) return ra - rb;
+        return a < b ? -1 : (a > b ? 1 : 0);
+      });
+      var cats = [];
+      for(var c = 0; c < catNames.length; c++){
+        var cat = catNames[c];
+        var rs = byKe[ke].cats[cat].slice();
+        // 組內案件依填單日期由新到舊，同日依序號
+        rs.sort(function(a, b){
+          var da = dateKey(a), db = dateKey(b);
+          if(da !== db) return da < db ? 1 : -1;
+          var na = Number(fieldStr(a, '序號')) || 0, nb = Number(fieldStr(b, '序號')) || 0;
+          return na - nb;
+        });
+        cats.push({ cat: cat, count: rs.length, rows: rs });
+      }
+      groups.push({ ke: ke, count: byKe[ke].total, cats: cats });
+    }
+    return { total: list.length, groups: groups };
+  }
+
+  function renderNotStartedSection(){
+    var sec = document.getElementById('notStartedSection');
+    var box = document.getElementById('notStartedBox');
+    if(!sec || !box || !state.model || !state.model.rows) return;
+    box.textContent = '';
+    box.className = '';
+    var data = groupNotStarted(state.model.rows);
+
+    var note = document.createElement('p');
+    note.className = 'pg-note';
+    note.textContent = '條件：已填「填單日期」但狀態為「未啟動」的案件。' +
+      '本表不隨「分析期間」與篩選縮放，固定顯示全部符合條件者。';
+    box.appendChild(note);
+
+    var cap = document.createElement('p');
+    cap.className = 'list-summary';
+    cap.textContent = '共 ' + data.total + ' 筆' +
+      (data.groups.length ? '・' + data.groups.length + ' 個課別' : '');
+    box.appendChild(cap);
+
+    if(!data.total){
+      var e = document.createElement('p');
+      e.className = 'ns-empty';
+      e.textContent = '無符合條件的案件（沒有「已填單但未啟動」的案件）。';
+      box.appendChild(e);
+      sec.hidden = false;
+      return;
+    }
+
+    var wrap = document.createElement('div');
+    wrap.className = 'ns-wrap';
+    for(var g = 0; g < data.groups.length; g++){
+      var grp = data.groups[g];
+      var keBox = document.createElement('div');
+      keBox.className = 'ns-ke';
+      var head = document.createElement('div');
+      head.className = 'ns-ke-head';
+      head.appendChild(document.createTextNode(grp.ke));
+      var cnt = document.createElement('span');
+      cnt.className = 'ns-ke-count';
+      cnt.textContent = grp.count + ' 筆';
+      head.appendChild(cnt);
+      keBox.appendChild(head);
+
+      for(var c = 0; c < grp.cats.length; c++){
+        var cg = grp.cats[c];
+        var catBox = document.createElement('div');
+        catBox.className = 'ns-cat';
+        var ch = document.createElement('div');
+        ch.className = 'ns-cat-head';
+        var sw = document.createElement('span');
+        sw.className = 'ns-cat-swatch c' + (NS_CAT_ORDER.indexOf(cg.cat) === -1 ? 3 : NS_CAT_ORDER.indexOf(cg.cat));
+        ch.appendChild(sw);
+        ch.appendChild(document.createTextNode(cg.cat));
+        var cc = document.createElement('span');
+        cc.className = 'ns-cat-count';
+        cc.textContent = '（' + cg.count + '）';
+        ch.appendChild(cc);
+        catBox.appendChild(ch);
+
+        var listEl = document.createElement('div');
+        listEl.className = 'ns-list';
+        for(var r2 = 0; r2 < cg.rows.length; r2++){
+          listEl.appendChild(buildNotStartedItem(cg.rows[r2]));
+        }
+        catBox.appendChild(listEl);
+        keBox.appendChild(catBox);
+      }
+      wrap.appendChild(keBox);
+    }
+    box.appendChild(wrap);
+    sec.hidden = false;
+  }
+
+  // 未啟動案件的明細：依使用者指定，只顯示 5 個欄位
+  // （這批案件尚無洽談記錄，洽談內容／說明／結案通常為空，顯示出來只會是整片「無資料」）
+  function buildNotStartedDetail(row){
+    var inner = document.createElement('div');
+    inner.className = 'list-detail-inner';
+    var fields = [
+      { label: '統一編號', key: '統編' },
+      { label: '公司名稱', key: '公司名稱' },
+      { label: '站所',     key: '收貨站所' },
+      { label: '開發者',   key: '開發者' },
+      { label: '填單日期', key: '填單日期' }
+    ];
+    for(var i = 0; i < fields.length; i++){
+      var t = fieldStr(row, fields[i].key);
+      var p = document.createElement('p');
+      var lb = document.createElement('span');
+      lb.className = 'do-field-label';
+      lb.textContent = fields[i].label + '：';
+      p.appendChild(lb);
+      if(t){
+        var val = document.createElement('span');
+        // 多行值（如多站所）逐行呈現
+        if(/\r?\n/.test(t)) val.className = 'ns-multiline';
+        val.textContent = t;
+        p.appendChild(val);
+      } else {
+        p.classList.add('do-empty');
+        p.appendChild(document.createTextNode('（未填）'));
+      }
+      inner.appendChild(p);
+    }
+    return inner;
+  }
+
+  // 單一案件列（可點擊展開明細）
+  function buildNotStartedItem(row){
+    var frag = document.createElement('div');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ns-item';
+    btn.setAttribute('aria-expanded', 'false');
+
+    var caret = document.createElement('span');
+    caret.className = 'ns-caret';
+    caret.textContent = '▸';
+    btn.appendChild(caret);
+
+    var nm = document.createElement('span');
+    nm.className = 'ns-name';
+    nm.textContent = fieldStr(row, '公司名稱') || '(未填公司名稱)';
+    btn.appendChild(nm);
+
+    var dt = document.createElement('span');
+    dt.className = 'ns-date';
+    dt.textContent = fieldStr(row, '填單日期');
+    btn.appendChild(dt);
+
+    var dv = document.createElement('span');
+    dv.className = 'ns-dev';
+    dv.textContent = fieldStr(row, '開發者');
+    btn.appendChild(dv);
+
+    var detail = document.createElement('div');
+    detail.className = 'ns-detail';
+    detail.hidden = true;
+    detail.appendChild(buildNotStartedDetail(row));
+
+    btn.addEventListener('click', function(){
+      var open = detail.hidden;
+      detail.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      caret.textContent = open ? '▾' : '▸';
+    });
+
+    frag.appendChild(btn);
+    frag.appendChild(detail);
+    return frag;
   }
 
   function renderKeQuickSection(model){
@@ -5426,6 +5697,7 @@ var state = {
     renderHighlightsSection(m);
     renderStats(m);
     renderKeQuickSection(m);
+    renderNotStartedSection();
     renderProgressSection(m);
     renderFunnelSection(m);
     renderTypeAnalysisSection(m);
@@ -6161,6 +6433,7 @@ var state = {
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection', title: '案件狀態統計' },
     { id: 'keQuickSection', title: '各課追蹤簡表' },
+    { id: 'notStartedSection', title: '未啟動案件追蹤表' },
     { id: 'progressSection', title: '進度追蹤表' },
     { id: 'typeSection', title: '案件類型分析' },
     { id: 'funnelSection', title: '里程碑漏斗' },
@@ -6195,6 +6468,7 @@ var state = {
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection',      title: '案件狀態統計' },
     { id: 'keQuickSection',   title: '各課追蹤簡表' },
+    { id: 'notStartedSection', title: '未啟動案件追蹤表' },
     { id: 'progressSection',  title: '進度追蹤表' },
     { id: 'typeSection',      title: '案件類型分析' },
     { id: 'funnelSection',    title: '漏斗分析' },
@@ -7082,6 +7356,12 @@ var state = {
       describePeriod: describePeriod,
       describeFilters: describeFilters,
       keQuickNote: keQuickNote,
+      NS_CAT_ORDER: NS_CAT_ORDER,
+      collectNotStarted: collectNotStarted,
+      groupNotStarted: groupNotStarted,
+      renderNotStartedSection: renderNotStartedSection,
+      buildNotStartedItem: buildNotStartedItem,
+      buildNotStartedDetail: buildNotStartedDetail,
       initCollapsible: initCollapsible,
       setCollapsed: setCollapsed,
       buildMeetingInfo: buildMeetingInfo,
