@@ -1793,6 +1793,31 @@ var state = {
   // 新增＝目前分析期間內填單的新進案件；開發累計／已導入累計＝全量累計，不隨期間縮放。
   // 篩選僅套用 課別/開發者/關鍵字（類別已為欄位維度、狀態不套用）。
   // ---------------------------------------------------------------------------
+  // 純函式：篩選條件摘要文字（無篩選回 ''；用於狀態列，讓「全部數據」不再與篩選混淆）
+  function describeFilters(filters){
+    var f = filters || {};
+    var parts = [];
+    var KEYS = ['課別', '類別', '狀態', '開發者'];
+    for(var i = 0; i < KEYS.length; i++){
+      var k = KEYS[i];
+      var v = f[k];
+      if(v === undefined || v === null || String(v).trim() === '') continue;
+      parts.push(k + '：' + (v === BLANK_BUCKET ? '(空白)' : String(v)));
+    }
+    var kw = String(f.關鍵字 || '').trim();
+    if(kw) parts.push('關鍵字：' + kw);
+    return parts.join('、');
+  }
+
+  // 各課追蹤簡表的說明註記（桌機與手機共用；置於表格上方，避免被誤認為套用了類別／狀態篩選）
+  function keQuickNote(){
+    var p = document.createElement('p');
+    p.className = 'pg-note';
+    p.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
+      '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
+    return p;
+  }
+
   function renderKeQuickSection(model){
     var sec = document.getElementById('keQuickSection');
     var box = document.getElementById('keQuickTable');
@@ -1816,12 +1841,8 @@ var state = {
     var data = computeKeQuick(scope, pr.rows);
 
     if(isMobileMode()){
+      box.appendChild(keQuickNote());
       box.appendChild(buildKeQuickMobile(data));
-      var mnote = document.createElement('p');
-      mnote.className = 'pg-note';
-      mnote.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
-        '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
-      box.appendChild(mnote);
       sec.hidden = false;
       return;
     }
@@ -1948,13 +1969,8 @@ var state = {
 
     table.appendChild(tbody);
     wrap.appendChild(table);
+    box.appendChild(keQuickNote());
     box.appendChild(withUnitLabel(wrap, '單位：客戶數'));
-
-    var note = document.createElement('p');
-    note.className = 'pg-note';
-    note.textContent = '新增＝目前分析期間內填單的新進案件（依填單日期）；開發累計／已導入累計＝全量累計，不隨期間縮放。' +
-      '此表以 課別／開發者／關鍵字 篩選為準，不受「類別／狀態」篩選影響。';
-    box.appendChild(note);
     sec.hidden = false;
   }
 
@@ -4832,12 +4848,15 @@ var state = {
     var total = state.model && state.model.rows ? state.model.rows.length : 0;
     var desc = describePeriod(state.period);
     var range = periodRange(state.period);
+    // 篩選摘要：讓狀態列同時反映「期間」與「篩選」，避免「全部數據」被誤讀為顯示全部資料
+    var fsum = describeFilters(state.filters);
+    var fpart = fsum ? '（篩選：' + fsum + '）' : '';
     if(!range){
-      badge.textContent = '目前檢視：全部數據｜共 ' + count + ' 筆';
+      badge.textContent = '目前檢視：全部數據' + fpart + '｜共 ' + count + ' 筆';
       if(blankNote) blankNote.hidden = true;
       return;
     }
-    badge.textContent = '目前檢視：' + desc + '｜共 ' + count + ' 筆／全部 ' + total + ' 筆';
+    badge.textContent = '目前檢視：' + desc + fpart + '｜共 ' + count + ' 筆／全部 ' + total + ' 筆';
     if(blankNote){
       var excl = excluded || 0;
       blankNote.hidden = (excl === 0);
@@ -5133,6 +5152,7 @@ var state = {
   // 換頁（依目前篩選結果夾取）
   function gotoPage(p){
     var filtered = applyFilters(state.model.rows, state.filters);
+    filtered = applyPeriod(filtered, state.period).rows;   // 須與 rebuildListResults 一致，否則總頁數不符
     var total = filtered.length;
     var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     if(p < 1) p = 1;
@@ -6850,6 +6870,8 @@ var state = {
       sparkTitle: sparkTitle,
       makeSparkline: makeSparkline,
       describePeriod: describePeriod,
+      describeFilters: describeFilters,
+      keQuickNote: keQuickNote,
       buildMeetingInfo: buildMeetingInfo,
       setPeriod: setPeriod,
       syncPeriodControls: syncPeriodControls,
