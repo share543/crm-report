@@ -79,6 +79,38 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 5. 驗收清單：15 塊 DOM 順序、`#presentBtn` 已 enabled、逐頁 `#pvCount`／`#pvTitle`
    （14 頁）、離開簡報後 15 塊歸位順序與進入前相同、`.snap-btn` 數量＝有 h2 的卡片數。
 
+## 列印設定面板（2026-10 新增）
+
+- 工具列「列印」不再直接 `window.print()`，改開面板（`openPrintPanel()`）。
+- 純函式（已 export）：`PRINT_SECTIONS`（13 項，**不含** `loadCard`／`periodCard`，載入與分析期間為控制用）、
+  `PRINT_VIEW_OPTIONS`、`normalizePrintView`、`normalizePrintEnabled`、`printVisibleIds`、`resolvePrintView`。
+- 狀態：`state.printEnabled`（`{區段id:boolean}`，未列＝true）、`state.printView`（`'auto'|'mobile'|'desktop'`）。
+  **與簡報勾選 `state.presentEnabled` 各自獨立**，不要合併。
+- 列印排除用 `@media print{ body.printing section.card.print-off{display:none!important} }`：
+  **掛 `body.printing` 才生效**，所以畫面顯示不受勾選影響，不會誤刪 DOM。
+- 版型切換：`doPrint()` 在 `needSwitch` 時**暫時**改 `body.classList` 並 `rerenderViewSensitiveSections()`
+  （只重繪各課簡表／進度追蹤表兩個「依版型選 renderer」的寬表），
+  **不動 `state.viewMode`**（保留 `prevMode` 供還原），列印後還原。
+- 還原用 `afterprint` ＋ `setTimeout(2000)` **雙重保險**（部分環境不觸發 `afterprint`）；
+  `restore` 內先 `removeEventListener` 避免重複執行。
+- 全部取消時 `readPrintPanel()` 回 false → **不列印**且面板保持開啟。
+- 持久化：`persistData()` 與 `currentDataPayload()`（存檔副本）都要帶 `printEnabled`/`printView`；
+  `tryRestoreData()` 的**兩條路徑**（內嵌副本／記憶）都要呼叫 `restorePrintConfig()`。
+  漏掉任一條，存檔副本開啟後設定不會還原。
+
+### 列印驗證怎麼跑
+
+- 純函式：Node stub `document`/`window`/`localStorage` 後 `require` 抽出的主 script（見「驗證方式」）。
+- E2E：**seed 必須插在主 script 之前** —— 主 script 尾端是 `if(typeof document !== 'undefined' && document.getElementById){ initApp(); }`
+  **同步執行**，插在它之後的 seed 太晚，`tryRestoreData()` 讀不到 → 畫面全空、`#printBtn` 仍 disabled。
+  （比 AGENTS 舊筆記更嚴格：不只 `</body>` 要挑最後一個，seed 還必須在主 script 前。）
+- 攔截 `window.print` 再按「開始列印」，可驗證列印期間的 `body` class、`print-off`、寬表是否改卡片。
+- **真實 PDF 是最強證據**：`--print-to-pdf=<path>` ＋ `pdftotext` 抽文字比對區塊標題。
+  ⚠️ **snap chromium 寫不進 `~/.hermes/...`（AppArmor 擋隱藏目錄，Permission denied 13）**，
+  輸出檔要放家目錄下的非隱藏路徑（如 `~/crm-pdf-test/`），測完刪除。
+- 寬表在手機版是 **JS 產生**（`.keq-card`／`buildKeQuickMobile`、`buildProgressMobile`），不是純 CSS；
+  驗證時別用 `.ke-card`（那是案件狀態統計的 class）。
+
 ## 待留意事項的交叉跳轉（2026-10 新增）
 
 - 警報由純函式 `collectAlerts(rows)` 產生，回傳 `items[]`（`{sev, kind, title, sections:[{lead, entries:[{row,label,note}]}]}`）
