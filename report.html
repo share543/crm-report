@@ -124,6 +124,18 @@
   #errorBox.warning{ color:var(--warning); }
   section h2{ font-size:16px; margin-bottom:12px; color:var(--text); }
   section h2 .muted{ color:var(--muted); font-weight:400; font-size:13px; }
+  /* 可收合區塊（桌機＋手機通用）：標題列可點，收合時只留 h2 */
+  section.card.collapsible > h2{ cursor:pointer; user-select:none; padding-right:22px; position:relative; }
+  section.card.collapsible > h2::after{ content:'▾'; position:absolute; right:2px; top:50%;
+    transform:translateY(-50%); font-size:12px; color:var(--muted); }
+  section.card.collapsible.collapsed > h2{ margin-bottom:0; }
+  section.card.collapsible.collapsed > h2::after{ transform:translateY(-50%) rotate(-90deg); }
+  section.card.collapsible.collapsed > :not(h2){ display:none !important; }
+  @media print{
+    /* 列印時一律展開，且不顯示收合指示（避免 PDF 漏印內容） */
+    section.card.collapsible.collapsed > :not(h2){ display:block !important; }
+    section.card.collapsible > h2::after{ content:none !important; }
+  }
   .table-wrap{ overflow:auto; max-height:480px; border:1px solid var(--border); border-radius:8px; }
   table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
   thead th{ position:sticky; top:0; background:var(--card-2); color:var(--muted);
@@ -870,7 +882,7 @@
     </div>
     <div id="list" class="pending">待產生</div>
   </section>
-  <section class="card" id="rawSection" hidden>
+  <section class="card collapsible collapsed" id="rawSection" hidden>
     <h2 id="rawTitle">原始資料預覽</h2>
     <div id="rawTable"></div>
   </section>
@@ -1618,12 +1630,77 @@ var state = {
     el.hidden = true;
   }
 
+  // 可收合區塊：點 h2 切換收合（桌機＋手機通用）；狀態存 localStorage 記憶
+  var COLLAPSE_KEY = 'crm-collapse';
+  function readCollapseMap(){
+    try{ var raw = localStorage.getItem(COLLAPSE_KEY); return raw ? JSON.parse(raw) : {}; }catch(_){ return {}; }
+  }
+  function writeCollapseMap(m){
+    try{ localStorage.setItem(COLLAPSE_KEY, JSON.stringify(m)); }catch(_){}
+  }
+  function setCollapsed(sec, collapsed){
+    if(!sec) return;
+    sec.classList.toggle('collapsed', !!collapsed);
+    var h2 = sec.querySelector('h2');
+    if(h2) h2.setAttribute('aria-expanded', String(!collapsed));
+    var m = readCollapseMap();
+    m[sec.id] = !!collapsed;
+    writeCollapseMap(m);
+  }
+  function initCollapsible(){
+    var map = readCollapseMap();
+    var secs = document.querySelectorAll('section.card.collapsible');
+    for(var i = 0; i < secs.length; i++){
+      var sec = secs[i];
+      // 未記憶者沿用 markup 的預設（rawSection 預設收合）
+      if(map[sec.id] === undefined){
+        map[sec.id] = sec.classList.contains('collapsed');
+      } else {
+        sec.classList.toggle('collapsed', !!map[sec.id]);
+      }
+      var h2 = sec.querySelector('h2');
+      if(h2){
+        h2.setAttribute('role', 'button');
+        h2.setAttribute('tabindex', '0');
+        h2.setAttribute('aria-expanded', String(!sec.classList.contains('collapsed')));
+        (function(s){
+          s.querySelector('h2').addEventListener('click', function(){
+            setCollapsed(s, !s.classList.contains('collapsed'));
+          });
+          s.querySelector('h2').addEventListener('keydown', function(e){
+            if(e.key === 'Enter' || e.key === ' '){
+              e.preventDefault();
+              setCollapsed(s, !s.classList.contains('collapsed'));
+            }
+          });
+        })(sec);
+      }
+    }
+    writeCollapseMap(map);
+  }
+
+  // 原始資料預覽：與案件清單一致套用「分析期間＋全部篩選」；
+  // 標題明示為原始欄位值（非分析結果），且預設收合，避免被誤認為篩選結果。
   function renderRawTable(model){
     var box = document.getElementById('rawTable');
     var title = document.getElementById('rawTitle');
     var section = document.getElementById('rawSection');
     box.textContent = '';
-    title.textContent = '原始資料預覽（前 ' + Math.min(model.rows.length, 20) + ' 列，共 ' + model.rows.length + ' 筆・' + model.sheetName + '）';
+    var totalRows = (state.model && state.model.rows) ? state.model.rows.length : model.rows.length;
+    var shown = model.rows.length;
+    var narrowed = (shown !== totalRows);
+    title.textContent = '原始資料預覽（原始欄位值，非分析結果）— 前 ' + Math.min(shown, 20) +
+      ' 列，符合條件 ' + shown + ' 筆' + (narrowed ? '／全部 ' + totalRows + ' 筆' : '') +
+      '・' + model.sheetName;
+
+    if(!shown){
+      var p = document.createElement('p');
+      p.className = 'pending';
+      p.textContent = '共 0 筆，無符合條件的資料';
+      box.appendChild(p);
+      section.hidden = false;
+      return;
+    }
 
     var wrap = document.createElement('div');
     wrap.className = 'table-wrap';
@@ -1639,7 +1716,7 @@ var state = {
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
-    var limit = Math.min(model.rows.length, 20);
+    var limit = Math.min(shown, 20);
     for(var r = 0; r < limit; r++){
       var tr = document.createElement('tr');
       for(var c = 0; c < model.headers.length; c++){
@@ -5293,6 +5370,7 @@ var state = {
     renderRankSection(m);
     renderAlertsSection(m);
     renderListSection();
+    renderRawTable(m);
   }
 
   // ---------------------------------------------------------------------------
@@ -5945,7 +6023,6 @@ var state = {
     var pc = document.getElementById('periodCard');
     if(pc) pc.hidden = false;
     syncPeriodControls();
-    renderRawTable(model);
     initListControls();
     rebuild();
     renderAgenda();
@@ -6631,6 +6708,7 @@ var state = {
     initTheme();
     initViewMode();
     initMobileFold();
+    initCollapsible();
     initPeriodControls();
     initSnapshotControls();
     if(!dropzone) return;
@@ -6872,6 +6950,8 @@ var state = {
       describePeriod: describePeriod,
       describeFilters: describeFilters,
       keQuickNote: keQuickNote,
+      initCollapsible: initCollapsible,
+      setCollapsed: setCollapsed,
       buildMeetingInfo: buildMeetingInfo,
       setPeriod: setPeriod,
       syncPeriodControls: syncPeriodControls,
