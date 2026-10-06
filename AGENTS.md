@@ -207,6 +207,42 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - **驗證**：`parseAgendaLines` 的邊界要測到 —— `**` 優先於 `*`、無符號→大項、手動編號去除、
   小數不誤刪、全形符號、空行／只有符號忽略、行內底線切段、存檔往返一致。
 
+## 區塊 →「案件清單」跳轉／回跳（2026-10-06 新增）
+
+- **右上工具列 `.card-tools`**：`position:absolute; top:14px; right:14px; display:flex; gap:14px`，
+  內含 `[☰ 案件][⬇ 存圖]`。**一律插在卡片本身**（`card.insertBefore(tools, card.firstChild)`），
+  不要插進 `.list-head` —— 那會讓清單那張的按鈕比其他卡片內縮 20px。
+  要再加按鈕就往這個 flex 群組 append，**不要新增第二個 absolute + 手寫 right 值**。
+- **純函式／函式**：`jumpToListSection(card)`、`backToJumpFrom()`、`updateBackControls()`、`updateBackPill()`。
+  `state.jumpFrom = {id,title}` 只記最近一個來源（單層返回），**不隨存檔保存**。
+- **案件清單自己不放跳轉鈕**（`card.id !== 'listSection'`）；D1＝所有其他區塊都放。
+- **跳轉保留篩選與頁碼**（J1），不可偷偷重置。跳轉展開目標區塊、回跳展開來源區塊，兩者都 `pulseClass` 高亮。
+- **回跳兩個入口但同一時間只出現一個**：標題列鈕常駐；浮動膠囊 `#backPill` 只在
+  「標題列已捲出畫面上方」且「還在清單附近」時出現。
+- 列印／簡報／存圖 PNG **三處都要隱藏**：`@media print{ .card-tools, #backPill{display:none!important} }`
+  （⚠ `#backPill` 是 `position:fixed`，不關掉會在 PDF 每頁重複）、
+  `body.pv-mode .card-tools{display:none!important}`、
+  `snapshotCss += '.shot-root .card-tools{display:none!important}'`。
+
+### ⚠️ 兩個「以為會動、其實不會動」的環境地雷（都踩過）
+
+1. **`html{scroll-behavior:smooth}`（第 700 行）＋ `scrollIntoView({behavior:'auto'})` = 平滑動畫**。
+   依規範 `'auto'` 是「**沿用 CSS 設定**」，不是「不滑動」。在平滑動畫不推進的環境
+   （headless／`--virtual-time-budget`、背景分頁、部分無障礙設定）**完全不會捲動**。
+   → 要即時捲動一律用 **`behavior:'instant'`**。全站 4 處已改（含 `jumpToCase`／`focusAlertEntries`）。
+   → 測試腳本自己 `window.scrollTo()` 也一樣，要寫 `scrollTo({top, behavior:'instant'})`。
+2. **`requestAnimationFrame` 節流會卡死**：rAF 在上述環境不觸發時，節流旗標永遠設著，
+   之後所有更新都被 `if(flag) return` 吃掉。→ 捲動節流用 **`setTimeout`**。
+
+### 這一類功能的驗證方式（headless 也量得到）
+
+- 用 `--virtual-time-budget` ＋ `--window-size`（比視窗矮就能捲）＋ `--dump-dom`，
+  在頁內 `window.scrollTo({top, behavior:'instant'})` 後比較 `getBoundingClientRect()`，
+  **不要只憑 DOM 狀態判斷**（捲動量才是真的）。
+- ⚠ `--screenshot` **不反映捲動位置**（永遠從頁面頂端截）。要截「已捲動」的畫面，
+  用 `document.documentElement.style.marginTop = '-Npx'` 模擬位移（負 margin 不會影響
+  `position:fixed` 的定位基準；用 `transform` 會建立 containing block 把 fixed 弄壞）。
+
 ## ⚠️ 開發時間分析：右欄「各階段平均天數」不可用 SVG（2026-10-05 定案）
 
 **踩過的坑**：右欄原用 `<svg viewBox="0 0 700 …">` + `width:100%`。
