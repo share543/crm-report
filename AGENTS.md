@@ -181,6 +181,17 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - **全形相容**：`normalizeAgMarker` 把 `＃－＊＞` 轉半形（中文輸入法常打出全形）。
 - **列印**：`@media print{ .agenda-editor, .agenda-empty-btn{display:none!important} }`，
   編輯器是操作介面不該進 PDF。投影層級字級只在 `body.pv-mode #agendaList > li.ag-*` 調，內容不省略。
+- ⚠️ **`說明` 標籤不可用「絕對定位 + 固定 padding」**：曾用
+  `::before{position:absolute;left:30px}` 配 `.ag-note{padding-left:52px}`，
+  但標籤寬約 30px（2 個 10px 中文字 + padding 4px×2 + 邊框 1px×2）→ 右緣 60px，
+  與文字起點 52px **重疊 8px**。改用 `display:flex` + `gap`，
+  標籤為 flex item、文字自然接在其後，改字級／padding 都不會再撞。
+  （同類風險：任何「絕對定位標籤 + 對稱 padding」的組合，寬度一變就重疊。）
+- **驗證方式**：`Range.getBoundingClientRect()` 量文字左緣，再用「同款樣式的探針 span」
+  量 `::before` 的寬度（`getComputedStyle(li,'::before')` 取 font/padding/border 後組一個 span），
+  兩者相減即為實際間距；螢幕／預覽／投影三處都要量。
+  另注意**預覽只在編輯器開啟後才渲染**（`updateAgendaPreview` 由 `openAgendaEditor` 觸發），
+  沒開編輯器就檢查 `#agendaPreview` 會誤判為空。
 - **驗證**：`parseAgendaLines` 的邊界要測到 —— `**` 優先於 `*`、無符號→大項、手動編號去除、
   小數不誤刪、全形符號、空行／只有符號忽略、行內底線切段、存檔往返一致。
 
