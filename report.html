@@ -3864,7 +3864,7 @@ var state = {
       hasCol = true;
       var colRight = document.createElement('div');
       colRight.className = 'timing-col';
-      var bw = 700, labelW = 160, barArea = 340, RH = 36, gap = 6;
+      var bw = 700, labelW = 170, barArea = 320, RH = 36, gap = 6;
       var bH = 30 + barData.length * (RH + gap) + 10;
       var bSvg = svgEl('svg', { viewBox: '0 0 ' + bw + ' ' + bH, width: '100%' });
       var bDefs = svgEl('defs', {});
@@ -3880,7 +3880,7 @@ var state = {
         var smJ = summarize(barData[j].data);
         var y = 30 + j * (RH + gap);
         var cy = y + RH / 2;
-        var lab = svgEl('text', { x: labelW - 8, y: cy + 5, 'text-anchor': 'end', 'font-size': '13', fill: '#e8eaef' });
+        var lab = svgEl('text', { x: labelW - 12, y: cy + 5, 'text-anchor': 'end', 'font-size': '14', fill: '#ffffff' });
         lab.textContent = barData[j].label;
         bSvg.appendChild(lab);
         var track = svgEl('rect', { x: labelW, y: y + 4, width: barArea, height: RH - 8, rx: 5, fill: '#21262f' });
@@ -3888,9 +3888,13 @@ var state = {
         var fw = Math.max(2, Math.round(smJ.avg / maxAvg * barArea));
         var fill = svgEl('rect', { x: labelW, y: y + 4, width: fw, height: RH - 8, rx: 5, fill: 'url(#timingBarGrad)' });
         bSvg.appendChild(fill);
-        var val = svgEl('text', { x: labelW + fw + 8, y: cy + 5, 'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
-        val.textContent = smJ.avg.toFixed(1) + ' 天（有效樣本 ' + smJ.n + ' 筆）';
+        var valX = labelW + fw + 8;
+        var val = svgEl('text', { x: valX, y: cy + 5, 'font-size': '14', 'font-weight': '650', fill: '#ffffff' });
+        val.textContent = smJ.avg.toFixed(1) + ' 天';
         bSvg.appendChild(val);
+        var sample = svgEl('text', { x: valX + 52, y: cy + 5, 'font-size': '12', fill: '#9aa3b2' });
+        sample.textContent = '（有效樣本 ' + smJ.n + ' 筆）';
+        bSvg.appendChild(sample);
       }
       colRight.appendChild(bSvg);
       gridWrap.appendChild(colRight);
