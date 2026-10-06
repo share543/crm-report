@@ -973,6 +973,7 @@
             <button type="button" data-ag-prefix="**">＊＊ 次重點</button>
             <button type="button" data-ag-prefix="&gt;">＞ 說明</button>
             <button type="button" data-ag-wrap="_">_ 底線</button>
+            <button type="button" data-ag-insert=" &gt; ">→ 流程箭頭</button>
           </div>
           <p class="ag-legend" id="agLegend"></p>
           <textarea id="agendaText" rows="8" placeholder="例：&#10;#本季開發狀況總覽&#10;-各課開發進度與轉換率&#10;*南一課零擔積壓 19 件&#10;**其中 12 件超過 30 天未接觸&#10;>延續上次會議結論，需站所主管分派&#10;#需討論的轉換流失案&#10;*本次須定案：_導入流程縮短方案_"></textarea>
@@ -2991,7 +2992,7 @@ var state = {
     { type: 'item',   prefix: '-',  name: '項目',   desc: '圓點' },
     { type: 'key',    prefix: '*',  name: '重點',   desc: '黃色★＋粗體' },
     { type: 'subkey', prefix: '**', name: '次重點', desc: '縮排＋黃色◦＋粗體' },
-    { type: 'note',   prefix: '>',  name: '說明',   desc: '灰色「說明」小標籤' }
+    { type: 'note',   prefix: '>',  name: '說明',   desc: '灰色朝右箭頭 →' }
   ];
   var AGENDA_TYPE_LABEL = { ke: '大項', item: '項目', key: '重點', subkey: '次重點', note: '說明' };
 
@@ -3039,6 +3040,17 @@ var state = {
     return out;
   }
 
+  // 純函式：行內箭頭 → 把 '->'、'=>'、'>'、'＞' 轉成 '→'
+  // 可在一行內重複多次（例：'報價 > 簽約 > 導入' → '報價 → 簽約 → 導入'）
+  // 規則刻意保持單純好預測：所有 '>' 都變箭頭（數字前也一樣）。
+  // 若要表達「大於」，請寫「超過 30 天」或「大於」，不要用 '>'。
+  function normalizeInlineArrows(text){
+    var s = String(text == null ? '' : text);
+    s = s.replace(/=>|->/g, '→');
+    s = s.replace(/[>＞]/g, '→');
+    return s;
+  }
+
   // 純函式：行內 _文字_ → 片段 [{ text, u }]（u=true 表底線）
   function parseAgendaInline(text){
     var s = String(text == null ? '' : text);
@@ -3077,7 +3089,7 @@ var state = {
         span.textContent = no + '.';
         li.appendChild(span);
       }
-      var parts = parseAgendaInline(n.text);
+      var parts = parseAgendaInline(normalizeInlineArrows(n.text));
       for(var p = 0; p < parts.length; p++){
         if(parts[p].u){
           var u = document.createElement('u');
@@ -3097,7 +3109,7 @@ var state = {
     if(!el) return;
     el.textContent = '';
     var b1 = document.createElement('b');
-    b1.textContent = '語法：';
+    b1.textContent = '行首語法：';
     el.appendChild(b1);
     for(var i = 0; i < AGENDA_TYPES.length; i++){
       var t = AGENDA_TYPES[i];
@@ -3107,12 +3119,19 @@ var state = {
       el.appendChild(document.createTextNode('（' + t.desc + '）'));
       if(i < AGENDA_TYPES.length - 1) el.appendChild(document.createTextNode('　'));
     }
+    el.appendChild(document.createElement('br'));
     var b2 = document.createElement('b');
-    b2.textContent = '　_強調_';
+    b2.textContent = '行內：';
     el.appendChild(b2);
-    el.appendChild(document.createTextNode('（前後各一個底線＝粗底線）'));
-    var br = document.createElement('br');
-    el.appendChild(br);
+    var b3 = document.createElement('b');
+    b3.textContent = '_文字_';
+    el.appendChild(b3);
+    el.appendChild(document.createTextNode('＝粗底線　'));
+    var b4 = document.createElement('b');
+    b4.textContent = 'A > B > C';
+    el.appendChild(b4);
+    el.appendChild(document.createTextNode('＝顯示成 A → B → C（箭頭可在一行內重複多次；行內所有 > 都會變成箭頭）'));
+    el.appendChild(document.createElement('br'));
     el.appendChild(document.createTextNode(
       '沒有符號＝大項（舊資料自動相容）；按 Enter 會沿用上一行的符號，方便連續輸入。'));
   }
@@ -3155,6 +3174,17 @@ var state = {
       ta.value = v.slice(0, s) + '_' + v.slice(s, e) + '_' + v.slice(e);
       ta.setSelectionRange(s + 1, e + 1);
     }
+    ta.focus();
+  }
+
+  // 在游標處插入文字（不改變該行的層級）—— 給行內流程箭頭用
+  function agendaInsertAtCursor(ta, text){
+    if(!ta) return;
+    var v = ta.value;
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    ta.value = v.slice(0, s) + text + v.slice(e);
+    var pos = s + text.length;
+    ta.setSelectionRange(pos, pos);
     ta.focus();
   }
 
@@ -7560,8 +7590,10 @@ var state = {
         var ta = document.getElementById('agendaText');
         var pre = btn.getAttribute('data-ag-prefix');
         var wrap = btn.getAttribute('data-ag-wrap');
+        var ins = btn.getAttribute('data-ag-insert');
         if(pre !== null) agendaApplyPrefix(ta, pre);
         else if(wrap) agendaWrapUnderline(ta);
+        else if(ins !== null) agendaInsertAtCursor(ta, ins);
         updateAgendaPreview();
       });
     }
@@ -7657,7 +7689,9 @@ var state = {
       normalizeAgMarker: normalizeAgMarker,
       stripManualNumber: stripManualNumber,
       parseAgendaLines: parseAgendaLines,
+      normalizeInlineArrows: normalizeInlineArrows,
       parseAgendaInline: parseAgendaInline,
+      agendaInsertAtCursor: agendaInsertAtCursor,
       renderAgendaNodes: renderAgendaNodes,
       renderAgendaLegend: renderAgendaLegend,
       updateAgendaPreview: updateAgendaPreview,
