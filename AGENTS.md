@@ -181,12 +181,15 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - **全形相容**：`normalizeAgMarker` 把 `＃－＊＞` 轉半形（中文輸入法常打出全形）。
 - **列印**：`@media print{ .agenda-editor, .agenda-empty-btn{display:none!important} }`，
   編輯器是操作介面不該進 PDF。投影層級字級只在 `body.pv-mode #agendaList > li.ag-*` 調，內容不省略。
-- ⚠️ **`說明` 標籤不可用「絕對定位 + 固定 padding」**：曾用
-  `::before{position:absolute;left:30px}` 配 `.ag-note{padding-left:52px}`，
-  但標籤寬約 30px（2 個 10px 中文字 + padding 4px×2 + 邊框 1px×2）→ 右緣 60px，
-  與文字起點 52px **重疊 8px**。改用 `display:flex` + `gap`，
-  標籤為 flex item、文字自然接在其後，改字級／padding 都不會再撞。
-  （同類風險：任何「絕對定位標籤 + 對稱 padding」的組合，寬度一變就重疊。）
+- ⚠️ **議題的層級標記一律用 flex，不要用「絕對定位 + 手寫 left」**。
+  踩過的坑：每個標記寫死 `left`，卻沒算字形實際寬度 → 全部都會壓到文字：
+  `★` 寬 15px（right 31 > 文字 30）、`◦` 寬 16px（right 54 > 文字 52）、
+  原本的「說明」徽章寬約 30px（right 60 > 文字 52）。
+  連**投影模式**也中招（★ −2、◦ 0）。**只修被回報的那一個會漏掉其他的** —— 要一次修全部。
+  現行做法：`.ag-item/.ag-key/.ag-subkey/.ag-note` 皆 `display:flex`，
+  標記 `flex:0 0 22px`（投影 32px）、`gap:8px`（投影 12px），
+  文字欄位因此固定為 大項 17／項目與重點 30／次重點與說明 52（投影 44／74）。
+  「說明」用朝右箭頭 `→`，不再用文字徽章（徽章太寬，是重疊主因）。
 - **驗證方式**：`Range.getBoundingClientRect()` 量文字左緣，再用「同款樣式的探針 span」
   量 `::before` 的寬度（`getComputedStyle(li,'::before')` 取 font/padding/border 後組一個 span），
   兩者相減即為實際間距；螢幕／預覽／投影三處都要量。
