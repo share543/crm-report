@@ -533,24 +533,25 @@
     margin-top:14px; border-left:4px solid var(--accent); padding-left:13px; }
   .ag > li.ag-ke:first-child{ margin-top:0; }
   .ag > li.ag-ke .ag-no{ color:var(--accent); margin-right:9px; font-variant-numeric:tabular-nums; }
+  /* 標記與文字一律用 flex（固定標記欄 + 固定間距），不再用絕對定位手寫座標。
+     ⚠ 原本每個標記都寫死 left，卻沒算字形實際寬度 → ★(15px) 與 ◦(16px) 都會壓到文字。
+     文字欄位：大項 17／項目與重點 30／次重點與說明 52 */
+  .ag > li.ag-item, .ag > li.ag-key{ display:flex; align-items:flex-start; gap:8px; }
+  .ag > li.ag-subkey, .ag > li.ag-note{ display:flex; align-items:flex-start; gap:8px; padding-left:22px; }
+  .ag > li.ag-item::before, .ag > li.ag-key::before,
+  .ag > li.ag-subkey::before, .ag > li.ag-note::before{ flex:0 0 22px; text-align:center; }
   /* 項目 */
-  .ag > li.ag-item{ font-size:15px; font-weight:400; color:var(--text); padding-left:30px; }
-  .ag > li.ag-item::before{ content:'•'; position:absolute; left:17px; color:var(--muted); font-weight:700; }
+  .ag > li.ag-item{ font-size:15px; font-weight:400; color:var(--text); }
+  .ag > li.ag-item::before{ content:'•'; color:var(--muted); font-weight:700; }
   /* 重點 */
-  .ag > li.ag-key{ font-size:15px; font-weight:700; color:var(--warning); padding-left:30px; }
-  .ag > li.ag-key::before{ content:'★'; position:absolute; left:16px; color:var(--warning); }
+  .ag > li.ag-key{ font-size:15px; font-weight:700; color:var(--warning); }
+  .ag > li.ag-key::before{ content:'★'; color:var(--warning); }
   /* 次項目重點 */
-  .ag > li.ag-subkey{ font-size:14px; font-weight:700; color:var(--text); padding-left:52px; }
-  .ag > li.ag-subkey::before{ content:'◦'; position:absolute; left:38px; top:1px;
-    color:var(--warning); font-weight:700; font-size:16px; }
-  /* 說明：標籤與文字用 flex 排列，文字自然接在標籤後方
-     （原本用絕對定位 left:30px + 文字 padding-left:52px，但標籤寬約 30px
-       → 標籤右緣 60px 與文字起點 52px 重疊 8px） */
-  .ag > li.ag-note{ display:flex; align-items:flex-start; gap:6px;
-    font-size:13px; color:var(--muted); line-height:1.6; padding-left:30px; }
-  .ag > li.ag-note::before{ content:'說明'; flex:0 0 auto; margin-top:3px;
-    font-size:10px; font-weight:700; color:var(--muted);
-    border:1px solid var(--border); border-radius:3px; padding:0 4px; line-height:1.5; }
+  .ag > li.ag-subkey{ font-size:14px; font-weight:700; color:var(--text); }
+  .ag > li.ag-subkey::before{ content:'◦'; font-size:16px; color:var(--warning); font-weight:700; }
+  /* 說明：朝右箭頭標記（「說明」文字標籤已移除 —— 它會與接續文字互相擠壓） */
+  .ag > li.ag-note{ font-size:13px; color:var(--muted); line-height:1.6; }
+  .ag > li.ag-note::before{ content:'→'; font-size:13px; font-weight:700; color:var(--muted); }
   /* 行內底線（_文字_） */
   .ag u{ text-decoration:underline; text-decoration-color:var(--accent);
     text-decoration-thickness:2px; text-underline-offset:3px; }
@@ -629,14 +630,16 @@
   /* 議題第一頁大字：投影片就是大綱，便於近距與投影遠讀（依層級縮放，內容全部保留） */
   body.pv-mode #agendaList{ margin:8px 0 0; }
   body.pv-mode #agendaList > li.ag-ke{ font-size:32px; margin-top:22px; border-left-width:6px; padding-left:20px; }
-  body.pv-mode #agendaList > li.ag-item{ font-size:25px; padding-left:44px; line-height:1.7; }
-  body.pv-mode #agendaList > li.ag-item::before{ left:22px; }
-  body.pv-mode #agendaList > li.ag-key{ font-size:25px; padding-left:44px; line-height:1.7; }
-  body.pv-mode #agendaList > li.ag-key::before{ left:21px; }
-  body.pv-mode #agendaList > li.ag-subkey{ font-size:21px; padding-left:74px; line-height:1.7; }
-  body.pv-mode #agendaList > li.ag-subkey::before{ left:52px; font-size:22px; top:3px; }
-  body.pv-mode #agendaList > li.ag-note{ font-size:17px; padding-left:44px; gap:8px; }
-  body.pv-mode #agendaList > li.ag-note::before{ font-size:12px; margin-top:4px; }
+  body.pv-mode #agendaList > li.ag-item,
+  body.pv-mode #agendaList > li.ag-key{ font-size:25px; line-height:1.7; gap:12px; }
+  body.pv-mode #agendaList > li.ag-subkey{ font-size:21px; line-height:1.7; padding-left:30px; gap:12px; }
+  body.pv-mode #agendaList > li.ag-note{ font-size:17px; padding-left:30px; gap:12px; }
+  body.pv-mode #agendaList > li.ag-item::before,
+  body.pv-mode #agendaList > li.ag-key::before,
+  body.pv-mode #agendaList > li.ag-subkey::before,
+  body.pv-mode #agendaList > li.ag-note::before{ flex:0 0 32px; }
+  body.pv-mode #agendaList > li.ag-subkey::before{ font-size:22px; }
+  body.pv-mode #agendaList > li.ag-note::before{ font-size:17px; }
   /* 本日議題兩欄：左＝議題清單，右＝開會資訊（資料範圍） */
   .agenda-wrap{ display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:20px; align-items:start; }
   .agenda-main{ min-width:0; }
