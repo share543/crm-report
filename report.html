@@ -453,6 +453,8 @@
   .snap-actions button{ cursor:pointer; }
   #snapHost{ position:fixed; left:-99999px; top:0; visibility:hidden; pointer-events:none; }
   @media print{ .snap-modal, #snapHost{ display:none !important; } }
+  /* 列印時隱藏議題編輯器（工具列／文字框／即時預覽都是操作介面，不該進 PDF） */
+  @media print{ .agenda-editor, .agenda-empty-btn{ display:none !important; } }
   /* 列印設定面板（沿用 snap-modal 外觀語彙） */
   .print-modal{ position:fixed; inset:0; z-index:2100; background:rgba(5,8,12,.6);
     display:flex; align-items:center; justify-content:center; padding:18px; }
@@ -521,16 +523,55 @@
   .mini-btn{ background:none; border:none; padding:0; color:var(--accent);
     text-decoration:underline; cursor:pointer; font-size:12px; }
   .mini-btn:hover{ color:var(--text); }
-  /* 簡報議題（開場亮點頂部） */
+  /* 本日議題：層級化議題（大項／項目／重點／次重點／說明；行內底線） */
   .agenda-block{ padding:12px 16px; border:1px solid var(--border); border-radius:10px;
     background:var(--card-2); margin:8px 0 14px; }
-  .agenda-block ol{ margin:6px 0 10px; padding-left:22px; }
-  .agenda-block li{ font-size:16px; line-height:1.8; color:var(--text); }
+  .ag{ list-style:none; margin:6px 0 10px; padding:0; }
+  .ag > li{ position:relative; padding:2px 0; }
+  /* 大項（自動編號） */
+  .ag > li.ag-ke{ font-size:19px; font-weight:700; line-height:1.5; color:var(--text);
+    margin-top:14px; border-left:4px solid var(--accent); padding-left:13px; }
+  .ag > li.ag-ke:first-child{ margin-top:0; }
+  .ag > li.ag-ke .ag-no{ color:var(--accent); margin-right:9px; font-variant-numeric:tabular-nums; }
+  /* 項目 */
+  .ag > li.ag-item{ font-size:15px; font-weight:400; color:var(--text); padding-left:30px; }
+  .ag > li.ag-item::before{ content:'•'; position:absolute; left:17px; color:var(--muted); font-weight:700; }
+  /* 重點 */
+  .ag > li.ag-key{ font-size:15px; font-weight:700; color:var(--warning); padding-left:30px; }
+  .ag > li.ag-key::before{ content:'★'; position:absolute; left:16px; color:var(--warning); }
+  /* 次項目重點 */
+  .ag > li.ag-subkey{ font-size:14px; font-weight:700; color:var(--text); padding-left:52px; }
+  .ag > li.ag-subkey::before{ content:'◦'; position:absolute; left:38px; top:1px;
+    color:var(--warning); font-weight:700; font-size:16px; }
+  /* 說明 */
+  .ag > li.ag-note{ font-size:13px; color:var(--muted); line-height:1.6; padding-left:52px; }
+  .ag > li.ag-note::before{ content:'說明'; position:absolute; left:30px; top:4px; font-size:10px;
+    font-weight:700; color:var(--muted); border:1px solid var(--border); border-radius:3px;
+    padding:0 4px; line-height:1.5; }
+  /* 行內底線（_文字_） */
+  .ag u{ text-decoration:underline; text-decoration-color:var(--accent);
+    text-decoration-thickness:2px; text-underline-offset:3px; }
+  /* 空清單提示（編輯器即時預覽用） */
+  .ag > li.ag-empty{ font-size:13px; color:var(--muted); padding-left:2px; }
+  .ag > li.ag-empty::before{ content:none; }
+
+  /* 議題編輯器：工具列 + 語法說明 + 即時預覽 */
   .agenda-editor{ padding:12px 16px; border:1px dashed var(--border); border-radius:10px;
     background:var(--card-2); margin:8px 0 14px; }
   .agenda-editor textarea{ width:100%; box-sizing:border-box; background:var(--card); color:var(--text);
-    border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit;
-    font-size:14px; line-height:1.6; resize:vertical; }
+    border:1px solid var(--border); border-radius:8px; padding:10px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:13.5px; line-height:1.9; resize:vertical; }
+  .ag-toolbar{ display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  .ag-toolbar button{ font:inherit; font-size:12px; padding:4px 10px; border-radius:6px; cursor:pointer;
+    background:var(--card); border:1px solid var(--border); color:var(--text); }
+  .ag-toolbar button:hover{ border-color:var(--accent); color:var(--accent); }
+  .ag-legend{ font-size:12px; color:var(--muted); margin:0 0 8px; line-height:1.8; }
+  .ag-legend b{ color:var(--text); font-weight:700; }
+  .ag-preview{ margin-top:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px;
+    background:var(--card); }
+  .ag-preview-title{ font-size:11.5px; color:var(--muted); margin:0 0 6px; }
+  .ag-preview .ag{ margin:0; }
   .agenda-actions{ display:flex; gap:8px; margin-top:10px; }
   .agenda-empty-btn{ display:block; width:100%; margin:8px 0 14px; padding:10px; font-size:14px;
     background:transparent; color:var(--muted); border:1px dashed var(--border); border-radius:10px;
@@ -582,8 +623,17 @@
   body.pv-mode #agendaBlock .mini-btn,
   body.pv-mode #addAgendaEmptyBtn,
   body.pv-mode #agendaEditor{ display:none; }
-  /* 議題第一頁大字：投影片就是大綱，便於近距與投影遠讀 */
-  body.pv-mode #agendaList li{ font-size:30px; line-height:2.1; }
+  /* 議題第一頁大字：投影片就是大綱，便於近距與投影遠讀（依層級縮放，內容全部保留） */
+  body.pv-mode #agendaList{ margin:8px 0 0; }
+  body.pv-mode #agendaList > li.ag-ke{ font-size:32px; margin-top:22px; border-left-width:6px; padding-left:20px; }
+  body.pv-mode #agendaList > li.ag-item{ font-size:25px; padding-left:44px; line-height:1.7; }
+  body.pv-mode #agendaList > li.ag-item::before{ left:22px; }
+  body.pv-mode #agendaList > li.ag-key{ font-size:25px; padding-left:44px; line-height:1.7; }
+  body.pv-mode #agendaList > li.ag-key::before{ left:21px; }
+  body.pv-mode #agendaList > li.ag-subkey{ font-size:21px; padding-left:74px; line-height:1.7; }
+  body.pv-mode #agendaList > li.ag-subkey::before{ left:52px; font-size:22px; top:3px; }
+  body.pv-mode #agendaList > li.ag-note{ font-size:17px; padding-left:74px; }
+  body.pv-mode #agendaList > li.ag-note::before{ left:44px; top:6px; font-size:12px; }
   /* 本日議題兩欄：左＝議題清單，右＝開會資訊（資料範圍） */
   .agenda-wrap{ display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:20px; align-items:start; }
   .agenda-main{ min-width:0; }
@@ -904,13 +954,26 @@
     <div class="agenda-wrap">
       <div class="agenda-main">
         <div class="agenda-block" id="agendaBlock" hidden>
-          <ol id="agendaList"></ol>
+          <ul class="ag" id="agendaList"></ul>
           <button type="button" class="mini-btn" id="editAgendaBtn">✎ 編輯議題</button>
         </div>
         <button type="button" class="agenda-empty-btn" id="addAgendaEmptyBtn" hidden>＋ 新增本日議題（簡報第 1 頁）</button>
         <div class="agenda-editor" id="agendaEditor" hidden>
-          <h3 class="subtitle">編輯本日議題 <span class="muted">每行一項</span></h3>
-          <textarea id="agendaText" rows="6" placeholder="例：&#10;1. 本季開發狀況總覽&#10;2. 需討論的轉換流失案&#10;3. 待確認里程碑"></textarea>
+          <h3 class="subtitle">編輯本日議題 <span class="muted">行首符號決定層級，一行一項</span></h3>
+          <div class="ag-toolbar" id="agToolbar">
+            <button type="button" data-ag-prefix="#">＃ 大項</button>
+            <button type="button" data-ag-prefix="-">－ 項目</button>
+            <button type="button" data-ag-prefix="*">＊ 重點</button>
+            <button type="button" data-ag-prefix="**">＊＊ 次重點</button>
+            <button type="button" data-ag-prefix="&gt;">＞ 說明</button>
+            <button type="button" data-ag-wrap="_">_ 底線</button>
+          </div>
+          <p class="ag-legend" id="agLegend"></p>
+          <textarea id="agendaText" rows="8" placeholder="例：&#10;#本季開發狀況總覽&#10;-各課開發進度與轉換率&#10;*南一課零擔積壓 19 件&#10;**其中 12 件超過 30 天未接觸&#10;>延續上次會議結論，需站所主管分派&#10;#需討論的轉換流失案&#10;*本次須定案：_導入流程縮短方案_"></textarea>
+          <div class="ag-preview">
+            <p class="ag-preview-title">即時預覽（儲存後即以此樣式顯示，簡報第 1 頁也相同）</p>
+            <ul class="ag" id="agendaPreview"></ul>
+          </div>
           <div class="agenda-actions">
             <button type="button" class="mini-btn" id="saveAgendaBtn">儲存</button>
             <button type="button" class="mini-btn" id="clearAgendaBtn">清除議題</button>
@@ -2898,6 +2961,220 @@ var state = {
     return out;
   }
 
+  // ---------------------------------------------------------------------------
+  // 議題層級語法（單一來源：解析、工具列、圖例都讀這裡）
+  //   #   大項（自動編號 1. 2. 3.）
+  //   -   項目
+  //   *   重點
+  //   **  次重點
+  //   >   說明
+  //   _文字_  行內底線
+  //   無符號 → 視為大項（與舊資料相容）
+  // ⚠ 比對順序：'**' 必須排在 '*' 之前，否則次重點會被吃成重點。
+  // ---------------------------------------------------------------------------
+  var AGENDA_PREFIXES = [
+    { prefix: '**', type: 'subkey' },
+    { prefix: '#',  type: 'ke' },
+    { prefix: '-',  type: 'item' },
+    { prefix: '*',  type: 'key' },
+    { prefix: '>',  type: 'note' }
+  ];
+  // 顯示順序（圖例與工具列用；與解析順序無關）
+  var AGENDA_TYPES = [
+    { type: 'ke',     prefix: '#',  name: '大項',   desc: '粗體＋左側色條，自動編號' },
+    { type: 'item',   prefix: '-',  name: '項目',   desc: '圓點' },
+    { type: 'key',    prefix: '*',  name: '重點',   desc: '黃色★＋粗體' },
+    { type: 'subkey', prefix: '**', name: '次重點', desc: '縮排＋黃色◦＋粗體' },
+    { type: 'note',   prefix: '>',  name: '說明',   desc: '灰色「說明」小標籤' }
+  ];
+  var AGENDA_TYPE_LABEL = { ke: '大項', item: '項目', key: '重點', subkey: '次重點', note: '說明' };
+
+  // 全形 → 半形（中文輸入法容易打出全形符號）
+  function normalizeAgMarker(ch){
+    if(ch === '＃') return '#';
+    if(ch === '－') return '-';
+    if(ch === '＊') return '*';
+    if(ch === '＞') return '>';
+    if(ch === '　') return ' ';
+    return ch;
+  }
+
+  // 舊資料可能自己打了編號（例：1. xxx／一、xxx／(1) xxx）→ 去掉，避免與自動編號重複。
+  // 用負向先行排除「1.5」這類小數，以免誤刪內容。
+  function stripManualNumber(s){
+    var t = String(s == null ? '' : s).replace(/^[\(（]?\d+[\)）]?[.、．)）](?!\d)\s*/, '');
+    if(t === s) t = String(s == null ? '' : s).replace(/^[\(（]?[一二三四五六七八九十]+[\)）]?[.、．)）](?!\d)\s*/, '');
+    return t;
+  }
+
+  // 純函式：編輯器文字 → 議題節點 [{ type, text }]
+  // 空行忽略；只打了符號沒有內容的行也忽略。
+  function parseAgendaLines(lines){
+    if(!Array.isArray(lines)) return [];
+    var out = [];
+    for(var i = 0; i < lines.length; i++){
+      var s = String(lines[i] == null ? '' : lines[i]).replace(/^\s+/, '');
+      if(!s) continue;
+      var type = null, text = '';
+      for(var p = 0; p < AGENDA_PREFIXES.length; p++){
+        var def = AGENDA_PREFIXES[p];
+        if(normalizeAgMarker(s.charAt(0)) !== def.prefix.charAt(0)) continue;
+        if(def.prefix.length === 2 && normalizeAgMarker(s.charAt(1)) !== def.prefix.charAt(1)) continue;
+        type = def.type;
+        text = s.slice(def.prefix.length).replace(/^\s+/, '');
+        break;
+      }
+      if(type === null){ type = 'ke'; text = stripManualNumber(s); }   // 無符號 → 大項（相容舊資料）
+      else if(type === 'ke'){ text = stripManualNumber(text); }
+      text = text.replace(/\s+$/, '');
+      if(!text) continue;
+      out.push({ type: type, text: text });
+    }
+    return out;
+  }
+
+  // 純函式：行內 _文字_ → 片段 [{ text, u }]（u=true 表底線）
+  function parseAgendaInline(text){
+    var s = String(text == null ? '' : text);
+    var parts = [], last = 0, m;
+    var re = /_([^_]+)_/g;
+    while((m = re.exec(s)) !== null){
+      if(m.index > last) parts.push({ text: s.slice(last, m.index), u: false });
+      parts.push({ text: m[1], u: true });
+      last = m.index + m[0].length;
+    }
+    if(last < s.length) parts.push({ text: s.slice(last), u: false });
+    if(!parts.length) parts.push({ text: s, u: false });
+    return parts;
+  }
+
+  // 渲染議題節點到指定的 <ul class="ag">；一律用 createElement／createTextNode（防注入）
+  function renderAgendaNodes(ul, nodes){
+    if(!ul) return;
+    ul.textContent = '';
+    if(!nodes || !nodes.length){
+      var empty = document.createElement('li');
+      empty.className = 'ag-empty';
+      empty.textContent = '（尚無內容）';
+      ul.appendChild(empty);
+      return;
+    }
+    var no = 0;
+    for(var i = 0; i < nodes.length; i++){
+      var n = nodes[i];
+      var li = document.createElement('li');
+      li.className = 'ag-' + n.type;
+      if(n.type === 'ke'){
+        no++;
+        var span = document.createElement('span');
+        span.className = 'ag-no';
+        span.textContent = no + '.';
+        li.appendChild(span);
+      }
+      var parts = parseAgendaInline(n.text);
+      for(var p = 0; p < parts.length; p++){
+        if(parts[p].u){
+          var u = document.createElement('u');
+          u.appendChild(document.createTextNode(parts[p].text));
+          li.appendChild(u);
+        } else {
+          li.appendChild(document.createTextNode(parts[p].text));
+        }
+      }
+      ul.appendChild(li);
+    }
+  }
+
+  // 編輯器內的常駐語法說明（成本近乎零，隔多久回來都還記得怎麼用）
+  function renderAgendaLegend(){
+    var el = document.getElementById('agLegend');
+    if(!el) return;
+    el.textContent = '';
+    var b1 = document.createElement('b');
+    b1.textContent = '語法：';
+    el.appendChild(b1);
+    for(var i = 0; i < AGENDA_TYPES.length; i++){
+      var t = AGENDA_TYPES[i];
+      var b = document.createElement('b');
+      b.textContent = t.prefix + ' ' + t.name;
+      el.appendChild(b);
+      el.appendChild(document.createTextNode('（' + t.desc + '）'));
+      if(i < AGENDA_TYPES.length - 1) el.appendChild(document.createTextNode('　'));
+    }
+    var b2 = document.createElement('b');
+    b2.textContent = '　_強調_';
+    el.appendChild(b2);
+    el.appendChild(document.createTextNode('（前後各一個底線＝粗底線）'));
+    var br = document.createElement('br');
+    el.appendChild(br);
+    el.appendChild(document.createTextNode(
+      '沒有符號＝大項（舊資料自動相容）；按 Enter 會沿用上一行的符號，方便連續輸入。'));
+  }
+
+  // 即時預覽：讀 textarea → 解析 → 渲染
+  function updateAgendaPreview(){
+    var ta = document.getElementById('agendaText');
+    var ul = document.getElementById('agendaPreview');
+    if(!ul) return;
+    renderAgendaNodes(ul, parseAgendaLines(ta ? ta.value.split('\n') : []));
+  }
+
+  // 在游標所在行首套用層級符號（會先去掉該行原有的符號，可反覆切換）
+  function agendaApplyPrefix(ta, prefix){
+    if(!ta) return;
+    var v = ta.value;
+    var selStart = ta.selectionStart, selEnd = ta.selectionEnd;
+    var lineStart = v.lastIndexOf('\n', selStart - 1) + 1;
+    var lineEnd = v.indexOf('\n', lineStart);
+    if(lineEnd === -1) lineEnd = v.length;
+    var line = v.slice(lineStart, lineEnd);
+    var stripped = line.replace(/^\s*(?:\*\*|[#\-*>＃－＊＞])[ \t]*/, '');
+    var newLine = prefix + stripped;
+    ta.value = v.slice(0, lineStart) + newLine + v.slice(lineEnd);
+    var pos = selStart + (newLine.length - line.length);
+    if(pos < lineStart + prefix.length) pos = lineStart + prefix.length;
+    ta.setSelectionRange(pos, pos);
+    ta.focus();
+  }
+
+  // 把選取的文字用底線符號包起來；沒有選取時插入一組空標記並把游標放中間
+  function agendaWrapUnderline(ta){
+    if(!ta) return;
+    var v = ta.value;
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    if(s === e){
+      ta.value = v.slice(0, s) + '__' + v.slice(e);
+      ta.setSelectionRange(s + 1, s + 1);
+    } else {
+      ta.value = v.slice(0, s) + '_' + v.slice(s, e) + '_' + v.slice(e);
+      ta.setSelectionRange(s + 1, e + 1);
+    }
+    ta.focus();
+  }
+
+  // Enter 沿用上一行符號，方便連續輸入；若該行只有符號（沒內容）則清掉符號並結束該層
+  function agendaHandleEnter(ta, ev){
+    if(!ta) return;
+    var v = ta.value;
+    var s = ta.selectionStart;
+    if(s !== ta.selectionEnd) return;
+    var lineStart = v.lastIndexOf('\n', s - 1) + 1;
+    var line = v.slice(lineStart, s);
+    var m = line.match(/^(\s*(?:\*\*|[#\-*>＃－＊＞])\s*)(.*)$/);
+    if(!m) return;
+    ev.preventDefault();
+    if(!m[2].replace(/\s/g, '')){
+      ta.value = v.slice(0, lineStart) + v.slice(s);
+      ta.setSelectionRange(lineStart, lineStart);
+    } else {
+      var ins = '\n' + m[1];
+      ta.value = v.slice(0, s) + ins + v.slice(ta.selectionEnd);
+      var pos = s + ins.length;
+      ta.setSelectionRange(pos, pos);
+    }
+    ta.focus();
+  }
+
   // 渲染議題卡：有資料才顯示區段；有內容時顯示清單，否則顯示「＋新增議題」入口；
   // 以 createTextNode 產生 <li>（沿用專案防 XSS 慣例）
   function renderAgenda(){
@@ -2919,12 +3196,7 @@ var state = {
       if(emptyBtn) emptyBtn.hidden = false;
       return;
     }
-    list.textContent = '';
-    for(var i = 0; i < state.agenda.length; i++){
-      var li = document.createElement('li');
-      li.appendChild(document.createTextNode(state.agenda[i]));
-      list.appendChild(li);
-    }
+    renderAgendaNodes(list, parseAgendaLines(state.agenda));
     block.hidden = false;
     if(emptyBtn) emptyBtn.hidden = true;
   }
@@ -7262,10 +7534,40 @@ var state = {
     var openAgendaEditor = function(){
       var editor = document.getElementById('agendaEditor');
       var ta = document.getElementById('agendaText');
-      if(editor && ta){ ta.value = (state.agenda || []).join('\n'); editor.hidden = false; editor.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      if(editor && ta){
+        ta.value = (state.agenda || []).join('\n');
+        editor.hidden = false;
+        renderAgendaLegend();
+        updateAgendaPreview();
+        editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     };
     if(editAgendaBtn){
       editAgendaBtn.addEventListener('click', openAgendaEditor);
+    }
+    // 議題編輯器：工具列（插入層級符號／包底線）、即時預覽、Enter 沿用上一行符號
+    var agToolbar = document.getElementById('agToolbar');
+    if(agToolbar){
+      agToolbar.addEventListener('click', function(ev){
+        var btn = (ev.target && ev.target.closest) ? ev.target.closest('button') : null;
+        if(!btn) return;
+        var ta = document.getElementById('agendaText');
+        var pre = btn.getAttribute('data-ag-prefix');
+        var wrap = btn.getAttribute('data-ag-wrap');
+        if(pre !== null) agendaApplyPrefix(ta, pre);
+        else if(wrap) agendaWrapUnderline(ta);
+        updateAgendaPreview();
+      });
+    }
+    var agendaTextEl = document.getElementById('agendaText');
+    if(agendaTextEl){
+      agendaTextEl.addEventListener('input', updateAgendaPreview);
+      agendaTextEl.addEventListener('keydown', function(ev){
+        if(ev.key === 'Enter' && !ev.shiftKey){
+          agendaHandleEnter(agendaTextEl, ev);
+          updateAgendaPreview();
+        }
+      });
     }
     var addAgendaEmptyBtn = document.getElementById('addAgendaEmptyBtn');
     if(addAgendaEmptyBtn){
@@ -7343,6 +7645,19 @@ var state = {
       renderHighlights: renderHighlights,
       renderHighlightsSection: renderHighlightsSection,
       normalizeAgenda: normalizeAgenda,
+      AGENDA_PREFIXES: AGENDA_PREFIXES,
+      AGENDA_TYPES: AGENDA_TYPES,
+      AGENDA_TYPE_LABEL: AGENDA_TYPE_LABEL,
+      normalizeAgMarker: normalizeAgMarker,
+      stripManualNumber: stripManualNumber,
+      parseAgendaLines: parseAgendaLines,
+      parseAgendaInline: parseAgendaInline,
+      renderAgendaNodes: renderAgendaNodes,
+      renderAgendaLegend: renderAgendaLegend,
+      updateAgendaPreview: updateAgendaPreview,
+      agendaApplyPrefix: agendaApplyPrefix,
+      agendaWrapUnderline: agendaWrapUnderline,
+      agendaHandleEnter: agendaHandleEnter,
       SLOW_DAYS: SLOW_DAYS, STALE_DAYS: STALE_DAYS, ALERT_MAX: ALERT_MAX,
       renderAlerts: renderAlerts,
       renderAlertsSection: renderAlertsSection,
