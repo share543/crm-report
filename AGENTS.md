@@ -160,6 +160,14 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 驗「案件清單只印當前頁」：用 `pdftotext` 抽出的序號集合判斷
   （page 模式只出現 50 個序號；all 模式出現全部）。
 
+## 各階段平均天數圖表可讀性（2026-10-05 改善）
+
+- 標籤字級 13px → 14px，顏色 `#e8eaef` → `#ffffff`（提高對比）
+- 數值字級 13px → 14px，顏色 `#e8eaef` → `#ffffff`
+- 左側標籤與長條間距 8px → 12px
+- 樣本數說明改為 12px，顏色 `#9aa3b2`（次要資訊）
+- 數值與樣本數分開顯示，避免擁擠
+
 ## 待留意事項的交叉跳轉（2026-10 新增）
 
 - 警報由純函式 `collectAlerts(rows)` 產生，回傳 `items[]`（`{sev, kind, title, sections:[{lead, entries:[{row,label,note}]}]}`）
