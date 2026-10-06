@@ -431,8 +431,32 @@
   @media print{ .cols-panel{ display:none !important; } }
   /* 區塊存成圖片：每卡右上「存圖」按鈕＋輸出 modal＋量測 host */
   section.card{ position:relative; }
-  .snap-btn{ position:absolute; top:14px; right:14px; }
-  body.pv-mode .snap-btn{ display:none !important; }
+  /* 卡片右上工具列：跳到案件清單 + 存圖。
+     用 flex 群組而非各自 absolute + 手寫 right 值 —— 按鈕文字一改就會擠在一起。 */
+  .card-tools{ position:absolute; top:14px; right:14px; display:flex; align-items:center; gap:14px; }
+  .snap-btn{ position:static; }
+  /* 跳到案件清單（放在「存圖」左邊） */
+  .jump-btn{ background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
+    color:var(--muted); font-size:12px; display:inline-flex; align-items:center; gap:5px; }
+  .jump-btn:hover{ color:var(--accent); }
+  .jump-btn .jump-glyph{ font-size:14px; line-height:1; }
+  body.pv-mode .snap-btn,
+  body.pv-mode .card-tools{ display:none !important; }
+  /* 回跳：案件清單標題列的膠囊鈕 */
+  .back-btn{ background:none; border:1px solid var(--border); border-radius:999px;
+    padding:2px 10px; font-family:inherit; font-size:12px; color:var(--accent); cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; }
+  .back-btn:hover{ border-color:var(--accent); color:var(--text); }
+  .back-btn[hidden]{ display:none; }
+  /* 回跳：浮動膠囊（案件清單標題列捲出畫面後才出現） */
+  #backPill{ position:fixed; right:20px; bottom:20px; z-index:900;
+    background:var(--card-2); border:1px solid var(--accent); border-radius:999px;
+    padding:8px 15px; font-family:inherit; font-size:12.5px; color:var(--text); cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  #backPill[hidden]{ display:none; }
+  #backPill:hover{ background:var(--accent); color:#fff; }
+  /* 列印：跳轉／回跳都是操作介面，不進 PDF（#backPill 是 fixed，不關掉會每頁重複） */
+  @media print{ .card-tools, #backPill{ display:none !important; } }
   .snap-modal{ position:fixed; inset:0; z-index:2000; background:rgba(5,8,12,.6);
     display:flex; align-items:center; justify-content:center; padding:18px; }
   .snap-modal[hidden]{ display:none; }
@@ -1044,6 +1068,7 @@
   </section>
   <section class="card" id="listSection" hidden>
     <div class="list-head">
+      <button type="button" class="back-btn" id="listBackBtn" hidden>← 回到</button>
       <h2>案件清單</h2>
       <button type="button" class="mini-btn" id="listColsBtn">欄位 ⚙</button>
       <div id="listColsPanel" class="cols-panel" hidden>
@@ -1063,6 +1088,8 @@
     <div id="rawTable"></div>
   </section>
   <div id="snapHost" aria-hidden="true"></div>
+  <!-- 回跳浮動膠囊：案件清單標題列捲出畫面後才出現（沒有來源時保持隱藏） -->
+  <button type="button" id="backPill" hidden>← 回到</button>
   <div class="snap-modal" id="snapModal" hidden role="dialog" aria-modal="true" aria-label="儲存區塊圖片">
     <div class="snap-box">
       <h3>儲存區塊圖片：<span id="snapTitle">區塊</span></h3>
@@ -1104,6 +1131,8 @@ var state = {
     printView: 'auto',  // 列印版型（'auto'＝跟隨畫面 | 'mobile' | 'desktop'）
     printList: 'page'   // 案件清單列印範圍（'page'＝當前頁 | 'all'＝全部符合條件的案件）
   };
+  // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
+  state.jumpFrom = null;   // { id, title } | null
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
   var DATE_COLS = new Set(['填單日期','初步接洽','需求確認','報價','簽約','導入']);
@@ -3631,11 +3660,87 @@ var state = {
     var tr = findListRowEl(row);
     if(!tr) return false;
     if(!tr.classList.contains('list-row-open')) tr.click();
-    // 即時捲動（不用 smooth）：跨頁跳轉距離大，smooth 在部分環境／無障礙設定下不會跑，
+    // 即時捲動：跨頁跳轉距離大，smooth 在部分環境／無障礙設定下不會跑，
     // 定位感改由高亮脈衝承擔；也讓自動化驗證量得到真的捲動結果。
-    try{ tr.scrollIntoView({ block: 'center', behavior: 'auto' }); }catch(e){ tr.scrollIntoView(); }
+    // ⚠ 必須用 'instant'，不能用 'auto' —— 本頁有 html{scroll-behavior:smooth}，
+    //   而 'auto' 依規範是「沿用 CSS 設定」＝ smooth，headless（虛擬時間）下完全不會動。
+    try{ tr.scrollIntoView({ block: 'center', behavior: 'instant' }); }catch(e){ tr.scrollIntoView(); }
     pulseClass(tr, 'jump-target');
     return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 區塊 →「案件清單」的泛用跳轉／回跳
+  //   跳轉：每個區塊右上角「☰ 案件」→ 捲到案件清單
+  //         保留目前篩選與頁碼（不偷偷改動使用者設好的條件）
+  //   回跳：案件清單標題列「← 回到 ○○○」＋ 標題列捲出畫面後的浮動膠囊
+  //   只記「最近一個來源」（單層返回），不做多層歷史
+  // ---------------------------------------------------------------------------
+
+  // 跳到案件清單。不傳 fromCard 就不改變來源（供既有 jumpToCase 之類呼叫）
+  function jumpToListSection(fromCard){
+    var list = document.getElementById('listSection');
+    if(!list) return false;
+    if(fromCard && fromCard.id && fromCard.id !== 'listSection'){
+      var h2 = fromCard.querySelector('h2');
+      var t = h2 ? (snapshotTitleText(h2) || h2.textContent || '') : '';
+      state.jumpFrom = { id: fromCard.id, title: String(t).replace(/\s+/g, ' ').trim() || '上一個區塊' };
+    }
+    updateBackControls();
+    unfoldSection(list);   // 被收合過要先展開，否則捲過去也看不到內容
+    try{ list.scrollIntoView({ block: 'start', behavior: 'instant' }); }catch(e){ list.scrollIntoView(); }
+    pulseClass(list, 'jump-target');
+    return true;
+  }
+
+  // 回到來源區塊
+  function backToJumpFrom(){
+    var from = state.jumpFrom;
+    if(!from) return false;
+    var card = document.getElementById(from.id);
+    if(!card) return false;
+    unfoldSection(card);
+    try{ card.scrollIntoView({ block: 'start', behavior: 'instant' }); }catch(e){ card.scrollIntoView(); }
+    pulseClass(card, 'jump-target');
+    updateBackControls();
+    return true;
+  }
+
+  // 同步回跳控制項（標題列鈕＋浮動膠囊）的文字與可見度
+  function updateBackControls(){
+    var from = state.jumpFrom;
+    var label = from ? (from.title || '上一個區塊') : '';
+    var btn = document.getElementById('listBackBtn');
+    if(btn){
+      if(from){
+        btn.hidden = false;
+        btn.textContent = '← 回到「' + label + '」';
+        btn.title = '回到「' + label + '」';
+      } else {
+        btn.hidden = true;
+        btn.textContent = '← 回到';
+        btn.removeAttribute('title');
+      }
+    }
+    updateBackPill();
+  }
+
+  // 浮動膠囊：只在「案件清單標題列已捲出畫面上方」且「還在案件清單附近」時出現，
+  // 避免捲到其他區塊時還浮著一顆沒用的按鈕（同一時間只會有一個返回入口）。
+  function updateBackPill(){
+    var pill = document.getElementById('backPill');
+    if(!pill) return;
+    var from = state.jumpFrom;
+    var list = document.getElementById('listSection');
+    if(!from || !list || list.hidden){ pill.hidden = true; return; }
+    var head = list.querySelector('.list-head');
+    if(!head){ pill.hidden = true; return; }
+    var hb = head.getBoundingClientRect();
+    var lb = list.getBoundingClientRect();
+    var vh = window.innerHeight || 0;
+    var show = (hb.bottom < 8) && (lb.bottom > 80) && (lb.top < vh);
+    pill.hidden = !show;
+    if(show) pill.textContent = '← 回到「' + (from.title || '上一個區塊') + '」';
   }
 
   // 反向：高亮待留意事項內符合條件的項目並捲過去（回傳命中數）
@@ -3660,7 +3765,7 @@ var state = {
         }
       }
     }
-    try{ sec.scrollIntoView({ block: 'start', behavior: 'auto' }); }catch(e){}
+    try{ sec.scrollIntoView({ block: 'start', behavior: 'instant' }); }catch(e){}
     return hits;
   }
 
@@ -6244,9 +6349,31 @@ var state = {
     for(var i = 0; i < cards.length; i++){
       var card = cards[i];
       if(!card || !card.querySelector) continue;
-      if(card.querySelector('.snap-btn')) continue;
+      if(card.querySelector('.card-tools')) continue;   // 已處理過（幂等）
       var h2 = card.querySelector('h2');
       if(!h2) continue;
+      // 右上工具列：一個 flex 群組，之後要再加按鈕只要往這裡 append，不必改任何座標。
+      // 一律插在卡片本身（不是 .list-head 內），所有卡片的 14px 定位才會一致。
+      var tools = document.createElement('div');
+      tools.className = 'card-tools';
+      // 跳到案件清單（案件清單自己不放：跳自己沒意義）
+      if(card.id !== 'listSection'){
+        var jb = document.createElement('button');
+        jb.type = 'button';
+        jb.className = 'jump-btn';
+        jb.setAttribute('data-jump-from', card.id || '');
+        jb.title = '跳到案件清單';
+        jb.setAttribute('aria-label', '跳到案件清單');
+        var glyph = document.createElement('span');
+        glyph.className = 'jump-glyph';
+        glyph.textContent = '☰';
+        jb.appendChild(glyph);
+        jb.appendChild(document.createTextNode('案件'));
+        (function(c){
+          jb.addEventListener('click', function(){ jumpToListSection(c); });
+        })(card);
+        tools.appendChild(jb);
+      }
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'mini-btn snap-btn';
@@ -6256,8 +6383,8 @@ var state = {
       (function(c){
         btn.addEventListener('click', function(){ openSnapshot(c); });
       })(card);
-      var host = (h2.parentNode && h2.parentNode.insertBefore) ? h2.parentNode : card;
-      host.insertBefore(btn, h2.nextSibling || null);
+      tools.appendChild(btn);
+      card.insertBefore(tools, card.firstChild || null);
     }
   }
 
@@ -6404,6 +6531,8 @@ var state = {
         var snapshotCss = rewriteSnapshotCss(pageCss);
         // 快照內不顯示「存圖」按鈕本身
         snapshotCss += '\n.shot-root .snap-btn{ display:none !important; }';
+        // 跳轉按鈕也一樣（操作介面不該進圖片）；整組工具列一起收掉較保險
+        snapshotCss += '\n.shot-root .card-tools{ display:none !important; }';
         // 取代表單控件的偵測用 span 樣式（仿 .list-field select/input 外觀，高度近似）
         snapshotCss += '\n.shot-root .snap-field{ display:inline-block; background:var(--card-2); color:var(--text);' +
           ' border:1px solid var(--border); border-radius:6px; padding:6px 10px;' +
@@ -7644,6 +7773,22 @@ var state = {
 
     buildListColsPanel();
     addSnapshotControls();
+    // 回跳控制項：案件清單標題列鈕 ＋ 浮動膠囊（兩者都指回最近一次跳轉的來源）
+    var listBackBtn = document.getElementById('listBackBtn');
+    if(listBackBtn) listBackBtn.addEventListener('click', backToJumpFrom);
+    var backPillEl = document.getElementById('backPill');
+    if(backPillEl) backPillEl.addEventListener('click', backToJumpFrom);
+    // 捲動時更新浮動膠囊。用 setTimeout 節流（不用 rAF）：
+    // ⚠ rAF 在部分環境（headless／虛擬時間、背景分頁）不會觸發，一旦沒觸發，
+    //   節流旗標就永遠卡住 → 膠囊之後再也不會更新。setTimeout 一定會執行。
+    var pillTimer = null;
+    var onScrollForPill = function(){
+      if(pillTimer) return;
+      pillTimer = setTimeout(function(){ pillTimer = null; updateBackPill(); }, 80);
+    };
+    window.addEventListener('scroll', onScrollForPill, { passive: true });
+    window.addEventListener('resize', onScrollForPill);
+    updateBackControls();
     tryRestoreData();
     renderAgenda();
   }
@@ -7710,6 +7855,10 @@ var state = {
       alertCountsBy: alertCountsBy,
       alertStampsOf: function(){ return alertStamps; },
       jumpToCase: jumpToCase,
+      jumpToListSection: jumpToListSection,
+      backToJumpFrom: backToJumpFrom,
+      updateBackControls: updateBackControls,
+      updateBackPill: updateBackPill,
       focusAlertEntries: focusAlertEntries,
       findListRowEl: findListRowEl,
       presentSlideIndexOf: presentSlideIndexOf,
