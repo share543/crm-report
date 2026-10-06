@@ -160,6 +160,30 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 驗「案件清單只印當前頁」：用 `pdftotext` 抽出的序號集合判斷
   （page 模式只出現 50 個序號；all 模式出現全部）。
 
+## 本日議題：層級化語法（2026-10-06 新增）
+
+**語法**（行首符號決定層級；行內 `_文字_` 表底線）：
+`#` 大項（自動編號）／`-` 項目／`*` 重點／`**` 次重點／`>` 說明。
+**無符號＝大項**（舊資料相容）；舊資料若自己打了 `1.`／`一、`／`(2)` 會自動去掉，避免「1. 1.」。
+
+- ⚠️ **解析順序**：`AGENDA_PREFIXES` 內 `'**'` 必須排在 `'*'` 之前，否則次重點會被吃成重點。
+- **單一來源**：解析、工具列、圖例都讀 `AGENDA_PREFIXES` / `AGENDA_TYPES`，新增層級只要改這兩處 + CSS class `.ag-<type>`。
+- **儲存格式不變**：`state.agenda` 仍存**原始文字行（含符號）**，`normalizeAgenda` 只去空白行；
+  渲染時才 `parseAgendaLines` 解析。舊存檔（純字串陣列）直接可讀。
+- **`stripManualNumber`** 用負向先行 `(?!\d)` 排除小數，否則「1.5 億」會被誤刪成「5 億」。
+- **純函式（已 export）**：`parseAgendaLines`、`parseAgendaInline`、`stripManualNumber`、`normalizeAgMarker`。
+- **渲染**：`renderAgendaNodes(ul, nodes)` 一律 `createElement`／`createTextNode`（防注入）；
+  大項編號由渲染時累加，**不要**寫進儲存內容。
+- **編輯器**：工具列按鈕 `agendaApplyPrefix` 會**先去掉該行原有符號再套用**（可反覆切換、不疊加）；
+  `agendaWrapUnderline` 包底線；`agendaHandleEnter` 在 Enter 時沿用上一行符號
+  （該行只有符號時則清掉符號結束該層）。工具列按鈕的顯示文字要與實際插入字元一致
+  （曾出現按鈕寫全形 `＿` 但插入半形 `_`）。
+- **全形相容**：`normalizeAgMarker` 把 `＃－＊＞` 轉半形（中文輸入法常打出全形）。
+- **列印**：`@media print{ .agenda-editor, .agenda-empty-btn{display:none!important} }`，
+  編輯器是操作介面不該進 PDF。投影層級字級只在 `body.pv-mode #agendaList > li.ag-*` 調，內容不省略。
+- **驗證**：`parseAgendaLines` 的邊界要測到 —— `**` 優先於 `*`、無符號→大項、手動編號去除、
+  小數不誤刪、全形符號、空行／只有符號忽略、行內底線切段、存檔往返一致。
+
 ## ⚠️ 開發時間分析：右欄「各階段平均天數」不可用 SVG（2026-10-05 定案）
 
 **踩過的坑**：右欄原用 `<svg viewBox="0 0 700 …">` + `width:100%`。
