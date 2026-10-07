@@ -469,9 +469,11 @@
   #laser .lz-ring{ position:relative; width:42px; height:42px; margin:-21px 0 0 -21px;
     border:2px solid var(--laser); border-radius:50%;
     box-shadow:0 0 10px rgba(232,68,122,.55), inset 0 0 9px rgba(232,68,122,.30); }
+  /* 中心點用品牌粉，不用白色：白色點在淺色主題的淺底上幾乎看不見，
+     粉紅在深色與淺色主題都清楚，也維持「粉紅＝游標」的單一語意。 */
   #laser .lz-ring::after{ content:''; position:absolute; left:50%; top:50%;
     width:4px; height:4px; margin:-2px 0 0 -2px; border-radius:50%;
-    background:rgba(255,255,255,.85); box-shadow:0 0 6px rgba(232,68,122,.85); }
+    background:var(--laser); box-shadow:0 0 6px rgba(232,68,122,.9); }
   /* 點擊放大光圈：最強的「看這裡」訊號 */
   .lz-pulse{ position:fixed; z-index:1510; pointer-events:none; border-radius:50%;
     border:3px solid var(--laser);
@@ -480,19 +482,34 @@
   @keyframes lzPulse{
     from{ width:14px; height:14px; margin:-7px 0 0 -7px; opacity:1; }
     to  { width:150px; height:150px; margin:-75px 0 0 -75px; opacity:0; } }
-  /* ⚠ 列強調刻意用「中性淡色」而不是品牌粉：
-     品牌粉是「游標」的識別色，底色若也用粉紅，粉紅環疊在同色列上會失去輪廓。
-     分工＝底色標「範圍」、粉紅標「游標」。 */
-  body.laser-on tr.lz-row td{ background:rgba(232,243,251,.085) !important;
-    box-shadow:inset 0 0 0 1px rgba(232,243,251,.13); }
-  body.laser-on tr.lz-row td:first-child{ box-shadow:inset 4px 0 0 var(--laser); }
+  /* 列強調：標記一律下在 <tr>，**完全不碰 <td>**。
+     ⚠ 絕對不可以對 td 寫 background 或 box-shadow —— 兩者都會蓋掉既有樣式：
+       (1) td 有自己的底色：各課追蹤簡表的「分組色」（td.qk-g0/g1/g2，
+           標示甲指／甲配／零擔）與「凍結首欄」的不透明底色
+           （td.qk-ke／td.pg-ke，position:sticky）。
+           覆寫 background 會讓凍結欄變半透明 → 橫向捲動時捲過去的內容從底下穿透，
+           兩層文字疊在一起糊掉（回報為「底色變深、文字深色無法閱讀」），
+           而且分組色的語意被一起消滅。
+       (2) td.cell-bad／td.cell-mismatch 用 box-shadow 畫警示框線，覆寫會讓警示消失。
+     tr 的 background 畫在 td 底色「之下」→ 有底色的儲存格完整保留原樣，
+     只有透明底色的儲存格才透出這個底色；outline 畫在整個 row 上，與儲存格底色無關。
+     兩者都不會改到任何 td 的既有宣告。 */
+  /* 底色用「中性灰」，框線用品牌粉 —— 一個顏色只代表一件事：
+     粉紅＝游標（環與框線），灰＝「這一列」的範圍。
+     若底色也用粉紅，粉紅環疊在同色底上對比會變弱（實測視覺確認為「對比不強」）。
+     中性灰（--muted #9aa3b2）在深色與淺色主題下都看得見，是唯一兩種主題通用的選擇。 */
+  body.laser-on tr.lz-row{
+    background:rgba(154,163,178,.20);
+    outline:2px solid rgba(232,68,122,.85);
+    outline-offset:-2px;
+  }
   /* 原生游標只在「內容區」與「簡報畫面」內隱藏。
      工具列與彈窗維持正常游標 —— 萬一光點沒被畫出來，至少還有原生游標當逃生門。 */
   body.laser-on main#app, body.laser-on main#app *,
   body.laser-on #presentOverlay, body.laser-on #presentOverlay *{ cursor:none; }
   @media print{
     #laser, .lz-pulse{ display:none !important; }
-    tr.lz-row td{ background:none !important; box-shadow:none !important; }
+    tr.lz-row{ background:none !important; outline:none !important; }
   }
   /* ⚠ 不要用 @media (hover:none)/(pointer:coarse) 去 display:none 光點。
      那種媒體查詢在「沒有實體滑鼠」的環境會命中（headless、遠端桌面、某些擴充基座），
@@ -6709,7 +6726,7 @@ var state = {
         snapshotCss += '\n.shot-root .card-tools{ display:none !important; }';
         snapshotCss += '\n.shot-root #laser, .shot-root .lz-pulse{ display:none !important; }';
         // 存圖當下若剛好有一列被雷射筆高亮，不可以被拍進去
-        snapshotCss += '\n.shot-root tr.lz-row td{ background:none !important; box-shadow:none !important; }';
+        snapshotCss += '\n.shot-root tr.lz-row{ background:none !important; outline:none !important; }';
         // 取代表單控件的偵測用 span 樣式（仿 .list-field select/input 外觀，高度近似）
         snapshotCss += '\n.shot-root .snap-field{ display:inline-block; background:var(--card-2); color:var(--text);' +
           ' border:1px solid var(--border); border-radius:6px; padding:6px 10px;' +
