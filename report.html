@@ -29,6 +29,9 @@
     --error:#ff6b6b;
     --warning:#ffc94d;
     --ok:#5ad98b;
+    --laser:#E8447A;      /* 會議用雷射筆光點。刻意選一個報表語意色沒有用到的顏色
+                             （accent 藍／error 淡紅／warning 黃／ok 綠都不是它），
+                             這樣游標永遠不會被誤讀成「錯誤」或「提醒」。 */
     --row-hover:#1b202a;
     --row-hover-strong:#242a36;
     --row-hover-strong-2:#2a3140;
@@ -457,6 +460,46 @@
   #backPill:hover{ background:var(--accent); color:#fff; }
   /* 列印：跳轉／回跳都是操作介面，不進 PDF（#backPill 是 fixed，不關掉會每頁重複） */
   @media print{ .card-tools, #backPill{ display:none !important; } }
+
+  /* ===================== 會議用雷射筆光點（游標） ===================== */
+  #laserBtn.on{ color:#fff; background:var(--laser); border-color:var(--laser); }
+  #laser{ position:fixed; left:0; top:0; z-index:1500; pointer-events:none; display:none;
+    will-change:transform; }
+  body.laser-on #laser.on{ display:block; }
+  #laser .lz-ring{ position:relative; width:42px; height:42px; margin:-21px 0 0 -21px;
+    border:2px solid var(--laser); border-radius:50%;
+    box-shadow:0 0 10px rgba(232,68,122,.55), inset 0 0 9px rgba(232,68,122,.30); }
+  #laser .lz-ring::after{ content:''; position:absolute; left:50%; top:50%;
+    width:4px; height:4px; margin:-2px 0 0 -2px; border-radius:50%;
+    background:rgba(255,255,255,.85); box-shadow:0 0 6px rgba(232,68,122,.85); }
+  /* 點擊放大光圈：最強的「看這裡」訊號 */
+  .lz-pulse{ position:fixed; z-index:1510; pointer-events:none; border-radius:50%;
+    border:3px solid var(--laser);
+    box-shadow:0 0 26px rgba(232,68,122,.7), inset 0 0 26px rgba(232,68,122,.3);
+    animation:lzPulse .75s cubic-bezier(.16,.9,.3,1) forwards; }
+  @keyframes lzPulse{
+    from{ width:14px; height:14px; margin:-7px 0 0 -7px; opacity:1; }
+    to  { width:150px; height:150px; margin:-75px 0 0 -75px; opacity:0; } }
+  /* ⚠ 列強調刻意用「中性淡色」而不是品牌粉：
+     品牌粉是「游標」的識別色，底色若也用粉紅，粉紅環疊在同色列上會失去輪廓。
+     分工＝底色標「範圍」、粉紅標「游標」。 */
+  body.laser-on tr.lz-row td{ background:rgba(232,243,251,.085) !important;
+    box-shadow:inset 0 0 0 1px rgba(232,243,251,.13); }
+  body.laser-on tr.lz-row td:first-child{ box-shadow:inset 4px 0 0 var(--laser); }
+  /* 原生游標只在「內容區」與「簡報畫面」內隱藏。
+     工具列與彈窗維持正常游標 —— 萬一光點沒被畫出來，至少還有原生游標當逃生門。 */
+  body.laser-on main#app, body.laser-on main#app *,
+  body.laser-on #presentOverlay, body.laser-on #presentOverlay *{ cursor:none; }
+  @media print{
+    #laser, .lz-pulse{ display:none !important; }
+    tr.lz-row td{ background:none !important; box-shadow:none !important; }
+  }
+  /* ⚠ 不要用 @media (hover:none)/(pointer:coarse) 去 display:none 光點。
+     那種媒體查詢在「沒有實體滑鼠」的環境會命中（headless、遠端桌面、某些擴充基座），
+     會讓整個功能靜默失效 —— class 都設對了、元素就是看不見，DOM 斷言也測不出來。
+     觸控裝置本來就不會發出 mousemove，光點自然不會出現，不必用 CSS 擋。
+     （這個 bug 只有靠「截圖＋看像素」才抓到，見 AGENTS.md） */
+  @media (prefers-reduced-motion:reduce){ .lz-pulse{ animation-duration:.01s; } }
   .snap-modal{ position:fixed; inset:0; z-index:2000; background:rgba(5,8,12,.6);
     display:flex; align-items:center; justify-content:center; padding:18px; }
   .snap-modal[hidden]{ display:none; }
@@ -930,6 +973,8 @@
     <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
     <button type="button" id="saveBtn" disabled>存檔（含資料）</button>
     <button type="button" id="presentBtn" disabled>開始簡報</button>
+    <button type="button" id="laserBtn" aria-pressed="false"
+            title="會議用光點：讓與會人員清楚看到你指的地方（快速鍵 L）">◎ 雷射筆</button>
     <button type="button" id="printBtn" disabled>列印</button>
   </div>
 </header>
@@ -1090,6 +1135,8 @@
   <div id="snapHost" aria-hidden="true"></div>
   <!-- 回跳浮動膠囊：案件清單標題列捲出畫面後才出現（沒有來源時保持隱藏） -->
   <button type="button" id="backPill" hidden>← 回到</button>
+  <!-- 會議用雷射筆光點（跟著滑鼠跑；列印／存圖／觸控裝置自動停用） -->
+  <div id="laser" aria-hidden="true"><div class="lz-ring"></div></div>
   <div class="snap-modal" id="snapModal" hidden role="dialog" aria-modal="true" aria-label="儲存區塊圖片">
     <div class="snap-box">
       <h3>儲存區塊圖片：<span id="snapTitle">區塊</span></h3>
@@ -3741,6 +3788,133 @@ var state = {
     var show = (hb.bottom < 8) && (lb.bottom > 80) && (lb.top < vh);
     pill.hidden = !show;
     if(show) pill.textContent = '← 回到「' + (from.title || '上一個區塊') + '」';
+  }
+
+  // ---------------------------------------------------------------------------
+  // 會議用雷射筆（游標光點）
+  //
+  // 為什麼不是用 CSS 改鼠標圖？
+  //   ① 遠端會議的螢幕分享常常「不傳送真正的滑鼠指標」——Zoom 官方回覆：
+  //      分享畫面的 raw 資料不含游標，並建議改用「會被燒進 video 資料」的方式。
+  //      Teams 在 Mac／Linux 客戶端同樣是已知限制。
+  //      → 改鼠標外觀，與會者根本看不到；但「網頁自己畫的元素」一定會被分享出去。
+  //   ② 自訂鼠標圖有大小上限（Chrome 64px、Firefox／Safari 128px，超過即失效），
+  //      想做亮一點、大一點會被卡住。
+  // 因此：用一個跟著滑鼠跑的 DOM 光點，取代內容區的原生游標。
+  //
+  // 設計取捨：
+  //   - 生效範圍＝main#app 與簡報畫面（#presentOverlay）；工具列與彈窗維持正常游標。
+  //   - 預設關閉（日常作業零干擾）；按 L 切換；進入簡報模式自動開啟。
+  //   - 表格自動加列強調（讓觀眾直接看到「哪一列」）。
+  // ---------------------------------------------------------------------------
+  var LASER_KEY = 'crm-laser';
+  var laserState = { on: false, x: 0, y: 0, inZone: false };
+
+  function laserPref(){
+    try{ return localStorage.getItem(LASER_KEY) === '1'; }catch(_){ return false; }
+  }
+  function setLaserPref(v){
+    try{ localStorage.setItem(LASER_KEY, v ? '1' : '0'); }catch(_){}
+  }
+  // 簡報模式一律開啟（不覆蓋使用者自己的偏好，離開簡報就恢復原設定）
+  function laserActive(){ return laserState.on || presentState.on; }
+
+  function laserClearRow(){
+    var rows = document.querySelectorAll('tr.lz-row');
+    for(var i = 0; i < rows.length; i++) rows[i].classList.remove('lz-row');
+  }
+  function laserMarkRowFrom(el){
+    var tr = (el && el.closest) ? el.closest('tr') : null;
+    if(tr && (!tr.parentElement || tr.parentElement.tagName !== 'TBODY')) tr = null;
+    var cur = document.querySelector('tr.lz-row');
+    if(tr === cur) return;
+    laserClearRow();
+    if(tr) tr.classList.add('lz-row');
+  }
+  function laserPaint(){
+    var el = document.getElementById('laser');
+    if(!el) return;
+    var act = laserActive();
+    document.body.classList.toggle('laser-on', act);
+    var show = act && laserState.inZone;
+    el.classList.toggle('on', show);
+    if(show){
+      el.style.transform = 'translate(' + laserState.x + 'px,' + laserState.y + 'px)';
+    }
+    if(!show) laserClearRow();
+  }
+  function laserSyncButton(){
+    var btn = document.getElementById('laserBtn');
+    if(!btn) return;
+    var act = laserActive();
+    btn.classList.toggle('on', act);
+    btn.setAttribute('aria-pressed', act ? 'true' : 'false');
+    btn.title = act
+      ? '會議用光點：已開啟（按 L 或點此關閉）'
+      : '會議用光點：讓與會人員清楚看到你指的地方（快速鍵 L）';
+  }
+  function setLaserOn(v){
+    laserState.on = !!v;
+    setLaserPref(laserState.on);
+    laserSyncButton();
+    laserPaint();
+  }
+  // 是否在生效範圍內。⚠ 用座標判定，不要用 mouseenter：
+  // 捲動時區塊會從指標下方移過，邊界事件補不到；卡片重繪後也不必重綁事件。
+  function laserZoneOf(x, y){
+    var el = document.elementFromPoint(x, y);
+    if(!el || !el.closest) return false;
+    return !!el.closest('main#app, #presentOverlay');
+  }
+  function laserOnMove(e){
+    laserState.x = e.clientX;
+    laserState.y = e.clientY;
+    var el = document.elementFromPoint(laserState.x, laserState.y);
+    laserState.inZone = !!(el && el.closest && el.closest('main#app, #presentOverlay'));
+    laserPaint();
+    if(laserState.inZone) laserMarkRowFrom(el);
+  }
+  function laserRepaint(){
+    laserState.inZone = laserZoneOf(laserState.x, laserState.y);
+    if(laserState.inZone && laserActive()) laserMarkRowFrom(document.elementFromPoint(laserState.x, laserState.y));
+    laserPaint();
+  }
+  function laserHide(){
+    laserState.inZone = false;
+    laserPaint();
+  }
+  function laserOnClick(e){
+    if(!laserActive() || !laserState.inZone) return;
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    // 不要在使用者點按鈕／連結／跳轉工具列時也放大光圈（那是操作，不是講解）
+    if(el && el.closest && el.closest('button, a, input, select, textarea, label, .card-tools')) return;
+    var p = document.createElement('div');
+    p.className = 'lz-pulse';
+    p.style.left = e.clientX + 'px';
+    p.style.top = e.clientY + 'px';
+    document.body.appendChild(p);
+    setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); }, 800);
+  }
+  function laserOnKey(e){
+    var t = e.target;
+    if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    if(e.key === 'l' || e.key === 'L') setLaserOn(!laserState.on);
+  }
+  function initLaser(){
+    laserState.on = laserPref();
+    laserState.inZone = false;
+    document.addEventListener('mousemove', laserOnMove, { passive: true });
+    // 捲動時區塊會從（不動的）指標下方移過／移開，必須重算
+    document.addEventListener('scroll', laserRepaint, { passive: true });
+    document.addEventListener('click', laserOnClick);
+    document.addEventListener('keydown', laserOnKey);
+    document.addEventListener('mouseleave', laserHide);
+    window.addEventListener('blur', laserHide);
+    var btn = document.getElementById('laserBtn');
+    if(btn) btn.addEventListener('click', function(){ setLaserOn(!laserState.on); });
+    laserSyncButton();
+    laserPaint();
   }
 
   // 反向：高亮待留意事項內符合條件的項目並捲過去（回傳命中數）
@@ -6533,6 +6707,9 @@ var state = {
         snapshotCss += '\n.shot-root .snap-btn{ display:none !important; }';
         // 跳轉按鈕也一樣（操作介面不該進圖片）；整組工具列一起收掉較保險
         snapshotCss += '\n.shot-root .card-tools{ display:none !important; }';
+        snapshotCss += '\n.shot-root #laser, .shot-root .lz-pulse{ display:none !important; }';
+        // 存圖當下若剛好有一列被雷射筆高亮，不可以被拍進去
+        snapshotCss += '\n.shot-root tr.lz-row td{ background:none !important; box-shadow:none !important; }';
         // 取代表單控件的偵測用 span 樣式（仿 .list-field select/input 外觀，高度近似）
         snapshotCss += '\n.shot-root .snap-field{ display:inline-block; background:var(--card-2); color:var(--text);' +
           ' border:1px solid var(--border); border-radius:6px; padding:6px 10px;' +
@@ -7489,6 +7666,9 @@ var state = {
     overlay.hidden = false;
     document.body.classList.add('pv-mode');
     document.addEventListener('keydown', presentOnKey);
+    // 簡報模式自動開啟雷射筆（這是它的主場）
+    laserSyncButton();
+    laserRepaint();
     showPresentSlide(0);
   }
 
@@ -7504,6 +7684,10 @@ var state = {
     if(presentState.overlay) presentState.overlay.hidden = true;
     document.body.classList.remove('pv-mode');
     document.removeEventListener('keydown', presentOnKey);
+    // 離開簡報 → 回到使用者自己的偏好設定
+    laserClearRow();
+    laserHide();
+    laserSyncButton();
   }
 
   function restorePresentSlide(id){
@@ -7643,6 +7827,7 @@ var state = {
     initCollapsible();
     initPeriodControls();
     initSnapshotControls();
+    initLaser();
     if(!dropzone) return;
 
     window.addEventListener('dragover', function(e){ e.preventDefault(); });
@@ -7859,6 +8044,18 @@ var state = {
       backToJumpFrom: backToJumpFrom,
       updateBackControls: updateBackControls,
       updateBackPill: updateBackPill,
+      LASER_KEY: LASER_KEY,
+      laserState: laserState,
+      laserPref: laserPref,
+      laserActive: laserActive,
+      laserPaint: laserPaint,
+      laserRepaint: laserRepaint,
+      laserOnMove: laserOnMove,
+      laserMarkRowFrom: laserMarkRowFrom,
+      laserClearRow: laserClearRow,
+      laserZoneOf: laserZoneOf,
+      setLaserOn: setLaserOn,
+      initLaser: initLaser,
       focusAlertEntries: focusAlertEntries,
       findListRowEl: findListRowEl,
       presentSlideIndexOf: presentSlideIndexOf,
