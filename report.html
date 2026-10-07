@@ -107,17 +107,26 @@
   .topbar p{ color:var(--muted); font-size:13px; margin-top:2px; }
   main{ max-width:1120px; margin:0 auto; padding:24px; }
   .card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:20px; }
-  #dropzone{ border:2px dashed var(--border); border-radius:12px; padding:44px 20px; text-align:center;
-    cursor:pointer; transition:border-color .15s ease, background .15s ease; outline:none; }
+  /* 載入區塊：原本是直排大區塊（拖放區 192px ＋ 卡內距 40px ≈ 338px 高，佔掉太多首屏）。
+     改成「一行式」：標題、或、按鈕同一行，內距與字級一併收斂。
+     用 flex ＋ gap 排版，之後改文字或字級不會需要重算任何座標。 */
+  #loadCard{ padding:14px 20px; }
+  #dropzone{ border:2px dashed var(--border); border-radius:10px; padding:12px 18px;
+    cursor:pointer; transition:border-color .15s ease, background .15s ease; outline:none;
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 12px; }
   #dropzone:hover, #dropzone:focus-visible{ border-color:var(--accent); }
   #dropzone.drag-over{ border-color:var(--accent); background:rgba(79,142,255,.08); }
-  #dropzone .dz-title{ font-size:17px; font-weight:600; }
-  #dropzone .dz-hint{ color:var(--muted); margin:8px 0; font-size:13px; }
-  #dropzone button{ background:var(--accent); color:#fff; border:0; border-radius:8px;
-    padding:9px 18px; font-size:14px; cursor:pointer; }
+  /* <p> 預設有 1em 上下外距，在一行式版面裡是主要的高度來源，必須歸零 */
+  #dropzone .dz-title{ font-size:15px; font-weight:600; margin:0; }
+  #dropzone .dz-hint{ color:var(--muted); margin:0; font-size:13px; }
+  #dropzone button{ background:var(--accent); color:#fff; border:0; border-radius:7px;
+    padding:6px 14px; font-size:13px; cursor:pointer; }
   #dropzone button:hover{ filter:brightness(1.1); }
-  #fileName{ margin-top:14px; color:var(--ok); font-weight:600; font-size:14px; }
-  #importProgress{ margin-top:14px; }
+  #fileName{ margin:8px 0 0; color:var(--ok); font-weight:600; font-size:14px; }
+  /* <p> 的預設上下外距（約 1em）在這種「一行一訊息」的區塊裡是主要的高度來源，
+     上面沒寫到 margin 的都要歸零，否則每多一則訊息就多 30~40px */
+  #memoryRow{ margin:2px 0 0; font-size:13px; }
+  #importProgress{ margin-top:10px; }
   .progress-track{ height:8px; background:var(--card-2); border:1px solid var(--border);
     border-radius:999px; overflow:hidden; }
   .progress-fill{ height:100%; width:0%; background:var(--accent); border-radius:999px;
