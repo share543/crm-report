@@ -207,6 +207,33 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - **驗證**：`parseAgendaLines` 的邊界要測到 —— `**` 優先於 `*`、無符號→大項、手動編號去除、
   小數不誤刪、全形符號、空行／只有符號忽略、行內底線切段、存檔往返一致。
 
+## 載入檔案區塊：一行式（2026-10-07）
+
+- 版面由 flex 一行式構成（標題・`或`・按鈕），`gap:8px 12px` ＋ `flex-wrap:wrap`。
+  **改文字或字級不需要動任何座標**；≤420px 會自動換成三行。
+- ⚠ **`<p>` 的預設 1em 上下外距在這種「一行一訊息」的區塊裡是主要的高度來源**。
+  `#fileName`／`#memoryRow`／`#dropzone .dz-title`／`.dz-hint` 全部要顯式寫 `margin`，
+  否則每多一則訊息就多 30～40px（本案一次就多 54px）。新增訊息列時記得一起寫。
+- `#loadCard{ padding:14px 20px }`（覆寫 `.card` 的 20px）；拖放區 `padding:12px 18px`
+  （原本 44px，光上下內距就 88px）。
+- 目標尺寸：空狀態 ≈89px、載入後 ≈140px、拖放區 ≈59px。改動後請重量這三個數字。
+
+### ⚠️ 驗「已載入」狀態要用真實流程 `handleFile`，不要直接呼叫 `parseXlsx`
+
+`parseXlsx` 內會 `updateImportProgress()`（把進度列 `hidden=false`），
+而**只有 `handleFile` 會在成功後（900ms 計時器）呼叫 `hideImportProgress()`**。
+測試若寫成 `parseXlsx` ＋ `applyModel`，會繞過隱藏 → 進度列留在畫面上，
+量到的高度多約 42px（本案 338→380，會誤判成「沒縮小」）。
+
+```js
+var ab = await (await fetch('/x.xlsx')).arrayBuffer();
+await handleFile(new File([ab], 'x.xlsx', {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+await sleep(1600);   // 等 hideImportProgress 的 900ms
+```
+
+同理：任何「載入／匯入後會改變畫面」的量測，都要走真正的使用者路徑，
+不要用內部函式拼一條近似的流程。
+
 ## 會議用雷射筆光點（2026-10-07 新增）
 
 **不要用 CSS `cursor:` 改鼠標外觀來做這件事**（直覺做法，但會議裡看不到）：
