@@ -207,6 +207,56 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - **驗證**：`parseAgendaLines` 的邊界要測到 —— `**` 優先於 `*`、無符號→大項、手動編號去除、
   小數不誤刪、全形符號、空行／只有符號忽略、行內底線切段、存檔往返一致。
 
+## 會議用雷射筆光點（2026-10-07 新增）
+
+**不要用 CSS `cursor:` 改鼠標外觀來做這件事**（直覺做法，但會議裡看不到）：
+1. 遠端會議的螢幕分享**常常不傳送真正的滑鼠指標**（Zoom 官方：分享畫面 raw 資料不含游標，
+   建議改用「會被燒進 video 資料」的方式；Teams Mac／Linux 同為已知限制）。
+   → 網頁自己畫的元素才是穩的。
+2. 自訂鼠標圖有**硬上限**（Chrome 128 且收緊到 64px、Firefox／Safari 128px，超過即失效）。
+
+實作要點
+- `#laser`：`position:fixed; z-index:1500; pointer-events:none`。z-index 必須**高於
+  `#presentOverlay`(1000)、低於彈窗**(2000/2100)，否則簡報模式看不到。
+- 生效範圍＝`main#app` 與 `#presentOverlay`；`cursor:none` 只下在這兩處，
+  **工具列與彈窗保留原生游標**（萬一光點沒畫出來還有逃生門）。
+- **「是否在範圍內」一律用 `document.elementFromPoint()` 判定，不要用 `mouseenter`**：
+  捲動時區塊會從指標下方移過，邊界事件補不到；卡片重繪後也不必重綁。
+  `mousemove` 與 `scroll` 都要重算。
+- 顏色用 `--laser:#E8447A`：刻意挑報表語意色（accent 藍／error 淡紅／warning 黃／ok 綠）
+  都沒用到的顏色，游標不會被誤讀成「錯誤」。
+- ⚠ **同一個顏色不要同時代表兩件事**：列強調（`tr.lz-row`）若也用品牌粉，
+  粉紅環疊在同色列上會**失去輪廓**（實測踩過）。底色負責「範圍」、粉紅負責「游標」，
+  所以底色用中性淡色 ＋ 左側品牌細條。
+- 預設關閉、`L` 切換、進入簡報模式自動開（不覆蓋使用者偏好，離開即恢復）；
+  設定存 `localStorage['crm-laser']`。
+- 列印／存圖要排除：`@media print{ #laser,.lz-pulse{display:none!important} }`、
+  `snapshotCss += '.shot-root #laser, .shot-root .lz-pulse{...}'`，並清掉 `tr.lz-row` 底色
+  （存圖當下若剛好有一列被高亮，會被拍進去）。
+
+### ⚠️ 三個「測試全過、功能卻是死的」陷阱
+
+1. **`@media (hover:none)` / `(pointer:coarse)` 的 `display:none` 會靜默殺掉整個功能**。
+   這種媒體查詢在「沒有實體滑鼠」的環境會命中（headless／虛擬時間、遠端桌面、某些擴充基座）。
+   症狀：`#laser` 的 class 正確是 `on`、`body.laser-on` 也在、`transform` 也對，
+   但 `getComputedStyle(...).display === 'none'`、`getBoundingClientRect()` 全 0。
+   **DOM 斷言完全測不出來**。→ 不要用 CSS 媒體查詢停用；觸控裝置本來就不會發 `mousemove`。
+2. **`html{scroll-behavior:smooth}`** 讓 `scrollIntoView({behavior:'auto'})` 變成平滑動畫
+   （`'auto'` 依規範是「沿用 CSS 設定」）。平滑動畫不推進的環境會**完全不捲動**。
+   → 一律用 `behavior:'instant'`；測試腳本自己的 `window.scrollTo()` 也一樣。
+3. **驗證位置相關功能前，必須先把目標捲進視窗**。`getBoundingClientRect()` 是
+   **viewport 相對**；目標在視窗外時座標會超出視窗，`elementFromPoint` 直接落空，
+   測試會誤判成「功能壞了」。用 `window.scrollTo({top, behavior:'instant'})` 先對位。
+
+### 驗證手法備忘（這幾個是這次學到的）
+
+- **一定要看像素／截圖，不能只看 DOM 狀態**。上面第 1 點就是這樣才抓到的。
+- 快照的 `<style>` **不會進 DOM**（只序列化成 data URL），要驗證快照 CSS 得**攔截
+  `XMLSerializer.prototype.serializeToString`** 取得餵給 SVG 的節點，再讀 `textContent`。
+- 合成 `MouseEvent` **不會**觸發 `mouseenter`，因此測試只能走「座標判定」這條路。
+- `MouseEvent.clientX/clientY` 依規範是**整數**（小數被截掉），期望值要用 `Math.trunc`。
+- `e.target.closest()` 在 `e.target` 不是元素（程式化觸發）時會拋錯 → 要防禦。
+
 ## 區塊 →「案件清單」跳轉／回跳（2026-10-06 新增）
 
 - **右上工具列 `.card-tools`**：`position:absolute; top:14px; right:14px; display:flex; gap:14px`，
