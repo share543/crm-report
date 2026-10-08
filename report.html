@@ -1408,7 +1408,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.2.1';   // 1.2.1：修正占比變化 pp 與結構區塊口徑（全期累計）
+  var APP_VERSION = '1.2.2';   // 1.2.2：以真實檔驗證後的修正（洞察句挑選、未填桶、停滯句）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4534,7 +4534,9 @@ var state = {
     var arr = [], k;
     for(k in map) if(map[k] > 0) arr.push({ name: k, n: map[k] });
     arr.sort(function(a, b){ return b.n - a.n || (a.name < b.name ? -1 : 1); });
-    var lim = maxN || 3, parts = [], i;
+    // ⚠ 上限 4：真實資料的類別是「零擔／1P(SCM)／3P(MO+)／未填」四桶，
+    //   上限 3 會把「未填」收成「其他 2」—— 看不出那是未分類，會誤導。
+    var lim = maxN || 4, parts = [], i;
     for(i = 0; i < arr.length && i < lim; i++) parts.push(arr[i].name + ' ' + arr[i].n);
     if(arr.length > lim){
       var rest = 0;
@@ -4560,13 +4562,17 @@ var state = {
       if(!best || valid[i].rate > best.rate) best = valid[i];
     }
     if(!best) return null;
+    // ⚠ 要挑「轉換率最低」的那個，不是「件數最大」的那個。
+    //   實測真實資料：零擔 124 件（21.0%）、1P(SCM) 61 件（8.2%）——
+    //   件數最大的是零擔，但真正卡住的是 1P(SCM)（只有最佳的三分之一）。
     var worst = null;
     for(i = 0; i < valid.length; i++){
       var it = valid[i];
       if(it.count < 5 || it.name === best.name) continue;
       // 量占比 >= 15% 且轉換率不到最佳的一半 → 才算「落差」
       if(it.share >= 15 && it.rate < best.rate * 0.5 && best.rate > 0){
-        if(!worst || it.count > worst.count) worst = it;
+        if(!worst || it.rate < worst.rate ||
+           (it.rate === worst.rate && it.count > worst.count)) worst = it;
       }
     }
     if(!worst) return null;
@@ -4624,7 +4630,8 @@ var state = {
     // ⚠ 不能寫「各有專長」—— 兩課可能集中在同一個類別（實測北一與南一都是零擔），
     //   那叫「共同集中」不是「分工」。只陳述事實：量集中在哪裡。
     var fmtP = function(p2){
-      return short ? (p2.ke.replace(/課$/, '') + p2.cat + ' ' + p2.pct + '%')
+      // ⚠ 不要把「課」拿掉：「中1P(SCM) 44%」看不出是哪一課（折行已處理行長）
+      return short ? (p2.ke + p2.cat + ' ' + p2.pct + '%')
                    : (p2.ke + '以' + p2.cat + '為主（' + p2.pct + '%）');   // 中文不加空格
     };
     if(parts.length >= 2){
@@ -5422,9 +5429,12 @@ var state = {
         }
         LL.push('');
       }
-      if(topKe){
+      if(stale.length >= 5 && topKe){
         LL.push('⚠️ 停滯最集中：' + topKe.name + ' ' + topKe.count + ' 件（' + briefNum(topShare) + '%）' +
                 (someClean ? '' : '，' + keAll.length + ' 個課別都有'));
+        LL.push('');
+      } else {
+        LL.push('⚠️ 停滯僅 ' + stale.length + ' 件，無明顯集中');
         LL.push('');
       }
       if(month.length){
@@ -5512,12 +5522,16 @@ var state = {
       var kins = briefKeInsight(gmKes);
       if(kins) L.push(kins);
     }
-    if(topKe){
+    // ⚠ 停滯件數少時不要講「最集中」—— 1/2 件（50%）這種佔比沒有意義
+    if(stale.length >= 5 && topKe){
       L.push('停滯最集中的是 ' + topKe.name + ' ' + topKe.count + ' 件（佔 ' + topShare + '%）' +
              (someClean ? '，問題位置明確。'
                         : '；全部 ' + keAll.length + ' 個課別都有停滯，是普遍性的推進卡點。'));
+    } else if(stale.length > 0){
+      L.push('停滯超過 ' + STALE_DAYS + ' 天的案件僅 ' + stale.length + ' 件，尚無明顯集中（未啟動另有 ' +
+             unstart + ' 件）。');
     } else {
-      L.push('目前沒有停滯超過 ' + STALE_DAYS + ' 天的案件。');
+      L.push('目前沒有停滯超過 ' + STALE_DAYS + ' 天的案件（未啟動 ' + unstart + ' 件）。');
     }
     L.push('');
     // 裁示：沿用報表自己產生的「要決定」條目（已是中性書面語）

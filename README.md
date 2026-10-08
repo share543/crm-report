@@ -295,7 +295,7 @@ git clone git@github.com:share543/crm-report.git
 
 ## 版本與授權
 
-- **目前版本：v1.2.1（2026-10-08）**
+- **目前版本：v1.2.2（2026-10-08）**
 - 版號採語意化版本 `v主.次.修`：
   | 位數 | 什麼時候加 |
   |---|---|
@@ -304,7 +304,7 @@ git clone git@github.com:share543/crm-report.git
   | **修** | 修正與樣式調整 |
 - **改版只要改一個地方**：`report.html` 內的 `APP_VERSION`（連同 `APP_VERSION_DATE`）。
   頁腳、講者版單檔、GM 書面摘要的版本戳記全部由這組常數產生。
-- 頁腳（畫面最下方，**列印也會保留**）：`© 2026 Arthur Hu（富昇物流）｜CRM 報表工具 v1.2.1（2026-10-08）｜授權：MIT License`
+- 頁腳（畫面最下方，**列印也會保留**）：`© 2026 Arthur Hu（富昇物流）｜CRM 報表工具 v1.2.2（2026-10-08）｜授權：MIT License`
 - 授權：**MIT License**（見 `LICENSE`）。改授權只要改 `APP_LICENSE` 這一個常數。
 
 ### 重點分析的三種呈現
