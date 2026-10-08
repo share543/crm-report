@@ -1408,7 +1408,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.2.0';   // 1.2.0：類別／課別結構（客戶類別）＋按鈕美化
+  var APP_VERSION = '1.2.1';   // 1.2.1：修正占比變化 pp 與結構區塊口徑（全期累計）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4476,7 +4476,9 @@ var state = {
       for(var o = 0; o < out.length; o++) if(out[o].name === prv[p2].name) found = true;
       if(!found) out.push({ name: prv[p2].name, count: 0, share: 0, prevCount: prv[p2].count,
                             prevShare: pn ? Math.round(prv[p2].count * 1000 / pn) / 10 : 0,
-                            pp: pn ? -Math.round(prv[p2].count * 1000 / pn * 10) / 10 : null,
+                            // ⚠ 必須與上面的 prevShare 同一個算式（先前多乘一次 10，
+                            //    實測出現「-250pp」這種不可能的占比變化）
+                            pp: pn ? -(Math.round(prv[p2].count * 1000 / pn) / 10) : null,
                             imp: 0, rate: 0, stale: staleMap[prv[p2].name] || 0 });
     }
     out.sort(function(a, b){ return b.count - a.count || b.prevCount - a.prevCount ||
@@ -4485,6 +4487,47 @@ var state = {
   }
 
   // ---- 本期分析：課別開發導入進度與排名（依本期導入件數） ----
+  // 把多個片段串成「每行不超過 maxLen」的行（LINE 在手機上的可讀性）
+  // 續行用全形空白縮排，避免看起來像新的段落。
+  function briefWrapPieces(prefix, pieces, maxLen, indent){
+    var out = [], line = prefix || '', ind = indent || '　　';
+    for(var i = 0; i < pieces.length; i++){
+      var add = (line === (prefix || '') ? '' : '｜') + pieces[i];
+      if(line.length + add.length > maxLen && line !== (prefix || '')){
+        out.push(line);
+        line = ind + pieces[i];
+      } else {
+        line += add;
+      }
+    }
+    if(line) out.push(line);
+    return out;
+  }
+
+  // 長句折行（優先在分隔符斷）：課別多時洞察句會超過手機一行
+  function briefWrapText(text, maxLen, indent){
+    var ind = indent || '　';
+    var parts = String(text).split(/(?=[／；])/);   // 在 ／ ； 之前斷
+    var out = [], line = '';
+    for(var i = 0; i < parts.length; i++){
+      var seg = parts[i];
+      while(seg.length > maxLen - ind.length){       // 單段本身就太長 → 硬切
+        out.push(line || '');
+        line = ind + seg.slice(0, maxLen - ind.length);
+        seg = seg.slice(maxLen - ind.length);
+        out[out.length - 1] = out[out.length - 1] || line;
+        line = '';
+      }
+      if((line + seg).length > maxLen && line){
+        out.push(line); line = ind + seg;
+      } else {
+        line += seg;
+      }
+    }
+    if(line) out.push(line);
+    return out.filter(function(x){ return x !== ''; });
+  }
+
   // 類別組成的短描述：'零擔 37／甲指 7／甲配 4'
   // 超過 3 個類別時收成「其他 N」—— 不讓一行無限長。
   function briefCatBreakdown(map, maxN){
@@ -4542,7 +4585,7 @@ var state = {
       if(short) return g.name + ' 量第 ' + g.rank + ' 大、只導入 ' + g.imp + ' 件';
       return g.name + ' 量體第 ' + g.rank + ' 大（' + g.n + ' 件、' + briefNum(g.share) +
              '%）卻只導入 ' + g.imp + ' 件（' + g.rate.toFixed(1) +
-             '%），是本期最大的結構落差：量在做、轉不動。';
+             '%），是最大的結構落差：量在做、轉不動。';   // 結構塊是全期口徑，不可寫「本期」
     }
     if(!st || st.length < 2) return '';
     var lo = null, hi = null, i;
@@ -5132,8 +5175,9 @@ var state = {
       n1.textContent = '本期（' + ranges.range.from + ' ~ ' + ranges.range.to + '）新增 ' + cat.total +
         ' 件' + (ranges.prev ? ('，上期 ' + cat.prevTotal + ' 件') : '') +
         '。長條為本期件數（相對最大值），右側數字為件數與佔比' + (ranges.prev ? '、「±」為佔比較上期的百分點變化' : '') +
-        '。下方一列為「導入完成件數」與轉換率（導入 ÷ 新增，括號為實際件數）以及停滯件數；' +
-        '停滯以全資料最新進度計算。';
+        '。下方一列為「導入完成件數」與本期轉換率（導入 ÷ 本期新增，括號為實際件數）以及停滯件數；' +
+        '停滯以全資料最新進度計算。注意：報表其他地方的「累計轉換率」是全期口徑，'
+        + '與此處的本期轉換率不可互相比較。';
       d1.appendChild(n1);
       // 一句可以直接講的說明（與課別區塊的 bf-dsum 對稱）
       if(cat.list.length && cat.list[0].count){
@@ -5170,7 +5214,9 @@ var state = {
         row.appendChild(nm); row.appendChild(bwrap); row.appendChild(val);
         // 「客戶類別」不只要看新增，還要看導入完成與轉換率 —— GM 要的是「哪個類別轉得動」
         var cmeta = document.createElement('div'); cmeta.className = 'bf-catmeta';
-        var cms = '導入 ' + it.imp + '　轉換率 ' + it.rate.toFixed(1) + '%（' + it.imp + '/' + it.count + '）';
+        // ⚠ 這裡是「本期」轉換率，必須標明 —— 報表其他地方的轉換率是累計（全期）
+        //    口徑，同一個詞兩種意思會讓人誤讀（4 件導入 4 件＝100% 的樣本雜訊）。
+        var cms = '導入 ' + it.imp + '　本期轉換率 ' + it.rate.toFixed(1) + '%（' + it.imp + '/' + it.count + '）';
         if(it.stale > 0) cms += '　停滯 ' + it.stale;
         cmeta.textContent = cms;
         row.appendChild(cmeta);
@@ -5187,7 +5233,8 @@ var state = {
       var n2 = document.createElement('p'); n2.className = 'bf-dnote';
       n2.textContent = '名次依「本期導入完成件數」排序；件數相同時，依轉換率、再依本期新增件數排序。' +
         '長條總長為本期新增件數（以各課別的最大值為基準），綠色段為其中已完成導入，' +
-        '藍色段為尚未導入。轉換率＝導入 ÷ 本期新增。' +
+        '藍色段為尚未導入。轉換率＝導入 ÷ 本期新增（本期口徑；報表其他地方的「累計轉換率」'
+        + '是全期口徑，兩者不可互相比較）。' +
         '每列下方標明該課「新增」與「導入完成」的客戶類別組成。';
       d2.appendChild(n2);
       var ksum = briefKeSummary(kes) + briefKeInsight(kes);
@@ -5216,7 +5263,7 @@ var state = {
         kb.appendChild(f1);
         var kv = document.createElement('span'); kv.className = 'bf-keval';
         // 同欄統一一位小數，否則會出現 28.6% 與 0% 混排
-        kv.textContent = '新增 ' + kk.n + '　導入 ' + kk.imp + '　轉換率 ' + kk.rate.toFixed(1) + '%';
+        kv.textContent = '新增 ' + kk.n + '　導入 ' + kk.imp + '　本期轉換率 ' + kk.rate.toFixed(1) + '%';
         r2.appendChild(rk); r2.appendChild(kn); r2.appendChild(kb); r2.appendChild(kv);
         // ⚠ 新增與導入都要標明「客戶類別」（使用者指定）：GM 要看的不是課別總數，
         //   而是「這個課的量集中在哪個類別、導入的又是哪個類別」。
@@ -5312,6 +5359,7 @@ var state = {
         return '➡️';
       };
       var LL = ['【業務開發｜本期摘要 ' + ymd + '】', ''];
+      var lineLegend = false;   // 全期口徑說明只印一次
       LL.push(arw(dN) + ' 新增 ' + curN + ' 件' + (ranges.prev ? '（上期 ' + prvN + '）' : ''));
       LL.push(arw(dO) + ' 導入 ' + curOp + ' 件' + (ranges.prev ? '（上期 ' + prvOp + '）' : ''));
       if(stale.length){
@@ -5334,31 +5382,44 @@ var state = {
         LL.push('');
       }
       // 類別結構（一行數字 ＋ 一行短洞察）
-      var lc = computeBriefCategory(cur, prv, briefStaleRows(rows));
+      var lc = computeBriefCategory(all, [], briefStaleRows(rows));   // 全期累計（與累計轉換率同口徑）
       if(lc.list.length){
         var lp = [];
         for(var lx = 0; lx < lc.list.length; lx++){
           if(!lc.list[lx].count) continue;
           // 用「新增/導入」同一種寫法 —— 一眼看出動不動得起來
-          lp.push(lc.list[lx].name + ' ' + lc.list[lx].count + '/' + lc.list[lx].imp);
+          lp.push(lc.list[lx].name + ' ' + lc.list[lx].imp + '/' + lc.list[lx].count);
         }
         if(lp.length){
-          LL.push('◆ 類別（新增/導入）' + lp.join('｜'));
+          // 全期口徑先講一次，資料行就不必每行重複（行長才夠用）
+          if(!lineLegend){
+            LL.push('◆ 類別／課別為全期累計（導入/總）');
+            lineLegend = true;
+          }
+          var wl = briefWrapPieces('◆ 類別' + '　', lp, 40);
+          for(var w1 = 0; w1 < wl.length; w1++) LL.push(wl[w1]);
           var lci = briefCatInsight(lc.list, true);
-          if(lci) LL.push('→ ' + lci);
+          if(lci){
+            var ciw = briefWrapText(lci, 38, '　');
+            for(var cix = 0; cix < ciw.length; cix++) LL.push((cix ? '' : '→ ') + ciw[cix]);
+          }
           LL.push('');
         }
       }
       // 課別結構（數字 ＋ 類別專長短句）
-      var lk = computeBriefKeProgress(cur);
+      var lk = computeBriefKeProgress(all);                          // 全期累計
       if(lk.length){
         var lp2 = [];
         for(var ly = 0; ly < lk.length; ly++){
-          lp2.push(lk[ly].name.replace(/課$/, '') + ' ' + lk[ly].n + '/' + lk[ly].imp);
+          lp2.push(lk[ly].name.replace(/課$/, '') + ' ' + lk[ly].imp + '/' + lk[ly].n);
         }
-        LL.push('◆ 課別（新增/導入）' + lp2.join('｜'));
+        var wl2 = briefWrapPieces('◆ 課別' + '　', lp2, 40);
+        for(var w2 = 0; w2 < wl2.length; w2++) LL.push(wl2[w2]);
         var lki = briefKeInsight(lk, true);
-        if(lki) LL.push('→ ' + lki);
+        if(lki){
+          var kiw = briefWrapText(lki, 38, '　');
+          for(var kix = 0; kix < kiw.length; kix++) LL.push((kix ? '' : '→ ') + kiw[kix]);
+        }
         LL.push('');
       }
       if(topKe){
@@ -5407,30 +5468,46 @@ var state = {
     }
     // ■ 類別結構：新增／導入／轉換率都放到「客戶類別」上
     //   （GM 要的不是分佈表，是「哪個類別轉不動」）
-    var gmCat = computeBriefCategory(cur, prv, briefStaleRows(rows));
+    // ⚠ 口徑必須與報表自己的宣告一致：轉換率是「累計（全期）」。
+    //   用本期算會出事 —— 實測 30 天內只有 4 件的類別出現「轉換率 100%」，
+    //   那是樣本雜訊（導入本來就落後新增一個開發週期）。
+    //   本期新增件數另外附在每列，本期動態不會消失。
+    var gmCat = computeBriefCategory(all, [], briefStaleRows(rows));
+    var curByCat = {};
+    for(var cc = 0; cc < cur.length; cc++){
+      var cn2 = String(fieldStr(cur[cc], '類別') || '').trim() || '(未填)';
+      curByCat[cn2] = (curByCat[cn2] || 0) + 1;
+    }
     if(gmCat.list.length){
-      L.push('■ 類別結構（本期，' + curN + ' 件）');
+      L.push('■ 類別結構（全期累計 ' + allN + ' 件；轉換率為累計口徑）');
       for(var c2 = 0; c2 < gmCat.list.length; c2++){
         var ci2 = gmCat.list[c2];
         if(!ci2.count) continue;
-        L.push('・' + ci2.name + '　新增 ' + ci2.count + '（' + briefNum(ci2.share) + '%）' +
-               '｜導入 ' + ci2.imp + '｜轉換率 ' + ci2.rate.toFixed(1) + '%（' +
-               ci2.imp + '/' + ci2.count + '）' + (ci2.stale > 0 ? '｜停滯 ' + ci2.stale : ''));
+        L.push('・' + ci2.name + '　全期 ' + ci2.count + '（' + briefNum(ci2.share) + '%）' +
+               '｜導入 ' + ci2.imp + '｜累計轉換率 ' + ci2.rate.toFixed(1) + '%（' +
+               ci2.imp + '/' + ci2.count + '）' +
+               '｜本期新增 ' + (curByCat[ci2.name] || 0));
       }
       var cins = briefCatInsight(gmCat.list);
       if(cins) L.push(cins);
       L.push('');
     }
     // ■ 課別結構：每一列都標明「新增」與「導入」的客戶類別組成
-    var gmKes = computeBriefKeProgress(cur);
+    var gmKes = computeBriefKeProgress(all);
+    var curByKe = {};
+    for(var kk4 = 0; kk4 < cur.length; kk4++){
+      var kn2 = String(fieldStr(cur[kk4], '課別') || '').trim() || '(未填)';
+      curByKe[kn2] = (curByKe[kn2] || 0) + 1;
+    }
     if(gmKes.length){
-      L.push('■ 課別結構（本期，依導入件數排名）');
+      L.push('■ 課別結構（全期累計，依導入件數排名）');
       for(var k3 = 0; k3 < gmKes.length; k3++){
         var kk3 = gmKes[k3];
-        L.push(kk3.rank + '. ' + kk3.name + '　新增 ' + kk3.n +
+        L.push(kk3.rank + '. ' + kk3.name + '　全期 ' + kk3.n +
                '（' + briefCatBreakdown(kk3.nByCat) + '）｜導入 ' + kk3.imp +
                (kk3.imp > 0 ? '（' + briefCatBreakdown(kk3.impByCat) + '）' : '') +
-               '｜轉換率 ' + kk3.rate.toFixed(1) + '%');
+               '｜累計轉換率 ' + kk3.rate.toFixed(1) + '%' +
+               '｜本期新增 ' + (curByKe[kk3.name] || 0));
       }
       var kins = briefKeInsight(gmKes);
       if(kins) L.push(kins);
