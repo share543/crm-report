@@ -106,6 +106,12 @@
   .topbar h1{ font-size:20px; font-weight:650; }
   .topbar p{ color:var(--muted); font-size:13px; margin-top:2px; }
   main{ max-width:1120px; margin:0 auto; padding:24px; }
+  /* 頁腳：版權與版號（列印也保留 —— PDF 也要能回溯版本） */
+  .app-footer{ max-width:1120px; margin:26px auto 44px; padding:16px 24px 0;
+    border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.9;
+    text-align:center; }
+  .app-footer .af-ver{ color:var(--text); font-weight:700; }
+  .app-footer .af-note{ margin-top:3px; font-size:11.5px; }
   .card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:20px; }
   /* 載入區塊：原本是直排大區塊（拖放區 192px ＋ 卡內距 40px ≈ 338px 高，佔掉太多首屏）。
      改成「一行式」：標題、或、按鈕同一行，內距與字級一併收斂。
@@ -567,6 +573,13 @@
   body.pv-mode #brief .bf-ask{ font-size:20px; }
   /* 投影時不出現操作介面與比較基準說明 */
   body.pv-mode #briefBase, body.pv-mode .bf-modes{ display:none; }
+  /* GM 書面：純文字區塊，方便複製 */
+  .bf-gmhint{ font-size:12px; color:var(--muted); margin-right:2px; }
+  .bf-gm{ white-space:pre-wrap; word-break:break-word; background:var(--card-2);
+    border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin:2px 0 4px;
+    font-size:14px; line-height:1.95; font-family:"Noto Sans TC","PingFang TC",system-ui,sans-serif; }
+  .bf-copy{ margin-left:auto; }
+  .bf-copy.done{ background:var(--ok); border-color:var(--ok); color:#0b2a17; }
   /* ⚠ 投影機不一定 1080p：實測 1920×1080 放得下（剩 106px），
      但 1400×900 溢出 74px、1366×768 溢出 206px。
      依視窗高度再降級，確保任何常見投影解析度都「一頁裝完、不用捲」。 */
@@ -1324,6 +1337,7 @@
     </div>
   </div>
 </main>
+<footer class="app-footer no-print-hide" id="appFooter"></footer>
 
 <!-- 講者版宿主：重點分析不在主報表流程（不顯示、不列印、不投影），
      但仍要渲染 —— 產生講者版單檔時要從這裡取內容。 -->
@@ -1331,8 +1345,16 @@
   <section class="card" id="briefSection" hidden>
     <h2>重點分析 <span class="muted">開場用：本期變化、要注意的事、今天要決定的事</span></h2>
     <p class="bf-base" id="briefBase"></p>
-    <div class="bf-modes">
-      <button type="button" class="bf-mode" id="briefModeBtn" aria-pressed="false">切換講稿模式</button>
+    <div class="bf-modes" id="briefModeBar">
+      <button type="button" class="bf-mode" id="briefModeList" aria-pressed="true">條列</button>
+      <button type="button" class="bf-mode" id="briefModeScript" aria-pressed="false">講稿</button>
+      <button type="button" class="bf-mode" id="briefModeGm" aria-pressed="false">GM 書面</button>
+      <button type="button" class="bf-mode bf-copy" id="briefCopyBtn" hidden>複製全文</button>
+    </div>
+    <div class="bf-modes" id="briefGmBar" hidden>
+      <span class="bf-gmhint">可直接複製貼到訊息或郵件：</span>
+      <button type="button" class="bf-mode" id="briefGmMsg" aria-pressed="true">訊息短版</button>
+      <button type="button" class="bf-mode" id="briefGmMail" aria-pressed="false">郵件完整版</button>
     </div>
     <div id="brief" class="pending">待產生</div>
     <div class="bf-modes" id="briefDetailBar" hidden>
@@ -1361,8 +1383,18 @@ var state = {
   };
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
-  // 重點分析呈現模式（'list'＝三分法條列 | 'script'＝講稿）；只在本次瀏覽有效
+  // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
+  var APP_VERSION = '1.0.0';
+  var APP_VERSION_DATE = '2026-10-08';
+  var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
+  // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
+  //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
+  var APP_LICENSE = 'MIT License';
+  var APP_FOOTER_NOTE = '單檔離線工具：所有資料都在您的瀏覽器內處理，不會上傳任何伺服器。';
+
   state.briefMode = 'list';
+  // GM 書面摘要的變體：'msg'＝訊息短版、'mail'＝郵件完整版
+  state.briefGmVariant = 'msg';
   // 本期分析（類別／課別細部）展開與否：null＝自動（螢幕展開、投影收合）、true/false＝使用者指定
   state.briefDetail = null;
 
@@ -4296,6 +4328,64 @@ var state = {
     arr.sort(function(a, b){ return b.count - a.count || (a.name < b.name ? -1 : 1); });
     return arr;
   }
+  // 停滯天數（逐件）：與 briefStaleRows 同一套判定，另回傳天數
+  function briefStaleGaps(rows){
+    var out = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(classifyStatus(r) !== '進行中') continue;
+      var last = '';
+      for(var m = MILESTONES.length - 1; m >= 0; m--){
+        var v = fieldStr(r, MILESTONES[m]);
+        if(v){ last = v; break; }
+      }
+      if(!last) last = fieldStr(r, '填單日期');
+      var d = new Date(last + 'T00:00:00');
+      if(isNaN(d.getTime())) continue;
+      var gap = Math.floor((Date.now() - d.getTime()) / 86400000);
+      if(gap > STALE_DAYS) out.push(gap);
+    }
+    return out;
+  }
+  function briefAvgMax(arr){
+    if(!arr || !arr.length) return { n: 0, avg: 0, max: 0 };
+    var sum = 0, mx = 0;
+    for(var i = 0; i < arr.length; i++){ sum += arr[i]; if(arr[i] > mx) mx = arr[i]; }
+    return { n: arr.length, avg: Math.round(sum / arr.length), max: mx };
+  }
+  // 平均開發週期（填單→導入天數的平均）；沒有完成的案件時回 null
+  function briefAvgCycle(rows){
+    var d = null;
+    try{ d = computeStageDurations(rows); }catch(e){ return null; }
+    var data = (d && d.total && d.total.data) ? d.total.data : [];
+    if(!data.length) return null;
+    var sum = 0;
+    for(var i = 0; i < data.length; i++) sum += data[i];
+    return Math.round(sum / data.length);
+  }
+  // 近 n 個月的新增件數（以填單日期計），由舊到新
+  function briefMonthlySeries(rows, n){
+    var now = new Date(), out = [];
+    for(var k = n - 1; k >= 0; k--){
+      var d = new Date(now.getFullYear(), now.getMonth() - k, 1);
+      var from = isoDate(d);
+      var to = isoDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+      var c = 0;
+      for(var i = 0; i < rows.length; i++){
+        var key = periodKeyDay(rows[i] && rows[i]['填單日期']);
+        if(key && periodMatches(key, from, to)) c++;
+      }
+      out.push({ label: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), count: c });
+    }
+    return out;
+  }
+  // 把一條洞見的 segs 接成純文字（GM 書面用）
+  function briefSegsText(it){
+    if(!it || !it.segs) return '';
+    var out = '';
+    for(var i = 0; i < it.segs.length; i++) out += it.segs[i][1];
+    return out;
+  }
   function briefTopN(list, n){
     var sum = 0;
     for(var i = 0; i < Math.min(n, list.length); i++) sum += list[i].count;
@@ -4386,6 +4476,8 @@ var state = {
     for(i = 0; i < prv.length; i++) if(classifyStatus(prv[i]) === '合作成功') prvOp++;
     var dOpen = ranges.prev ? briefDelta(curOp, prvOp) : null;
 
+    // 停滯天數：件數之外，GM 第二句話一定是「卡多久了」
+    var staleGap = briefAvgMax(briefStaleGaps(rows));
     var alerts = collectAlerts(rows);
     var misN = (alerts.stamps && alerts.stamps.mismatch) ? alerts.stamps.mismatch.length : 0;
     var stale = briefStaleRows(rows);
@@ -4424,22 +4516,38 @@ var state = {
     if(stale.length){
       items.push({ kind:'watch', key:'stale', prio:1, impact:stale.length, urgency:2, act:false, dirV:null,
         segs:[['t','停滯超過 ' + STALE_DAYS + ' 天 '],['n', String(stale.length)],['t',' 件'],
-              ['m','，其中 '],['w', topKe ? topKe.name : '（無）'],['t',' 就占 '],
-              ['n', String(topKe ? topKe.count : 0)],['t',' 件']],
-        speak:'比較要留意的是停滯：超過 ' + STALE_DAYS + ' 天沒動的有 ' + stale.length + ' 件' +
-              (topKe ? '，其中 ' + topKe.name + ' 就占 ' + topKe.count + ' 件。' : '。') });
+              ['m','（平均已停滯 ' + staleGap.avg + ' 天、最久 ' + staleGap.max + ' 天）']],
+        speak:'比較要留意的是停滯：超過 ' + STALE_DAYS + ' 天沒動的有 ' + stale.length + ' 件，' +
+              '平均已經卡了 ' + staleGap.avg + ' 天、最久 ' + staleGap.max + ' 天。' });
     } else {
       items.push({ kind:'watch', key:'stale0', prio:1, impact:0, urgency:1, act:false, dirV:null,
         segs:[['t','沒有停滯超過 ' + STALE_DAYS + ' 天的案件'],['m','（所有進行中案件都在推進中）']],
         speak:'停滯的部分目前沒有異常，進行中的案件都在推進。' });
     }
-    if(stale.length >= 5){
-      var local = share >= 50;
-      items.push({ kind:'watch', key:'focus', prio:2, impact:top3.sum, urgency:1, act:false, dirV:null,
-        segs:[['t','停滯案件 '],['n', String(share) + '%'],['t',' 集中在 3 個課別'],
-              ['m', local ? '（問題有明確位置，是局部問題）' : '（分散在多個課別，是全面性問題）']],
-        speak:'而且停滯有 ' + share + '% 集中在 3 個課別，' +
-              (local ? '表示問題有明確的位置，是局部問題。' : '表示這是全面性的問題。') });
+    if(stale.length >= 5 && topKe){
+      // ⚠ 舊版寫「停滯案件 X% 集中在 3 個課別（局部問題）」，判準是 Top3 覆蓋率 >= 50%。
+      //    那個判準在「課別總數 <= 3」時必然成立（Top3 就是全部），於是：
+      //    ① 敘述恆為 100%，等於廢話；② 還把「每個課別都有停滯」講成「局部問題」= 假話。
+      //    （實測：停滯 59 件分佈 南一課30／北一課15／北二課14，3 個課別全部有份，
+      //      舊版卻輸出「100% 集中在 3 個課別（問題有明確位置，是局部問題）」。）
+      //    正確判準是「有停滯的課別數 vs 課別總數」——要有課別「沒有」停滯，才談得上集中。
+      var keAll = briefGroupCount(rows, '課別');
+      var keWithStale = 0;
+      for(i = 0; i < byKe.length; i++) if(byKe[i].count > 0) keWithStale++;
+      var someClean = keAll.length > keWithStale;
+      var concentrated = someClean && keWithStale <= Math.max(1, Math.floor(keAll.length / 2));
+      var topShare = stale.length ? Math.round(topKe.count * 1000 / stale.length) / 10 : 0;
+      var verdict = !someClean
+        ? '（全部 ' + keAll.length + ' 個課別都有停滯，是普遍性問題）'
+        : (concentrated ? '（停滯只出現在 ' + keWithStale + ' 個課別，問題位置明確）'
+                        : '（分散在 ' + keWithStale + ' 個課別，沒有單一集中點）');
+      items.push({ kind:'watch', key:'focus', prio:2, impact:topKe.count, urgency:1, act:false, dirV:null,
+        segs:[['t','停滯最集中的是 '],['w', topKe.name],['t',' '],['n', String(topKe.count)],
+              ['t',' 件（佔 '],['n', String(topShare) + '%'],['t','）'],['m', verdict]],
+        speak:'停滯最集中的是 ' + topKe.name + '，' + topKe.count + ' 件、佔 ' + topShare + '%。' +
+              (someClean ? (concentrated ? '停滯只出現在部分課別，位置很明確。'
+                                         : '不過分散在好幾個課別，沒有單一集中點。')
+                         : '而且每個課別都有停滯，是普遍性的推進問題。') });
     }
     // W5 新增案件的類別分析（使用者指定要融合）
     if(curN >= 3){
@@ -4633,6 +4741,7 @@ var state = {
     var share = stale.length ? Math.round(briefTopN(byKe, 3).sum * 1000 / stale.length) / 10 : 0;
     var unstart = 0;
     for(var u = 0; u < allRows.length; u++) if(classifyStatus(allRows[u]) === '未啟動') unstart++;
+    var avgCycle = briefAvgCycle(allRows);
 
     var tiles = [
       // 「全期累計」的基準要與下面的開發轉換率一致（都是 allRows ＝ 篩選後全部資料），
@@ -4643,8 +4752,13 @@ var state = {
       { l: '本期導入完成', v: String(co), d: ranges.prev ? briefDirArrow(dO) : '—',
         cl: briefDirClass(dO),
         s: (ranges.prev ? ('上期 ' + po + ' 件') : '無上期可比') + '・全期累計 ' + opened + ' 件' },
-      { l: '開發轉換率', v: String(rate) + '%', d: '全期', cl: 'bf-flat',
-        s: '已導入 ' + opened + ' / 總 ' + allRows.length },
+      // ⚠ 不以「本期導入 ÷ 本期新增」呈現轉換率：導入比新增落後一整個開發週期
+      //    （依里程碑間隔，填單→導入約 100 天），本期導入完成多半來自更早的新增，
+      //    用本期當分母會得出兩套互相矛盾的比率（實測 9.6% vs 45.5%）。
+      //    改為只給「累計（全期）」並附上平均開發週期，讓口徑一眼看得出來。
+      { l: '累計轉換率（全期）', v: String(rate) + '%', d: '全期', cl: 'bf-flat',
+        s: '已導入 ' + opened + ' / 總 ' + allRows.length +
+           (avgCycle ? '・平均開發 ' + avgCycle + ' 天' : '') },
       { l: '待留意（停滯>' + STALE_DAYS + '天）', v: String(stale.length),
         d: 'Top3 課別佔 ' + briefNum(share) + '%', cl: 'bf-warn',
         s: '未啟動另有 ' + unstart + ' 件' }
@@ -4731,7 +4845,9 @@ var state = {
     if(!rows || !rows.length || !state.model || !state.model.rows){ sec.hidden = true; return; }
     var ranges = briefRanges(state.period, new Date());
     if(base) base.textContent = '比較基準：' + ranges.label +
-      '　·　風險與肯定類統計採目前篩選＋期間（與其他區塊一致）';
+      '　·　風險與肯定類統計採目前篩選＋期間（與其他區塊一致）' +
+      '　·　轉換率一律為「累計（全期）」口徑：導入比新增落後約一個開發週期，' +
+      '本期導入完成多來自更早的新增，故不以「本期導入÷本期新增」計算';
     var all = buildBriefItems(rows, trendRows || rows, ranges);
     var safe = [], bad = 0;
     for(var i = 0; i < all.length; i++){
@@ -4750,6 +4866,8 @@ var state = {
     if(state.briefMode === 'script'){
       renderBriefScript(box, items, { range: ranges.range, trendRows: trendRows || rows,
                                       staleN: briefStaleRows(rows).length });
+    } else if(state.briefMode === 'gm'){
+      renderBriefGm(box, rows, trendRows || rows, ranges, items);
     } else renderBriefList(box, items);
     // 本期分析（類別／課別）：永遠是重點分析的一部分，但預設收合 ——
     // 它不跟 5 條搶額度，也不讓投影頁超出一頁。
@@ -4921,25 +5039,207 @@ var state = {
     state.briefDetail = !!open;
     refreshBrief();
   }
+  // 頁腳：內容全部由 APP_* 常數產生 —— 改版只要改常數，不必動 HTML
+  function renderAppFooter(){
+    var f = document.getElementById('appFooter');
+    if(!f) return;
+    f.textContent = '';
+    var l1 = document.createElement('div');
+    l1.appendChild(document.createTextNode(APP_COPYRIGHT + ' ｜ CRM 報表工具 '));
+    var vs = document.createElement('b');
+    vs.className = 'af-ver';
+    vs.textContent = 'v' + APP_VERSION;
+    l1.appendChild(vs);
+    l1.appendChild(document.createTextNode('（' + APP_VERSION_DATE + '）｜授權：' + APP_LICENSE));
+    var l2 = document.createElement('div');
+    l2.className = 'af-note';
+    l2.textContent = APP_FOOTER_NOTE;
+    f.appendChild(l1);
+    f.appendChild(l2);
+  }
+
+  // ── GM 書面摘要：可直接複製貼到訊息或郵件 ──
+  // 與口頭講稿是兩種文體：結論先行、沒有「各位好」、沒有「→ 追問」、有明確請求。
+  function buildGmText(rows, trendRows, ranges, variant, items){
+    var cur = briefRowsInRange(trendRows || rows, ranges.range);
+    var prv = ranges.prev ? briefRowsInRange(trendRows, ranges.prev) : [];
+    var all = trendRows || rows;
+    var coop = function(list){ var n = 0; for(var i = 0; i < list.length; i++)
+      if(classifyStatus(list[i]) === '合作成功') n++; return n; };
+    var curN = cur.length, prvN = prv.length;
+    var curOp = coop(cur), prvOp = coop(prv);
+    var opened = coop(all), allN = all.length;
+    var rate = allN ? Math.round(opened * 1000 / allN) / 10 : 0;
+    var avgCycle = briefAvgCycle(all);
+    var stale = briefStaleRows(rows);
+    var gaps = briefAvgMax(briefStaleGaps(rows));
+    var byKe = briefGroupCount(stale, '課別');
+    var topKe = byKe.length ? byKe[0] : null;
+    var topShare = (topKe && stale.length) ? Math.round(topKe.count * 1000 / stale.length) / 10 : 0;
+    var keAll = briefGroupCount(rows, '課別');
+    var keWithStale = 0;
+    for(var k = 0; k < byKe.length; k++) if(byKe[k].count > 0) keWithStale++;
+    var someClean = keAll.length > keWithStale;
+    var unstart = 0;
+    for(var u = 0; u < all.length; u++) if(classifyStatus(all[u]) === '未啟動') unstart++;
+    var dN = ranges.prev ? briefDelta(curN, prvN) : null;
+    var dO = ranges.prev ? briefDelta(curOp, prvOp) : null;
+    var pct = function(v){ return (v === null) ? '—' : ((v > 0 ? '+' : '') + briefNum(v) + '%'); };
+    var month = briefMonthlySeries(all, 6);
+    var L = [];
+    var head = '業務開發進度摘要';
+
+    // 結論先行
+    var concl = '開發量' + (dN === null ? '' : (dN > 0.05 ? '明顯放大' : (dN < -0.05 ? '下降' : '持平'))) +
+      '（本期新增 ' + curN + ' 件' + (ranges.prev ? '，較上期 ' + pct(dN) : '') + '），' +
+      '導入完成 ' + curOp + ' 件' + (ranges.prev ? '（' + pct(dO) + '）' : '') + '，' +
+      '而停滯超過 ' + STALE_DAYS + ' 天未推進的案件累積到 ' + stale.length + ' 件 —— ' +
+      (stale.length > curOp ? '量能與轉化出現明顯落差，是本期主要風險' : '轉化與推進狀況需持續追蹤') + '。';
+
+    if(variant === 'mail'){
+      L.push('主旨：' + head + '（新增 ' + curN + ' 件、停滯 ' + stale.length + ' 件待處理）');
+      L.push('');
+    }
+    L.push('■ 結論');
+    L.push(concl);
+    L.push('');
+    L.push('■ 關鍵數字' + (ranges.prev ? '（本期 vs 上期）' : ''));
+    L.push('・新增案件　' + curN + ' 件' + (ranges.prev ? '（上期 ' + prvN + ' 件，' + pct(dN) + '）' : ''));
+    L.push('・導入完成　' + curOp + ' 件' + (ranges.prev ? '（上期 ' + prvOp + ' 件，' + pct(dO) + '）' : ''));
+    L.push('・累計轉換率　' + rate + '%（累計已導入 ' + opened + ' / 總 ' + allN + '；全期口徑' +
+           (avgCycle ? '，平均開發 ' + avgCycle + ' 天' : '') + '）');
+    L.push('・停滯 >' + STALE_DAYS + ' 天　' + stale.length + ' 件' +
+           (gaps.n ? '（平均已停滯 ' + gaps.avg + ' 天、最久 ' + gaps.max + ' 天）' : '') +
+           '；另有未啟動 ' + unstart + ' 件');
+    L.push('');
+    if(month.length){
+      L.push('■ 近 6 個月新增走勢');
+      L.push(month.map(function(m){ return m.label.slice(5) + ' 月 ' + m.count; }).join(' → '));
+      L.push('');
+    }
+    L.push('■ 問題在哪');
+    if(topKe){
+      L.push('・停滯最集中的是 ' + topKe.name + ' ' + topKe.count + ' 件（佔 ' + topShare + '%）');
+      L.push('・' + (someClean
+        ? '停滯只出現在 ' + keWithStale + ' 個課別（共 ' + keAll.length + ' 個），問題位置明確'
+        : '全部 ' + keAll.length + ' 個課別都有停滯 —— 不是單一課別的問題，是普遍性的推進卡點'));
+    } else {
+      L.push('・目前沒有停滯超過 ' + STALE_DAYS + ' 天的案件');
+    }
+    L.push('');
+    // 裁示：沿用報表自己產生的「要決定」條目（已是中性書面語）
+    var dec = [];
+    for(var q = 0; q < (items || []).length; q++) if(items[q].kind === 'decide') dec.push(items[q]);
+    L.push('■ 需要您裁示（' + dec.length + ' 項）');
+    if(dec.length){
+      for(var d = 0; d < dec.length; d++) L.push((d + 1) + '. ' + briefSegsText(dec[d]));
+    } else {
+      L.push('（本期無需裁示事項）');
+    }
+    if(variant === 'mail'){
+      L.push('');
+      L.push('■ 建議下一步');
+      L.push('・本週：定義「已簽約未導入」的判定標準與處理時限');
+      if(topKe) L.push('・兩週內：提出 ' + topKe.name + ' 停滯 ' + topKe.count + ' 件的支援方案');
+      L.push('・下期起：報表補上「量體（金額）」與「停滯天數」，讓影響可量化');
+      L.push('');
+      L.push('Arthur Hu');
+    }
+    L.push('');
+    L.push('（本摘要由 CRM 報表工具 v' + APP_VERSION + ' 產生於 ' + APP_FOOTER_TS() + '）');
+    return L.join('\n');
+  }
+
+  function APP_FOOTER_TS(){
+    var d = new Date();
+    var p = function(n){ return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+           p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function renderBriefGm(box, rows, trendRows, ranges, items){
+    var pre = document.createElement('pre');
+    pre.className = 'bf-gm';
+    pre.id = 'briefGmText';
+    pre.textContent = buildGmText(rows, trendRows, ranges, state.briefGmVariant, items);
+    box.appendChild(pre);
+  }
+
+  // 複製：file:// 不是 secure context，clipboard API 可能不可用 → 一定要有 fallback
+  function copyBriefText(btn){
+    var el = document.getElementById('briefGmText');
+    if(!el) return;
+    var txt = el.textContent;
+    function done(msg){
+      if(!btn) return;
+      btn.textContent = msg;
+      btn.classList.add('done');
+      setTimeout(function(){ btn.textContent = '複製全文'; btn.classList.remove('done'); }, 1600);
+    }
+    function legacy(){
+      try{
+        var ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try{ ok = document.execCommand('copy'); }catch(e2){ ok = false; }
+        document.body.removeChild(ta);
+        done(ok ? '已複製' : '請長按選取');
+      }catch(e3){ done('請長按選取'); }
+    }
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(function(){ done('已複製'); }, legacy);
+      } else legacy();
+    }catch(e){ legacy(); }
+  }
+
   function syncBriefModeBtn(){
-    var btn = document.getElementById('briefModeBtn');
-    if(!btn) return;
-    var sc = state.briefMode === 'script';
-    btn.textContent = sc ? '切換條列模式' : '切換講稿模式';
-    btn.setAttribute('aria-pressed', sc ? 'true' : 'false');
+    var map = [['briefModeList', 'list'], ['briefModeScript', 'script'], ['briefModeGm', 'gm']];
+    for(var i = 0; i < map.length; i++){
+      var b = document.getElementById(map[i][0]);
+      if(!b) continue;
+      var on = state.briefMode === map[i][1];
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.classList.toggle('on', on);
+    }
+    var gm = state.briefMode === 'gm';
+    var bar = document.getElementById('briefGmBar');
+    if(bar) bar.hidden = !gm;
+    var cp = document.getElementById('briefCopyBtn');
+    if(cp) cp.hidden = !gm;
+    var vm = document.getElementById('briefGmMsg'), vml = document.getElementById('briefGmMail');
+    if(vm) vm.setAttribute('aria-pressed', state.briefGmVariant === 'msg' ? 'true' : 'false');
+    if(vml) vml.setAttribute('aria-pressed', state.briefGmVariant === 'mail' ? 'true' : 'false');
   }
   function setBriefMode(mode){
-    state.briefMode = (mode === 'script') ? 'script' : 'list';
+    if(mode !== 'script' && mode !== 'gm') mode = 'list';
+    var changed = state.briefMode !== mode;
+    state.briefMode = mode;
+    syncBriefModeBtn();
+    if(changed) refreshBrief();
+  }
+  function setBriefGmVariant(v){
+    state.briefGmVariant = (v === 'mail') ? 'mail' : 'msg';
     syncBriefModeBtn();
     refreshBrief();
   }
   function initBrief(){
     state.briefMode = 'list';
+    state.briefGmVariant = 'msg';
     state.briefDetail = null;   // 自動：螢幕展開、投影收合
-    var btn = document.getElementById('briefModeBtn');
-    if(btn) btn.addEventListener('click', function(){
-      setBriefMode(state.briefMode === 'script' ? 'list' : 'script');
-    });
+    var wire = function(id, fn){
+      var b = document.getElementById(id);
+      if(b) b.addEventListener('click', fn);
+    };
+    wire('briefModeList', function(){ setBriefMode('list'); });
+    wire('briefModeScript', function(){ setBriefMode('script'); });
+    wire('briefModeGm', function(){ setBriefMode('gm'); });
+    wire('briefGmMsg', function(){ setBriefGmVariant('msg'); });
+    wire('briefGmMail', function(){ setBriefGmVariant('mail'); });
+    wire('briefCopyBtn', function(){ copyBriefText(this); });
     var db = document.getElementById('briefDetailBtn');
     // ⚠ 要對「實際可見狀態」取反，不是對 state 取反：
     //    state 為 null（自動模式）時 !null === true → 第一次點不會有任何變化。
@@ -8206,21 +8506,41 @@ var state = {
     '.spk-sec .bf-dsum{ font-size:15px; line-height:1.8; }',
     '.spk-sec .bf-kl{ font-size:12.5px; }',
     '@media (min-width:700px){ .spk-sec .bf-kpis{ grid-template-columns:repeat(4,1fr); } }',
-    '@media print{ #spkBar{ display:none !important; } }'
+    '@media print{ #spkBar{ display:none !important; } }',
+    '/* GM 書面：純文字區塊（複製用） */',
+    '.spk-sec .bf-gm{ white-space:pre-wrap; word-break:break-word; background:var(--card-2);',
+    '  border:1px solid var(--border); border-radius:10px; padding:14px 15px; margin:2px 0 4px;',
+    '  font-size:13.5px; line-height:1.85; }',
+    '/* 模式列 */',
+    '#spkBar .spk-m{ font-size:12.5px; padding:5px 11px; }',
+    '#spkBar .spk-m.on{ background:var(--accent); border-color:var(--accent); color:#0b1220; font-weight:700; }',
+    '#spkCopy{ font-size:12.5px; padding:5px 12px; margin-left:auto; }',
+    '#spkFoot{ margin-top:22px; padding-top:12px; border-top:1px solid var(--border);',
+    '  font-size:11.5px; line-height:1.8; color:var(--muted); text-align:center; }'
   ].join('\n');
+
+  // 頁腳純文字（報表與講者版共用同一份版權／版號來源）
+  function appFooterText(){
+    return APP_COPYRIGHT + ' ｜ CRM 報表工具 v' + APP_VERSION +
+           '（' + APP_VERSION_DATE + '）｜授權：' + APP_LICENSE;
+  }
 
   function buildSpeakerHtml(){
     var sec = document.getElementById('briefSection');
     if(!sec) return '';
     var css = '', st = document.querySelectorAll('style');
     for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
-    var prevMode = state.briefMode;
-    // 兩種模式都收進同一個檔案 —— 講者可以當場切換，不必回到電腦重產
+    var prevMode = state.briefMode, prevVar = state.briefGmVariant;
+    // 三種模式都收進同一個檔案 —— 講者可以當場切換，不必回到電腦重產
     setBriefMode('list');
     var listHtml = snapshotBriefSection();
     setBriefMode('script');
     var scriptHtml = snapshotBriefSection();
+    state.briefGmVariant = 'mail';       // 講者版帶「郵件完整版」（含主旨與署名，最完整）
+    setBriefMode('gm');
+    var gmHtml = snapshotBriefSection();
     setBriefMode(prevMode);
+    state.briefGmVariant = prevVar;
     var S = String.fromCharCode(60) + 'script' + String.fromCharCode(62);
     var E = String.fromCharCode(60) + '/script' + String.fromCharCode(62);
     return '<!DOCTYPE html>\n<html lang="zh-Hant" data-theme="dark">\n<head>\n'
@@ -8231,14 +8551,32 @@ var state = {
       + '<style>\n' + SPEAKER_CSS + '</style>\n'
       + '</head>\n<body class="spk-body">\n'
       + '<div id="spkBar"><span class="spk-title">講者版　·　會議主持用</span>'
-      + '<button type="button" id="spkMode">切換講稿模式</button></div>\n'
-      + '<div id="spkList">' + listHtml + '</div>\n'
-      + '<div id="spkScript" class="spk-hide">' + scriptHtml + '</div>\n'
-      + S + '(function(){var a=1,b=document.getElementById("spkMode");'
-      + 'b.addEventListener("click",function(){a=!a;'
-      + 'document.getElementById("spkList").className=a?"":"spk-hide";'
-      + 'document.getElementById("spkScript").className=a?"spk-hide":"";'
-      + 'b.textContent=a?"切換講稿模式":"切換條列模式";});})();' + E + '\n'
+      + '<button type="button" class="spk-m on" data-m="list">條列</button>'
+      + '<button type="button" class="spk-m" data-m="script">講稿</button>'
+      + '<button type="button" class="spk-m" data-m="gm">GM 書面</button>'
+      + '<button type="button" id="spkCopy">複製</button></div>\n'
+      + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
+      + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
+      + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
+      + '<div id="spkFoot">' + appFooterText() + '</div>\n'
+      + S + '(function(){'
+      + 'var bs=document.querySelectorAll(".spk-m");'
+      + 'function show(m){var ids={list:"spkList",script:"spkScript",gm:"spkGm"};'
+      + 'for(var k in ids){var el=document.getElementById(ids[k]);'
+      + 'if(el) el.className="spk-sec"+(k===m?"":" spk-hide");}'
+      + 'for(var i=0;i<bs.length;i++) bs[i].className="spk-m"+(bs[i].getAttribute("data-m")===m?" on":"");}'
+      + 'for(var i=0;i<bs.length;i++) bs[i].addEventListener("click",function(){show(this.getAttribute("data-m"));});'
+      + 'document.getElementById("spkCopy").addEventListener("click",function(){'
+      + 'var el=document.querySelector(".spk-sec:not(.spk-hide)"),txt=el?el.textContent:"",b=this;'
+      + 'function done(t){b.textContent=t;setTimeout(function(){b.textContent="複製";},1600);}'
+      + 'function legacy(){try{var ta=document.createElement("textarea");ta.value=txt;'
+      + 'ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();'
+      + 'var ok=false;try{ok=document.execCommand("copy");}catch(e){ok=false;}'
+      + 'document.body.removeChild(ta);done(ok?"已複製":"請長按選取");}catch(e2){done("請長按選取");}}'
+      + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
+      + 'navigator.clipboard.writeText(txt).then(function(){done("已複製");},legacy);}else legacy();}'
+      + 'catch(e){legacy();}});'
+      + 'show("list");})();' + E + '\n'
       + '</body>\n</html>\n';
   }
 
@@ -8960,6 +9298,7 @@ var state = {
     initSnapshotControls();
     initLaser();
     initBrief();
+    renderAppFooter();   // 版權與版號頁腳（內容由 APP_* 常數產生）
     if(!dropzone) return;
 
     window.addEventListener('dragover', function(e){ e.preventDefault(); });
@@ -9208,6 +9547,16 @@ var state = {
       briefStaleRows: briefStaleRows,
       renderBriefSection: renderBriefSection,
       briefDirWordUnit: briefDirWordUnit,
+      briefStaleGaps: briefStaleGaps,
+      briefAvgMax: briefAvgMax,
+      briefAvgCycle: briefAvgCycle,
+      briefMonthlySeries: briefMonthlySeries,
+      briefSegsText: briefSegsText,
+      buildGmText: buildGmText,
+      setBriefGmVariant: setBriefGmVariant,
+      renderAppFooter: renderAppFooter,
+      copyBriefText: copyBriefText,
+      appVersion: APP_VERSION,
       snapshotBriefSection: snapshotBriefSection,
       buildSpeakerHtml: buildSpeakerHtml,
       saveSpeakerVersion: saveSpeakerVersion,
