@@ -1352,9 +1352,9 @@
       <button type="button" class="bf-mode bf-copy" id="briefCopyBtn" hidden>複製</button>
     </div>
     <div class="bf-modes" id="briefGmBar" hidden>
-      <span class="bf-gmhint">可直接複製貼到訊息或郵件：</span>
-      <button type="button" class="bf-mode" id="briefGmMsg" aria-pressed="true">訊息短版</button>
-      <button type="button" class="bf-mode" id="briefGmMail" aria-pressed="false">郵件完整版</button>
+      <span class="bf-gmhint">可直接複製貼上：</span>
+      <button type="button" class="bf-mode" id="briefGmLine" aria-pressed="false">LINE 短版</button>
+      <button type="button" class="bf-mode" id="briefGmMail" aria-pressed="true">郵件完整版</button>
     </div>
     <div id="brief" class="pending">待產生</div>
     <div class="bf-modes" id="briefDetailBar" hidden>
@@ -1384,7 +1384,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.0.1';   // 1.0.1：修正複製格式（貼上後可讀）
+  var APP_VERSION = '1.1.0';   // 1.1.0：新增 LINE 短版（聊天用格式）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1393,8 +1393,8 @@ var state = {
   var APP_FOOTER_NOTE = '單檔離線工具：所有資料都在您的瀏覽器內處理，不會上傳任何伺服器。';
 
   state.briefMode = 'list';
-  // GM 書面摘要的變體：'msg'＝訊息短版、'mail'＝郵件完整版
-  state.briefGmVariant = 'msg';
+  // GM 書面摘要的變體：'line'＝LINE 短版、'mail'＝郵件完整版（預設郵件，因為郵件是主要用途）
+  state.briefGmVariant = 'mail';
   // 目前模式的「貼上用純文字」（由 renderBriefSection 產生，複製鈕直接取用）
   state.briefCopyText = '';
   // 本期分析（類別／課別細部）展開與否：null＝自動（螢幕展開、投影收合）、true/false＝使用者指定
@@ -5108,6 +5108,55 @@ var state = {
     var dO = ranges.prev ? briefDelta(curOp, prvOp) : null;
     var pct = function(v){ return (v === null) ? '—' : ((v > 0 ? '+' : '') + briefNum(v) + '%'); };
     var month = briefMonthlySeries(all, 6);
+    var d3 = new Date(), pp3 = function(n){ return ('0' + n).slice(-2); };
+    var ymd = d3.getFullYear() + '-' + pp3(d3.getMonth() + 1) + '-' + pp3(d3.getDate());
+
+    // ── LINE 短版 ──────────────────────────────────────────────────────────
+    // 聊天用的文體：行要短、層次要少、用 emoji 當視覺標記、不要主旨與署名。
+    // 直接送出，不需要收件人回頭對照報表。
+    if(variant === 'line'){
+      // ⚠ 方向一律由數字推導（不可寫死 emoji，否則會出現「下降卻標📈」的假話）
+      var arw = function(v){
+        if(v === null || v === undefined) return '・';
+        if(v > 0.05) return '📈';
+        if(v < -0.05) return '📉';
+        return '➡️';
+      };
+      var LL = ['【業務開發｜本期摘要 ' + ymd + '】', ''];
+      LL.push(arw(dN) + ' 新增 ' + curN + ' 件' + (ranges.prev ? '（上期 ' + prvN + '）' : ''));
+      LL.push(arw(dO) + ' 導入 ' + curOp + ' 件' + (ranges.prev ? '（上期 ' + prvOp + '）' : ''));
+      if(stale.length){
+        LL.push('⚠️ 停滯 >' + STALE_DAYS + ' 天 ' + stale.length + ' 件' +
+                (gaps.n ? '（平均 ' + gaps.avg + ' 天）' : ''));
+      }
+      LL.push('');
+      // 裁示事項：聊天要短 → 由結構化資料重建短句（不直接用落落長的原始句）
+      var misN3 = 0;
+      try{
+        var a3 = collectAlerts(rows);
+        misN3 = (a3 && a3.stamps && a3.stamps.mismatch) ? a3.stamps.mismatch.length : 0;
+      }catch(e3){ misN3 = 0; }
+      var lineDec = [];
+      if(misN3) lineDec.push('「已簽約未導入」' + misN3 + ' 件 → 待定判定標準');
+      if(topKe && topKe.count >= 5) lineDec.push(topKe.name + '停滯 ' + topKe.count + ' 件 → 支援或重新分派');
+      if(lineDec.length){
+        LL.push('📌 要決定 ' + lineDec.length + ' 項');
+        for(var q3 = 0; q3 < lineDec.length; q3++) LL.push((q3 + 1) + '. ' + lineDec[q3]);
+        LL.push('');
+      }
+      if(topKe){
+        LL.push('停滯集中在 ' + topKe.name + '（' + topKe.count + ' 件、' + briefNum(topShare) + '%），');
+        LL.push(someClean ? '其餘課別較少 → 位置明確。' : '3 個課別都有 → 普遍性卡點，不是單一課別。');
+        LL.push('');
+      }
+      if(month.length){
+        LL.push('近 6 個月新增');
+        LL.push(month.map(function(m){
+          return String(Number(m.label.slice(5))) + '月 ' + m.count;
+        }).join('→'));
+      }
+      return LL.join('\n').replace(/\s+$/, '');
+    }
     var L = [];
     var head = '業務開發進度摘要';
 
@@ -5310,8 +5359,8 @@ var state = {
       cp.hidden = false;                       // 三種模式都能複製
       if(state.briefMode === 'gm') cp.textContent = '複製全文';
     }
-    var vm = document.getElementById('briefGmMsg'), vml = document.getElementById('briefGmMail');
-    if(vm) vm.setAttribute('aria-pressed', state.briefGmVariant === 'msg' ? 'true' : 'false');
+    var vm = document.getElementById('briefGmLine'), vml = document.getElementById('briefGmMail');
+    if(vm) vm.setAttribute('aria-pressed', state.briefGmVariant === 'line' ? 'true' : 'false');
     if(vml) vml.setAttribute('aria-pressed', state.briefGmVariant === 'mail' ? 'true' : 'false');
   }
   function setBriefMode(mode){
@@ -5322,13 +5371,13 @@ var state = {
     if(changed) refreshBrief();
   }
   function setBriefGmVariant(v){
-    state.briefGmVariant = (v === 'mail') ? 'mail' : 'msg';
+    state.briefGmVariant = (v === 'line') ? 'line' : 'mail';
     syncBriefModeBtn();
     refreshBrief();
   }
   function initBrief(){
     state.briefMode = 'list';
-    state.briefGmVariant = 'msg';
+    state.briefGmVariant = 'mail';
     state.briefDetail = null;   // 自動：螢幕展開、投影收合
     var wire = function(id, fn){
       var b = document.getElementById(id);
@@ -5337,7 +5386,7 @@ var state = {
     wire('briefModeList', function(){ setBriefMode('list'); });
     wire('briefModeScript', function(){ setBriefMode('script'); });
     wire('briefModeGm', function(){ setBriefMode('gm'); });
-    wire('briefGmMsg', function(){ setBriefGmVariant('msg'); });
+    wire('briefGmLine', function(){ setBriefGmVariant('line'); });
     wire('briefGmMail', function(){ setBriefGmVariant('mail'); });
     wire('briefCopyBtn', function(){ copyBriefText(this); });
     var db = document.getElementById('briefDetailBtn');
