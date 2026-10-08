@@ -1125,6 +1125,8 @@
     <button type="button" id="exportCsvBtn" disabled>匯出 CSV</button>
     <button type="button" id="saveBtn" disabled>存檔（含資料）</button>
     <button type="button" id="presentBtn" disabled>開始簡報</button>
+    <button type="button" id="speakerBtn" disabled
+            title="產生講者版單檔（主持人用講稿，可傳到手機／平板離線開啟；與會者不受影響）">講者版</button>
     <button type="button" id="laserBtn" aria-pressed="false"
             title="會議用光點：讓與會人員清楚看到你指的地方（快速鍵 L）">◎ 雷射筆</button>
     <button type="button" id="printBtn" disabled>列印</button>
@@ -1215,19 +1217,6 @@
       </div>
     </div>
   </section>
-  <section class="card" id="briefSection" hidden>
-    <h2>重點分析 <span class="muted">開場用：本期變化、要注意的事、今天要決定的事</span></h2>
-    <p class="bf-base" id="briefBase"></p>
-    <div class="bf-modes">
-      <button type="button" class="bf-mode" id="briefModeBtn" aria-pressed="false">切換講稿模式</button>
-    </div>
-    <div id="brief" class="pending">待產生</div>
-    <div class="bf-modes" id="briefDetailBar" hidden>
-      <button type="button" class="bf-mode" id="briefDetailBtn" aria-expanded="false"></button>
-    </div>
-    <div id="briefDetail" hidden></div>
-  </section>
-
   <section class="card" id="alertSection" hidden>
     <h2>待留意事項</h2>
     <div id="alerts" class="pending">待產生</div>
@@ -1325,6 +1314,23 @@
     </div>
   </div>
 </main>
+
+<!-- 講者版宿主：重點分析不在主報表流程（不顯示、不列印、不投影），
+     但仍要渲染 —— 產生講者版單檔時要從這裡取內容。 -->
+<div id="speakerHost" hidden>
+  <section class="card" id="briefSection" hidden>
+    <h2>重點分析 <span class="muted">開場用：本期變化、要注意的事、今天要決定的事</span></h2>
+    <p class="bf-base" id="briefBase"></p>
+    <div class="bf-modes">
+      <button type="button" class="bf-mode" id="briefModeBtn" aria-pressed="false">切換講稿模式</button>
+    </div>
+    <div id="brief" class="pending">待產生</div>
+    <div class="bf-modes" id="briefDetailBar" hidden>
+      <button type="button" class="bf-mode" id="briefDetailBtn" aria-expanded="false"></button>
+    </div>
+    <div id="briefDetail" hidden></div>
+  </section>
+</div>
 <script>
 'use strict';
 
@@ -7499,6 +7505,8 @@ var state = {
       var card = cards[i];
       if(!card || !card.querySelector) continue;
       if(card.querySelector('.card-tools')) continue;   // 已處理過（幂等）
+      // 重點分析已移出主報表（改成講者版），不需要存圖／跳轉鈕
+      if(card.id === 'briefSection') continue;
       var h2 = card.querySelector('h2');
       if(!h2) continue;
       // 右上工具列：一個 flex 群組，之後要再加按鈕只要往這裡 append，不必改任何座標。
@@ -8046,7 +8054,7 @@ var state = {
     initListControls();
     rebuild();
     renderAgenda();
-    var enabled = ['exportCsvBtn', 'saveBtn', 'presentBtn', 'printBtn'];
+    var enabled = ['exportCsvBtn', 'saveBtn', 'presentBtn', 'speakerBtn', 'printBtn'];
     for(var b = 0; b < enabled.length; b++){
       var el = document.getElementById(enabled[b]);
       if(el) el.disabled = false;
@@ -8105,6 +8113,99 @@ var state = {
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
   }
 
+  // ---------------------------------------------------------------------------
+  // 講者版：把「重點分析」抽成單檔 HTML，給主持人在另一台裝置（手機／平板）離線看。
+  //   動機：會議時簡報電腦分享同一個畫面，與會者看的是主報表／簡報；
+  //   主持人手上的「講稿提示」不能出現在那個畫面上，所以另存為可攜單檔。
+  // 產生方式＝「已渲染的 DOM 快照 ＋ 報表既有 CSS」——不重跑分析，
+  //   所以不會出現兩套算法漂移（同一份數字，只是換一個容器呈現）。
+  // ⚠ 重點分析仍必須被渲染（宿主 #speakerHost 只是 hidden）——否則這裡取不到內容。
+  // ---------------------------------------------------------------------------
+  function snapshotBriefSection(){
+    var sec = document.getElementById('briefSection');
+    if(!sec) return '';
+    var clone = sec.cloneNode(true);
+    var kill = clone.querySelectorAll('.card-tools, .bf-modes');
+    for(var i = 0; i < kill.length; i++){
+      if(kill[i].parentNode) kill[i].parentNode.removeChild(kill[i]);
+    }
+    clone.hidden = false;
+    clone.removeAttribute('id');
+    clone.className = 'card spk-sec';
+    return clone.outerHTML;
+  }
+
+  // 講者版專屬版面（不動主報表）：手機優先、深色、一眼掃到
+  var SPEAKER_CSS = [
+    'body.spk-body{ padding:max(10px, env(safe-area-inset-top)) 12px calc(30px + env(safe-area-inset-bottom));',
+    '  max-width:900px; margin:0 auto; }',
+    '#spkBar{ position:sticky; top:0; z-index:50; display:flex; gap:8px; align-items:center;',
+    '  padding:9px 0 11px; background:var(--bg); border-bottom:1px solid var(--border); margin:0 0 14px; }',
+    '#spkBar .spk-title{ font-size:12.5px; color:var(--muted); margin-right:auto; }',
+    '#spkMode{ font-size:13px; padding:6px 13px; }',
+    '.spk-hide{ display:none !important; }',
+    '.spk-sec.card{ border:none; background:transparent; padding:0; margin:0; }',
+    '.spk-sec .card-tools{ display:none !important; }',
+    '/* 數字帶：手機改 2×2（原本 1 欄會佔掉整個首屏） */',
+    '.spk-sec .bf-kpis{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:2px 0 16px; }',
+    '.spk-sec .bf-kpi{ flex:none; padding:11px 13px; }',
+    '.spk-sec .bf-kv{ font-size:24px; }',
+    '/* 主持人要一眼掃到：條目與講稿加大 */',
+    '.spk-sec .bf-list > li{ font-size:16.5px; line-height:1.85; }',
+    '.spk-sec .bf-script p{ font-size:16.5px; line-height:1.95; }',
+    '.spk-sec .bf-dsum{ font-size:15px; line-height:1.8; }',
+    '.spk-sec .bf-kl{ font-size:12.5px; }',
+    '@media (min-width:700px){ .spk-sec .bf-kpis{ grid-template-columns:repeat(4,1fr); } }',
+    '@media print{ #spkBar{ display:none !important; } }'
+  ].join('\n');
+
+  function buildSpeakerHtml(){
+    var sec = document.getElementById('briefSection');
+    if(!sec) return '';
+    var css = '', st = document.querySelectorAll('style');
+    for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
+    var prevMode = state.briefMode;
+    // 兩種模式都收進同一個檔案 —— 講者可以當場切換，不必回到電腦重產
+    setBriefMode('list');
+    var listHtml = snapshotBriefSection();
+    setBriefMode('script');
+    var scriptHtml = snapshotBriefSection();
+    setBriefMode(prevMode);
+    var S = String.fromCharCode(60) + 'script' + String.fromCharCode(62);
+    var E = String.fromCharCode(60) + '/script' + String.fromCharCode(62);
+    return '<!DOCTYPE html>\n<html lang="zh-Hant" data-theme="dark">\n<head>\n'
+      + '<meta charset="utf-8">\n'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+      + '<title>重點分析（講者版）</title>\n'
+      + '<style>\n' + css + '</style>\n'
+      + '<style>\n' + SPEAKER_CSS + '</style>\n'
+      + '</head>\n<body class="spk-body">\n'
+      + '<div id="spkBar"><span class="spk-title">講者版　·　會議主持用</span>'
+      + '<button type="button" id="spkMode">切換講稿模式</button></div>\n'
+      + '<div id="spkList">' + listHtml + '</div>\n'
+      + '<div id="spkScript" class="spk-hide">' + scriptHtml + '</div>\n'
+      + S + '(function(){var a=1,b=document.getElementById("spkMode");'
+      + 'b.addEventListener("click",function(){a=!a;'
+      + 'document.getElementById("spkList").className=a?"":"spk-hide";'
+      + 'document.getElementById("spkScript").className=a?"spk-hide":"";'
+      + 'b.textContent=a?"切換講稿模式":"切換條列模式";});})();' + E + '\n'
+      + '</body>\n</html>\n';
+  }
+
+  function saveSpeakerVersion(){
+    if(!state.model || !state.model.rows) return;
+    var html = buildSpeakerHtml();
+    if(!html) return;
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '重點分析-講者版.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  }
+
   // 簡報模式（開會投影片）：全螢幕覆蓋層一次顯示一個區段，方向鍵/空白/Digit 換頁、Esc 結束。
   // 投影片＝現有各 section（不含 載入卡 與 原始資料），切頁採「移動真實節點」以保留事件綁定；
   // 結束時將所有被移動的 section 依原位置歸位。
@@ -8112,7 +8213,6 @@ var state = {
   //    只改 DOM 會變成「畫面一個順序、投影另一個順序」。
   var PRESENT_SLIDES = [
     { id: 'agendaSection', title: '本日議題' },
-    { id: 'briefSection', title: '重點分析' },
     { id: 'alertSection', title: '待留意事項' },
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection', title: '案件狀態統計' },
@@ -8148,7 +8248,6 @@ var state = {
   // 可列印區塊清單（依 main 內 section 順序；載入／分析期間為控制用，不列入）
   var PRINT_SECTIONS = [
     { id: 'agendaSection',    title: '本日議題' },
-    { id: 'briefSection',     title: '重點分析' },
     { id: 'alertSection',     title: '待留意事項' },
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection',      title: '案件狀態統計' },
@@ -8855,6 +8954,10 @@ var state = {
     if(saveBtn){
       saveBtn.addEventListener('click', saveSelfContained);
     }
+    var speakerBtn = document.getElementById('speakerBtn');
+    if(speakerBtn){
+      speakerBtn.addEventListener('click', saveSpeakerVersion);
+    }
     var presentBtn = document.getElementById('presentBtn');
     if(presentBtn){
       presentBtn.addEventListener('click', enterPresent);
@@ -9055,6 +9158,9 @@ var state = {
       briefStaleRows: briefStaleRows,
       renderBriefSection: renderBriefSection,
       briefDirWordUnit: briefDirWordUnit,
+      snapshotBriefSection: snapshotBriefSection,
+      buildSpeakerHtml: buildSpeakerHtml,
+      saveSpeakerVersion: saveSpeakerVersion,
       computeBriefCategory: computeBriefCategory,
       computeBriefKeProgress: computeBriefKeProgress,
       briefKeSummary: briefKeSummary,
