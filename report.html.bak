@@ -506,41 +506,7 @@
     padding:2px 11px; font-family:inherit; font-size:12px; color:var(--accent); cursor:pointer;
     margin:0 0 12px; }
   .bf-mode:hover{ border-color:var(--accent); color:var(--text); }
-  .bf-modes{ display:flex; gap:8px; align-items:center; margin:0 0 12px; flex-wrap:wrap; }
-  /* ---- 本期分析（類別／課別細部）：預設收合，標題帶結論數字 ---- */
-  #briefDetail{ margin-top:14px; border-top:1px solid var(--border); padding-top:14px; }
-  #briefDetail[hidden]{ display:none; }
-  .bf-dtitle{ font-size:13.5px; font-weight:700; margin:0 0 4px; }
-  .bf-dnote{ font-size:12px; color:var(--muted); margin:0 0 9px; line-height:1.6; }
-  .bf-dblock{ margin-bottom:18px; }
-  .bf-dblock:last-child{ margin-bottom:0; }
-  .bf-catrow{ display:flex; align-items:center; gap:10px; padding:3px 0; font-size:13px; }
-  .bf-catname{ flex:0 0 92px; color:var(--text); }
-  .bf-catbar{ flex:1 1 auto; height:9px; background:var(--card-2); border-radius:999px; overflow:hidden;
-    min-width:60px; }
-  .bf-catfill{ height:100%; background:var(--accent); }
-  .bf-catfill.up{ background:var(--ok); }
-  .bf-catfill.dn{ background:var(--error); }
-  .bf-catval{ flex:0 0 92px; color:var(--muted); text-align:right; white-space:nowrap; }
-  .bf-kerow{ display:flex; align-items:center; gap:10px; padding:3px 0; font-size:13px; }
-  .bf-kename{ flex:0 0 78px; color:var(--text); }
-  /* ⚠ 導入件數是「新增其中」的子集 → 綠色段必須疊在藍色段裡面。
-     若用 flex 把兩段並排，長條總長會變成「新增＋導入」，與文字說明矛盾。 */
-  .bf-kebar{ flex:1 1 auto; height:10px; background:var(--card-2); border-radius:999px; overflow:hidden;
-    min-width:60px; display:block; }
-  .bf-kefill{ display:block; height:100%; background:var(--accent); }
-  .bf-kimp{ display:block; height:100%; background:var(--ok); }
-  .bf-keval{ flex:0 0 150px; color:var(--muted); text-align:right; white-space:nowrap; }
-  .bf-kerank{ flex:0 0 26px; text-align:center; font-weight:700; color:var(--muted); }
-  .bf-kerank.r1{ color:var(--ok); }
-  .bf-dsum{ font-size:13px; line-height:1.7; margin:0 0 9px; padding:9px 12px; border-radius:8px;
-    background:var(--card-2); border-left:3px solid var(--accent); }
-  .bf-dsum b{ color:var(--warning); }
-  body.pv-mode #briefDetail .bf-catrow, body.pv-mode #briefDetail .bf-kerow{ font-size:16px; padding:5px 0; }
-  body.pv-mode #briefDetail{ margin-top:10px; padding-top:10px; }
-  @media (max-height: 800px){
-    body.pv-mode #briefDetail .bf-catrow, body.pv-mode #briefDetail .bf-kerow{ font-size:13.5px; padding:3px 0; }
-  }
+  .bf-modes{ display:flex; gap:8px; align-items:center; margin:0 0 12px; }
   /* 投影模式：重點分析是開場頁，字要放大到後排看得到
      （實測投影畫面後，18.5px 的正文在後排偏小 → 提高到 22px，標籤與內文一起放大） */
   body.pv-mode #brief .bf-kv{ font-size:36px; }
@@ -588,13 +554,7 @@
     body.pv-mode #brief .bf-tag{ font-size:12px; padding:2px 9px; margin-bottom:5px; }
     body.pv-mode #brief .bf-band{ margin-bottom:7px; }
   }
-  /* 列印時強制展開本期分析 —— 沿用報表既有慣例：可收合區塊在列印要展開，
-     否則 PDF 會靜默漏掉整個區塊（畫面上完全正常）。操作鈕本身則不進 PDF。 */
-  @media print{
-    .bf-mode, .bf-modes{ display:none !important; }
-    #briefDetail[hidden]{ display:block !important; }
-    #briefDetail{ border-top:1px solid #bbb !important; }
-  }
+  @media print{ .bf-mode, .bf-modes{ display:none !important; } }
 
   /* ===================== 會議用雷射筆光點（游標） ===================== */
   #laserBtn.on{ color:#fff; background:var(--laser); border-color:var(--laser); }
@@ -1222,10 +1182,6 @@
       <button type="button" class="bf-mode" id="briefModeBtn" aria-pressed="false">切換講稿模式</button>
     </div>
     <div id="brief" class="pending">待產生</div>
-    <div class="bf-modes" id="briefDetailBar" hidden>
-      <button type="button" class="bf-mode" id="briefDetailBtn" aria-expanded="false"></button>
-    </div>
-    <div id="briefDetail" hidden></div>
   </section>
 
   <section class="card" id="alertSection" hidden>
@@ -1347,8 +1303,6 @@ var state = {
   state.jumpFrom = null;   // { id, title } | null
   // 重點分析呈現模式（'list'＝三分法條列 | 'script'＝講稿）；只在本次瀏覽有效
   state.briefMode = 'list';
-  // 本期分析（類別／課別細部）展開與否：null＝自動（螢幕展開、投影收合）、true/false＝使用者指定
-  state.briefDetail = null;
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
   var DATE_COLS = new Set(['填單日期','初步接洽','需求確認','報價','簽約','導入']);
@@ -4123,13 +4077,6 @@ var state = {
     if(v < -0.05) return '▼ ' + briefNum(v) + '%';
     return '＝ 持平';
   }
-  // 方向詞（可換單位：百分點／件）
-  function briefDirWordUnit(v, unit){
-    if(v === null || v === undefined) return '無從比較';
-    if(v > 0.05)  return '增加 ' + briefNum(v) + (unit || '');
-    if(v < -0.05) return '減少 ' + briefNum(v) + (unit || '');
-    return '持平';
-  }
   function briefDirMood(v){
     if(v === null || v === undefined) return '上期沒有可比較的基準';
     if(v > 0.05)  return '動能是往上走的';
@@ -4259,60 +4206,6 @@ var state = {
     return out;
   }
 
-  // ---- 本期分析：新增案件的類別分佈（含與上期比較） ----
-  function computeBriefCategory(curRows, prevRows){
-    var cur = briefGroupCount(curRows, '類別');
-    var prv = briefGroupCount(prevRows || [], '類別');
-    var cn = curRows.length, pn = (prevRows || []).length;
-    var pMap = {};
-    for(var i = 0; i < prv.length; i++) pMap[prv[i].name] = prv[i].count;
-    var out = [];
-    for(var c = 0; c < cur.length; c++){
-      var n = cur[c].count;
-      var share = cn ? Math.round(n * 1000 / cn) / 10 : 0;
-      var pc = pMap[cur[c].name] || 0;
-      var pshare = pn ? Math.round(pc * 1000 / pn) / 10 : 0;
-      out.push({ name: cur[c].name, count: n, share: share, prevCount: pc, prevShare: pshare,
-                 pp: (pn ? Math.round((share - pshare) * 10) / 10 : null) });
-    }
-    // 只在本期出現、上期沒有的類別也標出來
-    for(var p2 = 0; p2 < prv.length; p2++){
-      var found = false;
-      for(var o = 0; o < out.length; o++) if(out[o].name === prv[p2].name) found = true;
-      if(!found) out.push({ name: prv[p2].name, count: 0, share: 0, prevCount: prv[p2].count,
-                            prevShare: pn ? Math.round(prv[p2].count * 1000 / pn) / 10 : 0,
-                            pp: pn ? -Math.round(prv[p2].count * 1000 / pn * 10) / 10 : null });
-    }
-    out.sort(function(a, b){ return b.count - a.count || b.prevCount - a.prevCount ||
-                                    (a.name < b.name ? -1 : 1); });
-    return { list: out, total: cn, prevTotal: pn };
-  }
-
-  // ---- 本期分析：課別開發導入進度與排名（依本期導入件數） ----
-  function computeBriefKeProgress(curRows){
-    var groups = briefGroupCount(curRows, '課別');
-    var imp = {};
-    for(var i = 0; i < curRows.length; i++){
-      if(classifyStatus(curRows[i]) !== '合作成功') continue;
-      var k = String(fieldStr(curRows[i], '課別') || '').trim();
-      if(!k) k = '(未填)';
-      imp[k] = (imp[k] || 0) + 1;
-    }
-    var list = [];
-    for(var g = 0; g < groups.length; g++){
-      var n = groups[g].count, im = imp[groups[g].name] || 0;
-      list.push({ name: groups[g].name, n: n, imp: im,
-                  rate: n ? Math.round(im * 1000 / n) / 10 : 0 });
-    }
-    // ⚠ 排序即名次：先導入件數，再轉換率，最後案件數。
-    //    「名次」是名次，不是分數 —— 排序規則必須寫明並顯示在畫面上。
-    list.sort(function(a, b){
-      return (b.imp - a.imp) || (b.rate - a.rate) || (b.n - a.n) || (a.name < b.name ? -1 : 1);
-    });
-    for(var r = 0; r < list.length; r++) list[r].rank = r + 1;
-    return list;
-  }
-
   // ---- 候選洞見 ----
   function buildBriefItems(rows, trendRows, ranges){
     var items = [];
@@ -4379,58 +4272,6 @@ var state = {
               ['m', local ? '（問題有明確位置，是局部問題）' : '（分散在多個課別，是全面性問題）']],
         speak:'而且停滯有 ' + share + '% 集中在 3 個課別，' +
               (local ? '表示問題有明確的位置，是局部問題。' : '表示這是全面性的問題。') });
-    }
-    // W5 新增案件的類別分析（使用者指定要融合）
-    if(curN >= 3){
-      var cat = computeBriefCategory(cur, prv);
-      var topCat = cat.list.length ? cat.list[0] : null;
-      if(topCat){
-        var csegs = [['t','本期新增以'],['w', topCat.name],['t','為主力（'],
-                     ['n', String(topCat.count)],['t',' 件，'],['n', String(topCat.share) + '%'],['t','）']];
-        var cspeak = '本期新增 ' + curN + ' 件，以 ' + topCat.name + ' ' + topCat.count +
-                     ' 件、佔 ' + topCat.share + '% 最多。';
-        if(topCat.pp !== null && Math.abs(topCat.pp) >= 3){
-          csegs.push(['m','，佔比較上期'],['m', briefDirWordUnit(topCat.pp, ' 個百分點')]);
-          cspeak += '佔比較上期' + briefDirWordUnit(topCat.pp, ' 個百分點') + '。';
-        }
-        items.push({ kind:'watch', key:'cat', prio:3, impact:topCat.count, urgency:1, act:false,
-          dirV: (topCat.pp !== null && Math.abs(topCat.pp) >= 3) ? topCat.pp : null,
-          segs:csegs, speak:cspeak });
-      }
-    }
-    // W6 課別開發導入進度與排名（使用者指定要融合）
-    if(curN >= 3){
-      var kes = computeBriefKeProgress(cur);
-      if(kes.length >= 2){
-        var lead = kes[0];
-        var lag = null;
-        for(var li = kes.length - 1; li >= 1; li--){
-          if(kes[li].n >= 3 && kes[li].imp === 0){ lag = kes[li]; break; }
-        }
-        var ksegs, kspeak;
-        if(lead.imp > 0){
-          ksegs = [['t','課別導入排名：'],['w', lead.name],['t',' '],['n', String(lead.imp)],
-                   ['t',' 件居首'],['m','（轉換率 ' + briefNum(lead.rate) + '%，第 1 名）']];
-          kspeak = '課別導入排名，' + lead.name + ' ' + lead.imp + ' 件居首，轉換率 ' +
-                   briefNum(lead.rate) + '%，第 1 名。';
-          if(lag){
-            ksegs.push(['m','；'],['w', lag.name],['t',' 本期新增 '],['n', String(lag.n)],
-                       ['t',' 件、導入 0 件']);
-            kspeak += lag.name + ' 本期新增 ' + lag.n + ' 件，但導入 0 件，要留意。';
-          } else if(kes[1]){
-            ksegs.push(['m','；'],['w', kes[1].name],['t',' 次之（'],['n', String(kes[1].imp)],['t',' 件）']);
-            kspeak += kes[1].name + ' 次之，' + kes[1].imp + ' 件。';
-          }
-        } else {
-          // 全部課別都沒有導入 → 不能說「居首」
-          ksegs = [['t','課別導入：本期尚無課別完成導入'],['m','（新增最多為 '],
-                   ['w', lead.name],['t',' '],['n', String(lead.n)],['t',' 件）']];
-          kspeak = '課別導入的部分，本期還沒有任何課別完成導入，新增最多的是 ' + lead.name +
-                   '、' + lead.n + ' 件。';
-        }
-        items.push({ kind:'watch', key:'ke', prio:4, impact:lead.imp, urgency:1, act:false, dirV:null,
-          segs:ksegs, speak:kspeak });
-      }
     }
     var drop = computeDropOff(rows);
     if(drop && drop.nodeLabels && drop.byCat){
@@ -4686,175 +4527,7 @@ var state = {
       renderBriefScript(box, items, { range: ranges.range, trendRows: trendRows || rows,
                                       staleN: briefStaleRows(rows).length });
     } else renderBriefList(box, items);
-    // 本期分析（類別／課別）：永遠是重點分析的一部分，但預設收合 ——
-    // 它不跟 5 條搶額度，也不讓投影頁超出一頁。
-    renderBriefDetail(trendRows || rows, ranges);
     sec.hidden = false;
-  }
-  // 課別導入的結論句（純函式，兩個分支都可單元測試）
-  // ⚠ 全部課別導入都是 0 時，說某人「居首」是誤導 ——
-  //   名次只是在沒有導入的前提下按新增件數排，必須講清楚。
-  function briefKeSummary(kes){
-    if(!kes || !kes.length) return '';
-    var anyImp = false;
-    for(var i = 0; i < kes.length; i++) if(kes[i].imp > 0) anyImp = true;
-    var lead = kes[0], lag = null;
-    if(anyImp){
-      for(var j = kes.length - 1; j >= 1; j--){
-        if(kes[j].n >= 3 && kes[j].imp === 0){ lag = kes[j]; break; }
-      }
-    }
-    if(!anyImp){
-      return '本期尚無課別完成導入（名次暫依本期新增件數排）。新增最多的是 ' + lead.name +
-             '（' + lead.n + ' 件），導入進度需追蹤。';
-    }
-    return '課別導入以 ' + lead.name + ' ' + lead.imp + ' 件居首（轉換率 ' + lead.rate.toFixed(1) + '%）' +
-      (lag ? ('；' + lag.name + '本期新增 ' + lag.n + ' 件、導入 0 件，是主要落差。')
-           : (kes[1] ? ('；' + kes[1].name + ' ' + kes[1].imp + ' 件次之。') : '。'));
-  }
-
-  // ---- 本期分析（類別／課別細部）渲染 ----
-  function renderBriefDetail(trendRows, ranges){
-    var host = document.getElementById('briefDetail');
-    var bar = document.getElementById('briefDetailBar');
-    var btn = document.getElementById('briefDetailBtn');
-    if(!host || !bar || !btn) return;
-    var cur = briefRowsInRange(trendRows, ranges.range);
-    var prv = ranges.prev ? briefRowsInRange(trendRows, ranges.prev) : [];
-    var cat = computeBriefCategory(cur, prv);
-    var kes = computeBriefKeProgress(cur);
-    if(!cat.total && !kes.length){ bar.hidden = true; host.hidden = true; return; }
-
-    // 按鈕標籤帶結論數字：收合時也看得到重點
-    var headline = [];
-    if(cat.list.length && cat.list[0].count){
-      headline.push('類別主力 ' + cat.list[0].name + ' ' + briefNum(cat.list[0].share) + '%');
-    }
-    if(kes.length){
-      var anyImp0 = false;
-      for(var q0 = 0; q0 < kes.length; q0++) if(kes[q0].imp > 0) anyImp0 = true;
-      headline.push(anyImp0
-        ? ('課別導入第 1：' + kes[0].name + '（' + kes[0].imp + ' 件）')
-        : '課別導入：本期尚無完成');
-    }
-    var open = briefDetailEffective();
-    btn.textContent = (open ? '收起細部' : '展開細部') + '（' + headline.join('｜') + '）';
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    bar.hidden = false;
-    // ⚠ 一律建立內容，最後才用 hidden 控制可見。
-    //    原本在收合時提早 return、不建內容 → 列印想強制展開時 DOM 裡根本沒東西，
-    //    PDF 靜默漏掉整個區塊（畫面與列印都看不出原因）。
-    host.textContent = '';
-    // ---- 類別分佈 ----
-    if(cat.total){
-      var d1 = document.createElement('div'); d1.className = 'bf-dblock';
-      var t1 = document.createElement('p'); t1.className = 'bf-dtitle';
-      t1.textContent = '本期新增案件的類別分佈';
-      d1.appendChild(t1);
-      var n1 = document.createElement('p'); n1.className = 'bf-dnote';
-      n1.textContent = '本期（' + ranges.range.from + ' ~ ' + ranges.range.to + '）新增 ' + cat.total +
-        ' 件' + (ranges.prev ? ('，上期 ' + cat.prevTotal + ' 件') : '') +
-        '。長條為本期件數（相對最大值），右側數字為件數與佔比' + (ranges.prev ? '、「±」為佔比較上期的百分點變化' : '') + '。';
-      d1.appendChild(n1);
-      // 一句可以直接講的說明（與課別區塊的 bf-dsum 對稱）
-      if(cat.list.length && cat.list[0].count){
-        var tc = cat.list[0];
-        var csum = document.createElement('p'); csum.className = 'bf-dsum';
-        var csp = document.createElement('span');
-        var ctxt = '本期新增 ' + cat.total + ' 件，以 ' + tc.name + ' ' + tc.count +
-                   ' 件（' + briefNum(tc.share) + '%）為主力';
-        if(tc.pp !== null && Math.abs(tc.pp) >= 3){
-          ctxt += '，佔比較上期' + briefDirWordUnit(tc.pp, ' 個百分點');
-        }
-        ctxt += '。';
-        csp.textContent = ctxt;
-        csum.appendChild(csp);
-        d1.appendChild(csum);
-      }
-      var maxC = cat.list.length ? cat.list[0].count : 1;
-      for(var c = 0; c < cat.list.length; c++){
-        var it = cat.list[c];
-        var row = document.createElement('div'); row.className = 'bf-catrow';
-        var nm = document.createElement('span'); nm.className = 'bf-catname'; nm.textContent = it.name;
-        var bwrap = document.createElement('span'); bwrap.className = 'bf-catbar';
-        var fill = document.createElement('span');
-        fill.className = 'bf-catfill' + (it.pp === null ? '' : (it.pp > 0.05 ? ' up' : (it.pp < -0.05 ? ' dn' : '')));
-        fill.style.width = (maxC ? Math.round(it.count * 100 / maxC) : 0) + '%';
-        bwrap.appendChild(fill);
-        var val = document.createElement('span'); val.className = 'bf-catval';
-        val.textContent = it.count + ' 件（' + briefNum(it.share) + '%）' +
-          // ⚠ briefNum() 取絕對值 → 正負號要自己補，否則負數會顯示成正數
-          // ⚠ 同一欄必須統一格式：briefNum 會把 33.0 印成 33，跟 2.8 混在一起很雜 → 固定一位小數
-          (it.pp === null ? '' : ('　' + (it.pp > 0.05 ? '+' : (it.pp < -0.05 ? '-' : '')) +
-                                  Math.abs(it.pp).toFixed(1) + 'pp'));
-        row.appendChild(nm); row.appendChild(bwrap); row.appendChild(val);
-        d1.appendChild(row);
-      }
-      host.appendChild(d1);
-    }
-    // ---- 課別開發導入進度與排名 ----
-    if(kes.length){
-      var d2 = document.createElement('div'); d2.className = 'bf-dblock';
-      var t2 = document.createElement('p'); t2.className = 'bf-dtitle';
-      t2.textContent = '課別開發導入進度與排名（本期）';
-      d2.appendChild(t2);
-      var n2 = document.createElement('p'); n2.className = 'bf-dnote';
-      n2.textContent = '名次依「本期導入完成件數」排序；件數相同時，依轉換率、再依本期新增件數排序。' +
-        '長條總長為本期新增件數（以各課別的最大值為基準），綠色段為其中已完成導入，' +
-        '藍色段為尚未導入。轉換率＝導入 ÷ 本期新增。';
-      d2.appendChild(n2);
-      var ksum = briefKeSummary(kes);
-      if(ksum){
-        var sum = document.createElement('p'); sum.className = 'bf-dsum';
-        var sp = document.createElement('span'); sp.textContent = ksum;
-        sum.appendChild(sp);
-        d2.appendChild(sum);
-      }
-      var maxN = 1;
-      for(var m2 = 0; m2 < kes.length; m2++) maxN = Math.max(maxN, kes[m2].n);
-      for(var k2 = 0; k2 < kes.length; k2++){
-        var kk = kes[k2];
-        var r2 = document.createElement('div'); r2.className = 'bf-kerow';
-        var rk = document.createElement('span');
-        rk.className = 'bf-kerank' + (kk.rank === 1 ? ' r1' : '');
-        rk.textContent = kk.rank + '.';
-        var kn = document.createElement('span'); kn.className = 'bf-kename'; kn.textContent = kk.name;
-        var kb = document.createElement('span'); kb.className = 'bf-kebar';
-        var f1 = document.createElement('span'); f1.className = 'bf-kefill';
-        f1.style.width = Math.round(kk.n * 100 / maxN) + '%';
-        // 綠色段的百分比是「佔藍色段的比例」＝ 導入 ÷ 新增 → 疊在裡面才對
-        var f2 = document.createElement('span'); f2.className = 'bf-kimp';
-        f2.style.width = (kk.n ? Math.round(kk.imp * 1000 / kk.n) / 10 : 0) + '%';
-        f1.appendChild(f2);
-        kb.appendChild(f1);
-        var kv = document.createElement('span'); kv.className = 'bf-keval';
-        // 同欄統一一位小數，否則會出現 28.6% 與 0% 混排
-        kv.textContent = '新增 ' + kk.n + '　導入 ' + kk.imp + '　轉換率 ' + kk.rate.toFixed(1) + '%';
-        r2.appendChild(rk); r2.appendChild(kn); r2.appendChild(kb); r2.appendChild(kv);
-        d2.appendChild(r2);
-      }
-      host.appendChild(d2);
-    }
-    host.hidden = !open;
-  }
-  // 本期分析的可見性：
-  //   預設（null）＝螢幕展開、投影模式收合 —— 投影頁才不會超出一頁，
-  //   而螢幕上要準備開會時看得到全部細部。
-  //   使用者按過鈕就照他的選擇（true/false）不再自動。
-  function briefDetailEffective(){
-    if(state.briefDetail === true) return true;
-    if(state.briefDetail === false) return false;
-    return !document.body.classList.contains('pv-mode');
-  }
-  function refreshBrief(){
-    if(!state.model || !state.model.rows) return;
-    var filtered = applyFilters(state.model.rows, state.filters);
-    renderBriefSection(applyPeriod(filtered, state.period).rows, filtered);
-  }
-  function syncBriefDetailBtn(){ /* 標籤由 renderBriefDetail 依當期數字產生 */ }
-  function setBriefDetail(open){
-    state.briefDetail = !!open;
-    refreshBrief();
   }
   function syncBriefModeBtn(){
     var btn = document.getElementById('briefModeBtn');
@@ -4866,19 +4539,17 @@ var state = {
   function setBriefMode(mode){
     state.briefMode = (mode === 'script') ? 'script' : 'list';
     syncBriefModeBtn();
-    refreshBrief();
+    if(state.model && state.model.rows){
+      var filtered = applyFilters(state.model.rows, state.filters);
+      renderBriefSection(applyPeriod(filtered, state.period).rows, filtered);
+    }
   }
   function initBrief(){
     state.briefMode = 'list';
-    state.briefDetail = null;   // 自動：螢幕展開、投影收合
     var btn = document.getElementById('briefModeBtn');
     if(btn) btn.addEventListener('click', function(){
       setBriefMode(state.briefMode === 'script' ? 'list' : 'script');
     });
-    var db = document.getElementById('briefDetailBtn');
-    // ⚠ 要對「實際可見狀態」取反，不是對 state 取反：
-    //    state 為 null（自動模式）時 !null === true → 第一次點不會有任何變化。
-    if(db) db.addEventListener('click', function(){ setBriefDetail(!briefDetailEffective()); });
     syncBriefModeBtn();
   }
 
@@ -8639,8 +8310,6 @@ var state = {
     // 簡報模式自動開啟雷射筆（這是它的主場）
     laserSyncButton();
     laserRepaint();
-    // 重點分析的「本期分析」在投影時自動收合（否則投影頁會超出一頁）
-    refreshBrief();
     showPresentSlide(0);
   }
 
@@ -8660,7 +8329,6 @@ var state = {
     laserClearRow();
     laserHide();
     laserSyncButton();
-    refreshBrief();
   }
 
   function restorePresentSlide(id){
@@ -9045,12 +8713,6 @@ var state = {
       briefItemOk: briefItemOk,
       briefStaleRows: briefStaleRows,
       renderBriefSection: renderBriefSection,
-      briefDirWordUnit: briefDirWordUnit,
-      computeBriefCategory: computeBriefCategory,
-      computeBriefKeProgress: computeBriefKeProgress,
-      briefKeSummary: briefKeSummary,
-      renderBriefDetail: renderBriefDetail,
-      setBriefDetail: setBriefDetail,
       setBriefMode: setBriefMode,
       initBrief: initBrief,
       focusAlertEntries: focusAlertEntries,
