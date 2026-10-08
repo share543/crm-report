@@ -3103,15 +3103,17 @@ var state = {
 
     var grid = document.createElement('div');
     grid.className = 'stat-grid';
-    // ⚠ 這一排只放「本區獨有」的數字。
-    //    原本的「總客戶數／合作結案」在期間≠全部時，與「重點分析」的
-    //    「本期新增案件／本期導入完成」是同一個數字（實測 11=11、5=5），
-    //    等於同一件事在兩個區塊各講一次；「成案率」則與「開發轉換率」同公式
-    //    但口徑不同（本期 45.5% vs 全期 9.6%），並排會被讀成報表算錯。
-    //    全期數字已改由「重點分析」的副標承載（全期累計 N 件），這裡不再重複。
+    // 使用者指示：還原成原本的 5 張卡（2026-10-08）。
+    // ⚠ 已知取捨：還原後「總客戶數／合作結案」在期間≠全部時，會與「重點分析」的
+    //    「本期新增案件／本期導入完成」是同一個數字（實測 11=11、5=5）；
+    //    「成案率」（本期）與「開發轉換率」（全期）同公式但口徑不同，並排會被讀成
+    //    報表算錯（實測 45.5% vs 9.6%）。要同時保留 5 張卡又不重複的做法見 AGENTS.md。
     var big = [
+      { label: '總客戶數', value: String(stats.total), cls: '', cats: catsBreakdown(model.rows, null) },
+      { label: '合作結案', value: String(stats.coop), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }) },
       { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '進行中'; }) },
-      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) }
+      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) },
+      { label: '成案率', value: stats.rate + '%', cls: 'ok' }
     ];
     for(var i = 0; i < big.length; i++){
       var c = document.createElement('div');
