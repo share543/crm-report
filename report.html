@@ -1384,7 +1384,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.1.0';   // 1.1.0：新增 LINE 短版（聊天用格式）
+  var APP_VERSION = '1.1.1';   // 1.1.1：LINE 短版補進講者版（原本拿不到）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -8687,9 +8687,13 @@ var state = {
     var listHtml = snapshotBriefSection(), listText = state.briefCopyText || '';
     setBriefMode('script');
     var scriptHtml = snapshotBriefSection(), scriptText = state.briefCopyText || '';
-    state.briefGmVariant = 'mail';       // 講者版帶「郵件完整版」（含主旨與署名，最完整）
+    // ⚠ 用 setBriefGmVariant（setBriefMode 在模式沒變時會跳過重繪 → 會拿到舊文字）
     setBriefMode('gm');
+    setBriefGmVariant('mail');           // 郵件完整版（含主旨與署名，最完整）
     var gmHtml = snapshotBriefSection(), gmText = state.briefCopyText || '';
+    setBriefGmVariant('line');           // LINE 短版：畫面直接顯示該格式 → 看到什麼就複製什麼
+    var lineText = state.briefCopyText || '';
+    var lineHtml = '<pre class="bf-gm">' + escHtml(lineText) + '</pre>';
     setBriefMode(prevMode);
     state.briefGmVariant = prevVar;
     function escHtml(t){
@@ -8707,19 +8711,22 @@ var state = {
       + '<div id="spkBar"><span class="spk-title">講者版　·　會議主持用</span>'
       + '<button type="button" class="spk-m on" data-m="list">條列</button>'
       + '<button type="button" class="spk-m" data-m="script">講稿</button>'
-      + '<button type="button" class="spk-m" data-m="gm">GM 書面</button>'
+      + '<button type="button" class="spk-m" data-m="gm">GM 郵件</button>'
+      + '<button type="button" class="spk-m" data-m="gmline">GM LINE</button>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
+      + '<div id="spkGmLine" class="spk-sec spk-hide">' + lineHtml + '</div>\n'
       // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
       + '<textarea id="spkTxtGm" hidden readonly>' + escHtml(gmText) + '</textarea>\n'
+      + '<textarea id="spkTxtGmLine" hidden readonly>' + escHtml(lineText) + '</textarea>\n'
       + '<div id="spkFoot">' + appFooterText() + '</div>\n'
       + S + '(function(){'
       + 'var bs=document.querySelectorAll(".spk-m");'
-      + 'function show(m){var ids={list:"spkList",script:"spkScript",gm:"spkGm"};'
+      + 'function show(m){var ids={list:"spkList",script:"spkScript",gm:"spkGm",gmline:"spkGmLine"};'
       + 'for(var k in ids){var el=document.getElementById(ids[k]);'
       + 'if(el) el.className="spk-sec"+(k===m?"":" spk-hide");}'
       + 'for(var i=0;i<bs.length;i++) bs[i].className="spk-m"+(bs[i].getAttribute("data-m")===m?" on":"");}'
@@ -8727,15 +8734,16 @@ var state = {
       + 'document.getElementById("spkCopy").addEventListener("click",function(){'
       + 'var cur=null,bs2=document.querySelectorAll(".spk-m");'
       + 'for(var j=0;j<bs2.length;j++) if(/ on$| on /.test(bs2[j].className+" ")) cur=bs2[j].getAttribute("data-m");'
-      + 'var tx=document.getElementById("spkTxt"+(cur==="gm"?"Gm":(cur==="script"?"Script":"List")));'
+      + 'var tx=document.getElementById("spkTxt"+(cur==="gm"?"Gm":(cur==="gmline"?"GmLine":(cur==="script"?"Script":"List"))));'
       + 'var txt=tx?tx.value:"",b=this;'
       + 'function done(t){b.textContent=t;setTimeout(function(){b.textContent="複製";},1600);}'
+      + 'var tag=(cur==="gmline")?"（LINE 版）":((cur==="gm")?"（郵件版）":"");'
       + 'function legacy(){try{var ta=document.createElement("textarea");ta.value=txt;'
       + 'ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();'
       + 'var ok=false;try{ok=document.execCommand("copy");}catch(e){ok=false;}'
-      + 'document.body.removeChild(ta);done(ok?"已複製":"請長按選取");}catch(e2){done("請長按選取");}}'
+      + 'document.body.removeChild(ta);done(ok?("已複製"+tag):"請長按選取");}catch(e2){done("請長按選取");}}'
       + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
-      + 'navigator.clipboard.writeText(txt).then(function(){done("已複製");},legacy);}else legacy();}'
+      + 'navigator.clipboard.writeText(txt).then(function(){done("已複製"+tag);},legacy);}else legacy();}'
       + 'catch(e){legacy();}});'
       + 'show("list");})();' + E + '\n'
       + '</body>\n</html>\n';
