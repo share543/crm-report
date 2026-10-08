@@ -1349,7 +1349,7 @@
       <button type="button" class="bf-mode" id="briefModeList" aria-pressed="true">條列</button>
       <button type="button" class="bf-mode" id="briefModeScript" aria-pressed="false">講稿</button>
       <button type="button" class="bf-mode" id="briefModeGm" aria-pressed="false">GM 書面</button>
-      <button type="button" class="bf-mode bf-copy" id="briefCopyBtn" hidden>複製全文</button>
+      <button type="button" class="bf-mode bf-copy" id="briefCopyBtn" hidden>複製</button>
     </div>
     <div class="bf-modes" id="briefGmBar" hidden>
       <span class="bf-gmhint">可直接複製貼到訊息或郵件：</span>
@@ -1384,7 +1384,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.0.1';   // 1.0.1：修正複製格式（貼上後可讀）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1395,6 +1395,8 @@ var state = {
   state.briefMode = 'list';
   // GM 書面摘要的變體：'msg'＝訊息短版、'mail'＝郵件完整版
   state.briefGmVariant = 'msg';
+  // 目前模式的「貼上用純文字」（由 renderBriefSection 產生，複製鈕直接取用）
+  state.briefCopyText = '';
   // 本期分析（類別／課別細部）展開與否：null＝自動（螢幕展開、投影收合）、true/false＝使用者指定
   state.briefDetail = null;
 
@@ -4722,7 +4724,7 @@ var state = {
   function briefAppendLine(parent, segs){
     for(var i = 0; i < segs.length; i++) parent.appendChild(briefSegNode(segs[i]));
   }
-  function renderBriefKpis(box, trendRows, ranges, rows){
+  function briefKpiTiles(trendRows, ranges, rows){
     var cur = briefRowsInRange(trendRows, ranges.range);
     var prv = ranges.prev ? briefRowsInRange(trendRows, ranges.prev) : [];
     var cn = cur.length, pn = prv.length;
@@ -4766,6 +4768,11 @@ var state = {
         d: topKeK ? ('最集中：' + topKeK.name + ' ' + briefNum(topShareK) + '%') : '—',
         cl: 'bf-warn', s: '未啟動另有 ' + unstart + ' 件' }
     ];
+    return tiles;
+  }
+  // 渲染數字帶：內容來自 briefKpiTiles，與複製文字共用同一份計算（不會漂移）
+  function renderBriefKpis(box, trendRows, ranges, rows){
+    var tiles = briefKpiTiles(trendRows, ranges, rows);
     var grid = document.createElement('div');
     grid.className = 'bf-kpis';
     for(var t = 0; t < tiles.length; t++){
@@ -4805,15 +4812,19 @@ var state = {
       box.appendChild(band);
     }
   }
+  function briefOpeningLine(ranges){
+    if(!ranges) return '';
+    var cur = briefRowsInRange(ranges.trendRows || [], ranges.range);
+    return '各位好，先看本期幾個數字：新增 ' + cur.length + ' 件，' +
+      '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。以下分三塊說明。';
+  }
   function renderBriefScript(box, items, ranges){
     var wrap = document.createElement('div'); wrap.className = 'bf-script';
     // 開場句：先給這一輪的三個關鍵數字，再進條目（只放數字、不放方向詞，避免與數字不一致）
     if(ranges){
-      var cur = briefRowsInRange(ranges.trendRows || [], ranges.range);
       var p0 = document.createElement('p');
       var s0 = document.createElement('span');
-      s0.textContent = '「各位好，先看本期幾個數字：新增 ' + cur.length + ' 件，' +
-        '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。以下分三塊說明。」';
+      s0.textContent = briefOpeningLine(ranges);
       p0.appendChild(s0);
       wrap.appendChild(p0);
     }
@@ -4866,12 +4877,20 @@ var state = {
       w.textContent = '（有 ' + bad + ' 條因「數字與語句方向不一致」而未顯示 —— 寧缺勿假）';
       box.appendChild(w);
     }
+    // 複製內容與畫面同源：由同一份 items／數字產生，切模式就換一份
+    var tr = trendRows || rows;
     if(state.briefMode === 'script'){
-      renderBriefScript(box, items, { range: ranges.range, trendRows: trendRows || rows,
-                                      staleN: briefStaleRows(rows).length });
+      var sOpts = { range: ranges.range, trendRows: tr, staleN: briefStaleRows(rows).length };
+      renderBriefScript(box, items, sOpts);
+      state.briefCopyText = buildScriptText(rows, tr, ranges, items, sOpts);
     } else if(state.briefMode === 'gm'){
-      renderBriefGm(box, rows, trendRows || rows, ranges, items);
-    } else renderBriefList(box, items);
+      var gmText = buildGmText(rows, tr, ranges, state.briefGmVariant, items);
+      renderBriefGm(box, gmText);
+      state.briefCopyText = gmText;
+    } else {
+      renderBriefList(box, items);
+      state.briefCopyText = buildListText(rows, tr, ranges, items);
+    }
     // 本期分析（類別／課別）：永遠是重點分析的一部分，但預設收合 ——
     // 它不跟 5 條搶額度，也不讓投影頁超出一頁。
     renderBriefDetail(trendRows || rows, ranges);
@@ -5117,7 +5136,7 @@ var state = {
     L.push('');
     if(month.length){
       L.push('■ 近 6 個月新增走勢');
-      L.push(month.map(function(m){ return m.label.slice(5) + ' 月 ' + m.count; }).join(' → '));
+      L.push(month.map(function(m){ return String(Number(m.label.slice(5))) + '月 ' + m.count; }).join(' → ') + '（件）');
       L.push('');
     }
     L.push('■ 問題在哪');
@@ -5160,19 +5179,94 @@ var state = {
            p(d.getHours()) + ':' + p(d.getMinutes());
   }
 
-  function renderBriefGm(box, rows, trendRows, ranges, items){
+  function renderBriefGm(box, text){
     var pre = document.createElement('pre');
     pre.className = 'bf-gm';
     pre.id = 'briefGmText';
-    pre.textContent = buildGmText(rows, trendRows, ranges, state.briefGmVariant, items);
+    pre.textContent = text;
     box.appendChild(pre);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 複製用純文字：三種模式各有一套。
+  // ⚠ 絕對不要用 textContent 當複製內容 —— 畫面是 HTML 排版（卡片、<li>、<p>），
+  //    textContent 會把所有標籤與數字黏成一長串、完全沒有換行（實測：
+  //    「本期新增案件53▲ 130.4%上期 23 件・全期累計 115 件本期導入完成8...」）。
+  //    這裡為每一種模式設計貼到訊息／郵件後可直接閱讀的純文字。
+  // ───────────────────────────────────────────────────────────────────────────
+  function briefTextHeader(kind){
+    var d = new Date(), p = function(n){ return ('0' + n).slice(-2); };
+    return '業務開發進度｜' + kind + '（' + d.getFullYear() + '-' +
+           p(d.getMonth() + 1) + '-' + p(d.getDate()) + '）';
+  }
+  function briefStampLine(){
+    return '（由 CRM 報表工具 v' + APP_VERSION + ' 產生於 ' + APP_FOOTER_TS() + '）';
+  }
+  function briefTilesText(trendRows, ranges, rows){
+    var tiles = briefKpiTiles(trendRows, ranges, rows);
+    var out = ['▍本期數字'];
+    for(var i = 0; i < tiles.length; i++){
+      var t = tiles[i], extra = [];
+      if(t.d && t.d !== '—') extra.push(t.d);
+      if(t.s) extra.push(t.s);
+      out.push('・' + t.l + '　' + t.v + (extra.length ? '（' + extra.join('；') + '）' : ''));
+    }
+    return out;
+  }
+  function briefGrouped(items){
+    var order = ['decide', 'watch', 'good'], labels = { decide: '要決定', watch: '要注意', good: '值得肯定' };
+    var out = [];
+    for(var o = 0; o < order.length; o++){
+      var g = [];
+      for(var i = 0; i < items.length; i++) if(items[i].kind === order[o]) g.push(items[i]);
+      if(g.length) out.push({ kind: order[o], label: labels[order[o]], items: g });
+    }
+    return out;
+  }
+  function buildListText(rows, trendRows, ranges, items){
+    var L = [briefTextHeader('重點分析'), ''];
+    L = L.concat(briefTilesText(trendRows, ranges, rows));
+    L.push('');
+    var groups = briefGrouped(items);
+    for(var g = 0; g < groups.length; g++){
+      L.push('▍' + groups[g].label);
+      for(var k = 0; k < groups[g].items.length; k++){
+        // 要決定的是待辦 → 用編號；其餘用・（讀起來才知道有幾件事要做）
+        L.push((groups[g].kind === 'decide' ? (k + 1) + '. ' : '・') + briefSegsText(groups[g].items[k]));
+      }
+      L.push('');
+    }
+    L.push(briefStampLine());
+    return L.join('\n');
+  }
+  function buildScriptText(rows, trendRows, ranges, items, opts){
+    var L = [briefTextHeader('口頭講稿'), ''];
+    L = L.concat(briefTilesText(trendRows, ranges, rows));
+    L.push('');
+    L.push(briefOpeningLine(opts));
+    L.push('');
+    var groups = briefGrouped(items);
+    for(var g = 0; g < groups.length; g++){
+      var gi = groups[g].items;
+      L.push('▍' + groups[g].label);      // ⚠ 分區標題一組只印一次（每條都印會重複）
+      for(var k = 0; k < gi.length; k++){
+        var it = gi[k];
+        L.push(it.speak || briefSegsText(it));
+        if(it.kind === 'decide') L.push('（今天要裁示的事）');
+        if(it.ask) L.push('　→ 追問：' + it.ask);
+        if(k < gi.length - 1) L.push('');
+      }
+      L.push('');
+    }
+    L.push(briefStampLine());
+    return L.join('\n');
   }
 
   // 複製：file:// 不是 secure context，clipboard API 可能不可用 → 一定要有 fallback
   function copyBriefText(btn){
-    var el = document.getElementById('briefGmText');
-    if(!el) return;
-    var txt = el.textContent;
+    // ⚠ 複製的是「設計過的純文字」，不是 DOM 的 textContent（後者沒有換行）
+    var txt = state.briefCopyText || '';
+    if(!txt) return;
     function done(msg){
       if(!btn) return;
       btn.textContent = msg;
@@ -5212,7 +5306,10 @@ var state = {
     var bar = document.getElementById('briefGmBar');
     if(bar) bar.hidden = !gm;
     var cp = document.getElementById('briefCopyBtn');
-    if(cp) cp.hidden = !gm;
+    if(cp){
+      cp.hidden = false;                       // 三種模式都能複製
+      if(state.briefMode === 'gm') cp.textContent = '複製全文';
+    }
     var vm = document.getElementById('briefGmMsg'), vml = document.getElementById('briefGmMail');
     if(vm) vm.setAttribute('aria-pressed', state.briefGmVariant === 'msg' ? 'true' : 'false');
     if(vml) vml.setAttribute('aria-pressed', state.briefGmVariant === 'mail' ? 'true' : 'false');
@@ -8535,15 +8632,20 @@ var state = {
     for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
     var prevMode = state.briefMode, prevVar = state.briefGmVariant;
     // 三種模式都收進同一個檔案 —— 講者可以當場切換，不必回到電腦重產
+    // 每切一次模式，renderBriefSection 就會把該模式的「貼上用純文字」放進
+    // state.briefCopyText —— 順手把它留下來，講者版才有設計過的複製內容可用。
     setBriefMode('list');
-    var listHtml = snapshotBriefSection();
+    var listHtml = snapshotBriefSection(), listText = state.briefCopyText || '';
     setBriefMode('script');
-    var scriptHtml = snapshotBriefSection();
+    var scriptHtml = snapshotBriefSection(), scriptText = state.briefCopyText || '';
     state.briefGmVariant = 'mail';       // 講者版帶「郵件完整版」（含主旨與署名，最完整）
     setBriefMode('gm');
-    var gmHtml = snapshotBriefSection();
+    var gmHtml = snapshotBriefSection(), gmText = state.briefCopyText || '';
     setBriefMode(prevMode);
     state.briefGmVariant = prevVar;
+    function escHtml(t){
+      return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
     var S = String.fromCharCode(60) + 'script' + String.fromCharCode(62);
     var E = String.fromCharCode(60) + '/script' + String.fromCharCode(62);
     return '<!DOCTYPE html>\n<html lang="zh-Hant" data-theme="dark">\n<head>\n'
@@ -8561,6 +8663,10 @@ var state = {
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
+      // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
+      + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
+      + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
+      + '<textarea id="spkTxtGm" hidden readonly>' + escHtml(gmText) + '</textarea>\n'
       + '<div id="spkFoot">' + appFooterText() + '</div>\n'
       + S + '(function(){'
       + 'var bs=document.querySelectorAll(".spk-m");'
@@ -8570,7 +8676,10 @@ var state = {
       + 'for(var i=0;i<bs.length;i++) bs[i].className="spk-m"+(bs[i].getAttribute("data-m")===m?" on":"");}'
       + 'for(var i=0;i<bs.length;i++) bs[i].addEventListener("click",function(){show(this.getAttribute("data-m"));});'
       + 'document.getElementById("spkCopy").addEventListener("click",function(){'
-      + 'var el=document.querySelector(".spk-sec:not(.spk-hide)"),txt=el?el.textContent:"",b=this;'
+      + 'var cur=null,bs2=document.querySelectorAll(".spk-m");'
+      + 'for(var j=0;j<bs2.length;j++) if(/ on$| on /.test(bs2[j].className+" ")) cur=bs2[j].getAttribute("data-m");'
+      + 'var tx=document.getElementById("spkTxt"+(cur==="gm"?"Gm":(cur==="script"?"Script":"List")));'
+      + 'var txt=tx?tx.value:"",b=this;'
       + 'function done(t){b.textContent=t;setTimeout(function(){b.textContent="複製";},1600);}'
       + 'function legacy(){try{var ta=document.createElement("textarea");ta.value=txt;'
       + 'ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();'
@@ -9556,6 +9665,12 @@ var state = {
       briefMonthlySeries: briefMonthlySeries,
       briefSegsText: briefSegsText,
       buildGmText: buildGmText,
+      briefKpiTiles: briefKpiTiles,
+      briefTilesText: briefTilesText,
+      briefGrouped: briefGrouped,
+      buildListText: buildListText,
+      buildScriptText: buildScriptText,
+      briefOpeningLine: briefOpeningLine,
       setBriefGmVariant: setBriefGmVariant,
       renderAppFooter: renderAppFooter,
       copyBriefText: copyBriefText,
