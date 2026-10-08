@@ -470,6 +470,92 @@
   /* 列印：跳轉／回跳都是操作介面，不進 PDF（#backPill 是 fixed，不關掉會每頁重複） */
   @media print{ .card-tools, #backPill{ display:none !important; } }
 
+  /* ===================== 重點分析（開場用） ===================== */
+  .bf-kpis{ display:flex; gap:12px; flex-wrap:wrap; margin:2px 0 16px; }
+  .bf-kpi{ flex:1 1 200px; background:var(--card-2); border:1px solid var(--border);
+    border-radius:10px; padding:11px 14px; }
+  .bf-kl{ font-size:12px; color:var(--muted); }
+  .bf-kv{ font-size:26px; font-weight:700; line-height:1.2; margin:2px 0 3px; }
+  .bf-kd{ font-size:12.5px; }
+  .bf-ks{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .bf-up{ color:var(--ok); }
+  .bf-dn{ color:var(--error); }
+  .bf-flat{ color:var(--muted); }
+  .bf-warn{ color:var(--warning); }
+  .bf-band{ margin-bottom:14px; }
+  .bf-band:last-child{ margin-bottom:0; }
+  .bf-tag{ display:inline-block; font-size:12.5px; font-weight:700; letter-spacing:.4px;
+    padding:3px 10px; border-radius:999px; margin-bottom:7px; }
+  .bf-tag-decide{ background:rgba(232,68,122,.16); color:var(--laser); }
+  .bf-tag-watch{ background:rgba(255,201,77,.16); color:var(--warning); }
+  .bf-tag-good{ background:rgba(90,217,139,.16); color:var(--ok); }
+  .bf-list{ list-style:none; margin:0; padding:0; }
+  .bf-list > li{ display:flex; gap:9px; align-items:flex-start; padding:6px 0; font-size:14.5px;
+    line-height:1.65; border-bottom:1px solid var(--cell-border); }
+  .bf-list > li:last-child{ border-bottom:0; }
+  .bf-mk{ flex:0 0 16px; text-align:center; font-weight:700; color:var(--laser); }
+  .bf-num{ color:var(--warning); font-weight:700; }
+  .bf-who{ color:var(--accent); }
+  .bf-m{ color:var(--muted); font-size:13px; }
+  .bf-script p{ margin:0 0 12px; font-size:15.5px; line-height:1.95; }
+  .bf-script p:last-child{ margin-bottom:0; }
+  .bf-cue{ color:var(--muted); font-size:12.5px; }
+  .bf-ask{ color:var(--accent); }
+  .bf-base{ font-size:12px; color:var(--muted); margin:0 0 10px; }
+  .bf-mode{ background:none; border:1px solid var(--border); border-radius:999px;
+    padding:2px 11px; font-family:inherit; font-size:12px; color:var(--accent); cursor:pointer;
+    margin:0 0 12px; }
+  .bf-mode:hover{ border-color:var(--accent); color:var(--text); }
+  .bf-modes{ display:flex; gap:8px; align-items:center; margin:0 0 12px; }
+  /* 投影模式：重點分析是開場頁，字要放大到後排看得到
+     （實測投影畫面後，18.5px 的正文在後排偏小 → 提高到 22px，標籤與內文一起放大） */
+  body.pv-mode #brief .bf-kv{ font-size:36px; }
+  body.pv-mode #brief .bf-kl{ font-size:15px; }
+  body.pv-mode #brief .bf-kd{ font-size:16px; }
+  body.pv-mode #brief .bf-ks{ font-size:14px; }
+  body.pv-mode #brief .bf-list > li{ font-size:22px; gap:12px; padding:9px 0; }
+  body.pv-mode #brief .bf-mk{ flex:0 0 22px; }
+  body.pv-mode #brief .bf-m{ font-size:18px; }
+  body.pv-mode #brief .bf-tag{ font-size:16px; padding:5px 14px; margin-bottom:10px; }
+  body.pv-mode #brief .bf-kpi{ padding:14px 18px; }
+  body.pv-mode #brief .bf-script p{ font-size:22px; }
+  body.pv-mode #brief .bf-cue{ font-size:16px; }
+  body.pv-mode #brief .bf-ask{ font-size:20px; }
+  /* 投影時不出現操作介面與比較基準說明 */
+  body.pv-mode #briefBase, body.pv-mode .bf-modes{ display:none; }
+  /* ⚠ 投影機不一定 1080p：實測 1920×1080 放得下（剩 106px），
+     但 1400×900 溢出 74px、1366×768 溢出 206px。
+     依視窗高度再降級，確保任何常見投影解析度都「一頁裝完、不用捲」。 */
+  @media (max-height: 900px){
+    body.pv-mode #brief .bf-kv{ font-size:30px; }
+    body.pv-mode #brief .bf-kpi{ padding:11px 15px; }
+    body.pv-mode #brief .bf-list > li{ font-size:19px; padding:6px 0; }
+    body.pv-mode #brief .bf-tag{ font-size:15px; margin-bottom:8px; }
+    body.pv-mode #brief .bf-script p{ font-size:19px; margin-bottom:9px; }
+  }
+  @media (max-height: 800px){
+    body.pv-mode #brief .bf-kv{ font-size:25px; }
+    body.pv-mode #brief .bf-kl{ font-size:12.5px; }
+    body.pv-mode #brief .bf-kd{ font-size:13px; }
+    body.pv-mode #brief .bf-ks{ font-size:11.5px; }
+    body.pv-mode #brief .bf-kpi{ padding:8px 12px; }
+    body.pv-mode #brief .bf-list > li{ font-size:16.5px; padding:4px 0; line-height:1.5; }
+    body.pv-mode #brief .bf-m{ font-size:13.5px; }
+    body.pv-mode #brief .bf-tag{ font-size:13px; padding:3px 10px; margin-bottom:6px; }
+    body.pv-mode #brief .bf-band{ margin-bottom:9px; }
+    body.pv-mode #brief .bf-script p{ font-size:16.5px; margin-bottom:7px; line-height:1.75; }
+  }
+  /* 1280×720（較舊投影機）再降一級 */
+  @media (max-height: 700px){
+    body.pv-mode #brief .bf-kv{ font-size:22px; }
+    body.pv-mode #brief .bf-kpi{ padding:6px 10px; }
+    body.pv-mode #brief .bf-list > li{ font-size:15px; padding:3px 0; line-height:1.45; }
+    body.pv-mode #brief .bf-m{ font-size:12.5px; }
+    body.pv-mode #brief .bf-tag{ font-size:12px; padding:2px 9px; margin-bottom:5px; }
+    body.pv-mode #brief .bf-band{ margin-bottom:7px; }
+  }
+  @media print{ .bf-mode, .bf-modes{ display:none !important; } }
+
   /* ===================== 會議用雷射筆光點（游標） ===================== */
   #laserBtn.on{ color:#fff; background:var(--laser); border-color:var(--laser); }
   #laser{ position:fixed; left:0; top:0; z-index:1500; pointer-events:none; display:none;
@@ -1089,6 +1175,15 @@
       </div>
     </div>
   </section>
+  <section class="card" id="briefSection" hidden>
+    <h2>重點分析 <span class="muted">開場用：本期變化、要注意的事、今天要決定的事</span></h2>
+    <p class="bf-base" id="briefBase"></p>
+    <div class="bf-modes">
+      <button type="button" class="bf-mode" id="briefModeBtn" aria-pressed="false">切換講稿模式</button>
+    </div>
+    <div id="brief" class="pending">待產生</div>
+  </section>
+
   <section class="card" id="alertSection" hidden>
     <h2>待留意事項</h2>
     <div id="alerts" class="pending">待產生</div>
@@ -1206,6 +1301,8 @@ var state = {
   };
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
+  // 重點分析呈現模式（'list'＝三分法條列 | 'script'＝講稿）；只在本次瀏覽有效
+  state.briefMode = 'list';
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
   var DATE_COLS = new Set(['填單日期','初步接洽','需求確認','報價','簽約','導入']);
@@ -3943,6 +4040,519 @@ var state = {
     laserPaint();
   }
 
+  // ===========================================================================
+  // 重點分析（開場用）
+  //
+  // 目的：每次開會開頭，用「口頭說明 + 條列重點」跟大家分享。
+  //
+  // 設計原則
+  //   1. 智慧型在「排序」不在「算更多」—— 只講該講的 5 條（硬上限）
+  //   2. 「要決定」優先，其次「要注意」，最後保留 1 條「值得肯定」（開場士氣）
+  //   3. 每條都有「數字 ＋ 範圍 ＋ 所以呢」
+  //   4. ⚠ 句庫必須「方向感知」，輸出前再跑反向檢查 —— 不能產生假話。
+  //      原型第一版把「動能是往上走的」寫死在模板裡，遇到 0% 成長就輸出
+  //      「較上期成長 0.0，動能是往上走的」這種前後矛盾的句子，
+  //      而使用者會照著唸出去 —— 在會議裡比不寫還糟。
+  //
+  // 範圍：趨勢用「篩選後的全部資料」（才拿得到上期）；
+  //       風險與肯定用「篩選＋期間」後的資料，與待留意事項等其他區塊一致
+  //       （避免兩個區塊的同一個數字互相打對台）。
+  // ===========================================================================
+  var BRIEF_MAX = 5;          // 條數硬上限（超過就沒人記得）
+  var BRIEF_KEEP_GOOD = 1;    // 保留給「值得肯定」的條數
+
+  // ---- 方向感知語句（純函式；成長／持平／下降三分支） ----
+  function briefNum(v){
+    return String(Math.round(Math.abs(v) * 10) / 10);
+  }
+  function briefDirWord(v){
+    if(v === null || v === undefined) return '無從比較';
+    if(v > 0.05)  return '成長 ' + briefNum(v) + '%';
+    if(v < -0.05) return '減少 ' + briefNum(v) + '%';
+    return '與上期持平';
+  }
+  function briefDirArrow(v){
+    if(v === null || v === undefined) return '—';
+    if(v > 0.05)  return '▲ ' + briefNum(v) + '%';
+    if(v < -0.05) return '▼ ' + briefNum(v) + '%';
+    return '＝ 持平';
+  }
+  function briefDirMood(v){
+    if(v === null || v === undefined) return '上期沒有可比較的基準';
+    if(v > 0.05)  return '動能是往上走的';
+    if(v < -0.05) return '動能是往下掉的';
+    return '動能持平';
+  }
+  function briefDelta(cur, prev){
+    if(!prev) return null;     // 上期為 0 → 不做除法（避免無限大／假百分比）
+    return Math.round((cur - prev) * 1000 / prev) / 10;
+  }
+  function briefDirClass(v){
+    if(v === null || v === undefined) return 'bf-flat';
+    if(v > 0.05)  return 'bf-up';
+    if(v < -0.05) return 'bf-dn';
+    return 'bf-flat';
+  }
+  // 反向檢查：句子裡出現方向詞時，數字必須支持它
+  function briefConsistent(v, text){
+    var t = String(text || '');
+    var up   = t.indexOf('成長') !== -1 || t.indexOf('往上') !== -1 ||
+               t.indexOf('增加') !== -1 || t.indexOf('上升') !== -1;
+    var down = t.indexOf('減少') !== -1 || t.indexOf('往下') !== -1 ||
+               t.indexOf('下滑') !== -1 || t.indexOf('下降') !== -1;
+    var flat = t.indexOf('持平') !== -1;
+    var has = (v !== null && v !== undefined);
+    if(up   && !(has && v >  0.05)) return false;
+    if(down && !(has && v < -0.05)) return false;
+    if(flat && !(has && Math.abs(v) <= 0.05)) return false;
+    return true;
+  }
+  function briefSegsText(segs){
+    var out = '';
+    for(var i = 0; i < segs.length; i++) out += segs[i][1];
+    return out;
+  }
+  // 一條重點（含朗讀句）是否通過反向檢查
+  function briefItemOk(it){
+    if(!briefConsistent(it.dirV, briefSegsText(it.segs))) return false;
+    if(it.speak && !briefConsistent(it.dirV, it.speak)) return false;
+    return true;
+  }
+  function checkBriefItems(items){
+    var bad = [];
+    for(var i = 0; i < items.length; i++) if(!briefItemOk(items[i])) bad.push(briefSegsText(items[i].segs));
+    return bad;
+  }
+
+  // ---- 期間：本期範圍與「等長、緊接在前」的上期 ----
+  function briefRowsInRange(rows, range){
+    var out = [];
+    if(!range) return out;
+    for(var i = 0; i < rows.length; i++){
+      var k = periodKeyDay(rows[i] && rows[i]['填單日期']);
+      if(k && periodMatches(k, range.from, range.to)) out.push(rows[i]);
+    }
+    return out;
+  }
+  function briefPreviousRange(range){
+    if(!range || !range.from || !range.to) return null;
+    var F = parseDateKey(range.from), T = parseDateKey(toDateKeyEnd(range.to));
+    if(!F || !T) return null;
+    var fms = new Date(F.y, F.mo - 1, F.d).getTime();
+    var tms = new Date(T.y, T.mo - 1, T.d).getTime();
+    if(!isFinite(fms) || !isFinite(tms) || tms < fms) return null;
+    var span = Math.round((tms - fms) / 86400000) + 1;      // 含頭尾
+    var pT = new Date(tms - 86400000);
+    var pF = new Date(pT.getTime() - (span - 1) * 86400000);
+    return { from: isoDate(pF), to: isoDate(pT) };
+  }
+  // 期間為「全部數據」時沒有上期可比 → 退回「近 30 天 vs 前 30 天」並標明
+  function briefRanges(period, now){
+    var r = periodRange(period, now);
+    if(r){
+      return { range: r, prev: briefPreviousRange(r),
+               label: describePeriod(period, now) + '，與前一段等長期間比較' };
+    }
+    now = now || new Date();
+    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var tms = t.getTime();
+    var pT = new Date(tms - 30 * 86400000);
+    return { range: { from: isoDate(new Date(tms - 29 * 86400000)), to: isoDate(t) },
+             prev:  { from: isoDate(new Date(pT.getTime() - 29 * 86400000)), to: isoDate(pT) },
+             label: '近 30 天 vs 前 30 天（分析期間為「全部數據」，故自動以最近 30 天為比較基準）' };
+  }
+
+  // ---- 分組小工具 ----
+  function briefFirstReal(list){
+    for(var i = 0; i < (list || []).length; i++){
+      var n = list[i].name;
+      if(n !== '(空白)' && n !== '(未填公司名稱)') return list[i];
+    }
+    return null;
+  }
+  function briefGroupCount(rows, field){
+    var m = {};
+    for(var i = 0; i < rows.length; i++){
+      var v = String(fieldStr(rows[i], field) || '').trim();
+      if(!v) v = '(未填)';
+      m[v] = (m[v] || 0) + 1;
+    }
+    var arr = [];
+    for(var k in m) arr.push({ name: k, count: m[k] });
+    arr.sort(function(a, b){ return b.count - a.count || (a.name < b.name ? -1 : 1); });
+    return arr;
+  }
+  function briefTopN(list, n){
+    var sum = 0;
+    for(var i = 0; i < Math.min(n, list.length); i++) sum += list[i].count;
+    return { list: list.slice(0, n), sum: sum };
+  }
+  function briefStaleRows(rows){
+    var out = [];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(classifyStatus(r) !== '進行中') continue;
+      var last = '';
+      for(var m = MILESTONES.length - 1; m >= 0; m--){
+        var v = fieldStr(r, MILESTONES[m]);
+        if(v){ last = v; break; }
+      }
+      if(!last) last = fieldStr(r, '填單日期');
+      var d = new Date(last + 'T00:00:00');
+      if(isNaN(d.getTime())) continue;
+      var gap = Math.floor((Date.now() - d.getTime()) / 86400000);
+      if(gap > STALE_DAYS) out.push(r);
+    }
+    return out;
+  }
+
+  // ---- 候選洞見 ----
+  function buildBriefItems(rows, trendRows, ranges){
+    var items = [];
+    var cur = briefRowsInRange(trendRows, ranges.range);
+    var prv = ranges.prev ? briefRowsInRange(trendRows, ranges.prev) : [];
+    var curN = cur.length, prvN = prv.length;
+    var dNew = ranges.prev ? briefDelta(curN, prvN) : null;
+    var curOp = 0, prvOp = 0, i;
+    for(i = 0; i < cur.length; i++) if(classifyStatus(cur[i]) === '合作成功') curOp++;
+    for(i = 0; i < prv.length; i++) if(classifyStatus(prv[i]) === '合作成功') prvOp++;
+    var dOpen = ranges.prev ? briefDelta(curOp, prvOp) : null;
+
+    var alerts = collectAlerts(rows);
+    var misN = (alerts.stamps && alerts.stamps.mismatch) ? alerts.stamps.mismatch.length : 0;
+    var stale = briefStaleRows(rows);
+    var byKe = briefGroupCount(stale, '課別');
+    var topKe = byKe.length ? byKe[0] : null;
+    var top3 = briefTopN(byKe, 3);
+    var share = stale.length ? Math.round(top3.sum * 1000 / stale.length) / 10 : 0;
+
+    // ---------- 要決定 ----------
+    if(misN > 0){
+      items.push({ kind:'decide', key:'rule', prio:1, impact:misN, urgency:3, act:true, dirV:null,
+        segs:[['t','「已簽約未導入」'],['n', String(misN)],['t',' 件待定義'],
+              ['m','：是導入延遲、還是規則不一致？需要一個判定標準']],
+        speak:'另外，已簽約未導入的有 ' + misN + ' 件，需要一個判定標準 —— 這一項希望今天可以定下來。',
+        ask:'這 ' + misN + ' 件的共同原因是什麼？判定標準由誰定？' });
+    }
+    if(topKe && topKe.count >= 5){
+      var devSet = {};
+      for(i = 0; i < stale.length; i++){
+        if(String(fieldStr(stale[i], '課別') || '').trim() === topKe.name){
+          var dv = String(fieldStr(stale[i], '開發者') || '').trim();
+          if(dv) devSet[dv] = 1;
+        }
+      }
+      var devN = 0; for(var dk in devSet) devN++;
+      items.push({ kind:'decide', key:'capacity', prio:2, impact:topKe.count, urgency:2, act:true, dirV:null,
+        segs:[['w', topKe.name],['t',' 停滯 '],['n', String(topKe.count)],['t',' 件'],
+              ['m','（開發者 ' + devN + ' 人）：是否需要支援或重新分派？']],
+        speak:'再來是 ' + topKe.name + '，停滯 ' + topKe.count + ' 件' +
+              (devN ? '、開發者只有 ' + devN + ' 人' : '') +
+              '，需要討論是不是要支援或重新分派。',
+        ask: topKe.name + ' 這 ' + topKe.count + ' 件需要誰支援？' });
+    }
+
+    // ---------- 要注意 ----------
+    if(stale.length){
+      items.push({ kind:'watch', key:'stale', prio:1, impact:stale.length, urgency:2, act:false, dirV:null,
+        segs:[['t','停滯超過 ' + STALE_DAYS + ' 天 '],['n', String(stale.length)],['t',' 件'],
+              ['m','，其中 '],['w', topKe ? topKe.name : '（無）'],['t',' 就占 '],
+              ['n', String(topKe ? topKe.count : 0)],['t',' 件']],
+        speak:'比較要留意的是停滯：超過 ' + STALE_DAYS + ' 天沒動的有 ' + stale.length + ' 件' +
+              (topKe ? '，其中 ' + topKe.name + ' 就占 ' + topKe.count + ' 件。' : '。') });
+    } else {
+      items.push({ kind:'watch', key:'stale0', prio:1, impact:0, urgency:1, act:false, dirV:null,
+        segs:[['t','沒有停滯超過 ' + STALE_DAYS + ' 天的案件'],['m','（所有進行中案件都在推進中）']],
+        speak:'停滯的部分目前沒有異常，進行中的案件都在推進。' });
+    }
+    if(stale.length >= 5){
+      var local = share >= 50;
+      items.push({ kind:'watch', key:'focus', prio:2, impact:top3.sum, urgency:1, act:false, dirV:null,
+        segs:[['t','停滯案件 '],['n', String(share) + '%'],['t',' 集中在 3 個課別'],
+              ['m', local ? '（問題有明確位置，是局部問題）' : '（分散在多個課別，是全面性問題）']],
+        speak:'而且停滯有 ' + share + '% 集中在 3 個課別，' +
+              (local ? '表示問題有明確的位置，是局部問題。' : '表示這是全面性的問題。') });
+    }
+    var drop = computeDropOff(rows);
+    if(drop && drop.nodeLabels && drop.byCat){
+      var nodeSum = {}, best = null, bestN = 0;
+      for(i = 0; i < drop.nodeLabels.length; i++) nodeSum[drop.nodeLabels[i]] = 0;
+      for(var ck in drop.byCat){
+        for(i = 0; i < drop.nodeLabels.length; i++){
+          var arr = drop.byCat[ck][drop.nodeLabels[i]];
+          if(arr){ nodeSum[drop.nodeLabels[i]] += arr.length; }
+        }
+      }
+      for(var nk in nodeSum){
+        if(nodeSum[nk] > bestN){ bestN = nodeSum[nk]; best = nk; }
+      }
+      if(best && bestN > 0){
+        items.push({ kind:'watch', key:'dropoff', prio:3, impact:bestN, urgency:1, act:false, dirV:null,
+          segs:[['t','最大流失節點：'],['w', best],['t','，'],['n', String(bestN)],['t',' 件'],
+                ['m','（建議優先檢視此階段停滯原因）']],
+          speak:'流失最多的節點是「' + best + '」，有 ' + bestN + ' 件，這一關要先處理。' });
+      }
+    }
+    var missN = 0;
+    var st = alerts.stamps || {};
+    missN = (st.missingDev || []).length + (st.missingCont || []).length + (st.missingSta || []).length;
+    if(missN > 0){
+      items.push({ kind:'watch', key:'missing', prio:4, impact:missN, urgency:1, act:false, dirV:null,
+        segs:[['t','資料缺漏 '],['n', String(missN)],['t',' 筆'],
+              ['m','（開發者／聯絡窗口／收貨站所未填，影響統計與派工）']],
+        speak:'另外有 ' + missN + ' 筆的欄位沒填齊，會影響統計跟派工，要請大家補一下。' });
+    }
+    // W5 類別結構位移（只有真的位移 >= 5 個百分點才講）
+    if(ranges.prev && curN >= 5 && prvN >= 5){
+      var c1 = briefGroupCount(cur, '類別'), p1 = briefGroupCount(prv, '類別');
+      if(c1.length && p1.length && c1[0].name === p1[0].name){
+        var sc = curN ? Math.round(c1[0].count * 1000 / curN) / 10 : 0;
+        var sp = prvN ? Math.round(p1[0].count * 1000 / prvN) / 10 : 0;
+        var dv2 = Math.round((sc - sp) * 10) / 10;
+        if(Math.abs(dv2) >= 5){
+          items.push({ kind:'watch', key:'mix', prio:5, impact:Math.abs(dv2), urgency:1, act:false, dirV:null,
+            segs:[['t','類別結構位移：'],['w', c1[0].name],['t',' 佔比 '],['n', String(sc) + '%'],
+                  ['m','（上期 '],['n', String(sp) + '%'],['m','，' + briefDirWord(dv2) + '）']],
+            speak:'類別結構也有變化，' + c1[0].name + ' 佔比 ' + sc + '%，上期是 ' + sp + '% ，' +
+                  briefDirWord(dv2) + '。' });
+        }
+      }
+    }
+
+    // ---------- 值得肯定 ----------
+    if(dNew !== null && dNew > 0.05){
+      items.push({ kind:'good', key:'growth', prio:1, impact:curN, urgency:1, act:false, dirV:dNew,
+        segs:[['t','本期開發量'],['t', briefDirWord(dNew)],['m','，新增 '],['n', String(curN)],
+              ['t',' 件'],['m','（上期 ' + prvN + ' 件）']],
+        speak:'好消息是，本期開發量' + briefDirWord(dNew) + '，新增 ' + curN + ' 件。' });
+    }
+    // ⚠ 開發量下降要當成「要注意」主動提出，不能只是不出現肯定條目 ——
+    //    （第一版只做了成長的肯定，下降時整份重點分析完全不提開發量，會漏掉最重要的訊號）
+    if(dNew !== null && dNew < -0.05){
+      items.push({ kind:'watch', key:'decline', prio:1, impact:prvN - curN, urgency:2, act:false, dirV:dNew,
+        segs:[['t','本期開發量較上期'],['n', briefDirWord(dNew)],
+              ['m','（上期 ' + prvN + ' 件 → 本期 ' + curN + ' 件）'],
+              ['m','：需留意動能']],
+        speak:'要留意的是開發量：本期 ' + curN + ' 件、上期 ' + prvN + ' 件，' + briefDirWord(dNew) + '，動能需要盯一下。' });
+    }
+    var topImp = briefFirstReal(computeRanking(rows, '開發者', 'import'));
+    if(topImp && topImp.import > 0){
+      items.push({ kind:'good', key:'star', prio:2, impact:topImp.import, urgency:1, act:false, dirV:null,
+        segs:[['w', topImp.name],['t',' 累計導入完成 '],['n', String(topImp.import)],['t',' 件'],
+              ['m','（全公司最多）']],
+        speak:'另外也要肯定 ' + topImp.name + '，累計導入完成 ' + topImp.import + ' 件，全公司最多。' });
+    }
+    if(dOpen !== null && dOpen > 0.05 && curOp > 0){
+      items.push({ kind:'good', key:'impr', prio:3, impact:curOp, urgency:1, act:false, dirV:dOpen,
+        segs:[['t','導入完成 '],['n', String(curOp)],['t',' 件'],['m','（上期 ' + prvOp + ' 件，'],
+              ['m', briefDirWord(dOpen) + '）']],
+        speak:'導入完成 ' + curOp + ' 件，' + briefDirWord(dOpen) + '。' });
+    }
+    return items;
+  }
+
+  // ---- 排序：要決定 → 要注意 → 值得肯定；保留 1 條肯定 ----
+  function rankBriefItems(items){
+    var byKind = { decide: [], watch: [], good: [] };
+    var kindRank = { decide: 3, watch: 2, good: 1 };
+    // ⚠ 排序不是「分數越高越前面」就好 —— 重點分析要讀起來像一段敘事。
+    //    所以同種類內用明確的 prio（總量 → 集中度 → 具體卡點 → 資料品質），
+    //    分數只在 prio 相同時當備援。（第一版只用分數，結果「停滯 100% 集中在 3 課」
+    //    排在「停滯總共 51 件」前面，沒先講總量就講集中度，讀起來很突兀。）
+    for(var i = 0; i < items.length; i++){
+      var it = items[i];
+      (byKind[it.kind] || byKind.watch).push({ it: it, prio: (it.prio === undefined ? 9 : it.prio),
+        sc: kindRank[it.kind] * 100 + Math.min(50, it.impact) * 2 + (it.act ? 12 : 0) + (3 - it.urgency) });
+    }
+    for(var k in byKind){
+      byKind[k].sort(function(a, b){
+        if(a.prio !== b.prio) return a.prio - b.prio;
+        return b.sc - a.sc;
+      });
+    }
+    var out = [];
+    var goodKeep = Math.min(BRIEF_KEEP_GOOD, byKind.good.length);
+    var mainMax = BRIEF_MAX - goodKeep;
+    var main = byKind.decide.concat(byKind.watch);
+    for(var m = 0; m < main.length && out.length < mainMax; m++) out.push(main[m].it);
+    for(var g = 0; g < goodKeep; g++) out.push(byKind.good[g].it);
+    return out;
+  }
+
+  // ---- 渲染（一律 createElement／createTextNode，不用 innerHTML） ----
+  var BRIEF_KIND_LABEL = { decide: '要決定', watch: '要注意', good: '值得肯定' };
+  var BRIEF_KIND_CLASS = { decide: 'bf-tag-decide', watch: 'bf-tag-watch', good: 'bf-tag-good' };
+  var BRIEF_KIND_MARK = { decide: '？', watch: '！', good: '＋' };
+  function briefSegNode(seg){
+    var sp = document.createElement('span');
+    sp.textContent = seg[1];
+    if(seg[0] === 'n') sp.className = 'bf-num';
+    else if(seg[0] === 'w') sp.className = 'bf-who';
+    else if(seg[0] === 'm') sp.className = 'bf-m';
+    return sp;
+  }
+  function briefAppendLine(parent, segs){
+    for(var i = 0; i < segs.length; i++) parent.appendChild(briefSegNode(segs[i]));
+  }
+  function renderBriefKpis(box, trendRows, ranges, rows){
+    var cur = briefRowsInRange(trendRows, ranges.range);
+    var prv = ranges.prev ? briefRowsInRange(trendRows, ranges.prev) : [];
+    var cn = cur.length, pn = prv.length;
+    var dN = ranges.prev ? briefDelta(cn, pn) : null;
+    var co = 0, po = 0;
+    for(var i = 0; i < cur.length; i++) if(classifyStatus(cur[i]) === '合作成功') co++;
+    for(var j = 0; j < prv.length; j++) if(classifyStatus(prv[j]) === '合作成功') po++;
+    var dO = ranges.prev ? briefDelta(co, po) : null;
+    var allRows = trendRows;
+    var opened = 0;
+    for(var k = 0; k < allRows.length; k++) if(classifyStatus(allRows[k]) === '合作成功') opened++;
+    var rate = allRows.length ? Math.round(opened * 1000 / allRows.length) / 10 : 0;
+    // 停滯與其他區塊用同一份資料（篩選＋期間），避免同一數字兩個區塊互相打對台
+    var stale = briefStaleRows(rows || allRows);
+    var byKe = briefGroupCount(stale, '課別');
+    var share = stale.length ? Math.round(briefTopN(byKe, 3).sum * 1000 / stale.length) / 10 : 0;
+    var unstart = 0;
+    for(var u = 0; u < allRows.length; u++) if(classifyStatus(allRows[u]) === '未啟動') unstart++;
+
+    var tiles = [
+      { l: '本期新增案件', v: String(cn), d: ranges.prev ? briefDirArrow(dN) : '—',
+        cl: briefDirClass(dN), s: ranges.prev ? ('上期 ' + pn + ' 件') : '無上期可比' },
+      { l: '本期導入完成', v: String(co), d: ranges.prev ? briefDirArrow(dO) : '—',
+        cl: briefDirClass(dO), s: ranges.prev ? ('上期 ' + po + ' 件') : '無上期可比' },
+      { l: '開發轉換率', v: String(rate) + '%', d: '全期', cl: 'bf-flat',
+        s: '已導入 ' + opened + ' / 總 ' + allRows.length },
+      { l: '待留意（停滯>' + STALE_DAYS + '天）', v: String(stale.length),
+        d: 'Top3 課別佔 ' + briefNum(share) + '%', cl: 'bf-warn',
+        s: '未啟動另有 ' + unstart + ' 件' }
+    ];
+    var grid = document.createElement('div');
+    grid.className = 'bf-kpis';
+    for(var t = 0; t < tiles.length; t++){
+      var card = document.createElement('div'); card.className = 'bf-kpi';
+      var l = document.createElement('div'); l.className = 'bf-kl'; l.textContent = tiles[t].l;
+      var v = document.createElement('div'); v.className = 'bf-kv'; v.textContent = tiles[t].v;
+      var d = document.createElement('div'); d.className = 'bf-kd ' + tiles[t].cl; d.textContent = tiles[t].d;
+      var sb = document.createElement('div'); sb.className = 'bf-ks'; sb.textContent = tiles[t].s;
+      card.appendChild(l); card.appendChild(v); card.appendChild(d); card.appendChild(sb);
+      grid.appendChild(card);
+    }
+    box.appendChild(grid);
+  }
+  function renderBriefList(box, items){
+    var order = ['decide', 'watch', 'good'];
+    for(var o = 0; o < order.length; o++){
+      var kind = order[o], group = [];
+      for(var i = 0; i < items.length; i++) if(items[i].kind === kind) group.push(items[i]);
+      if(!group.length) continue;
+      var band = document.createElement('div'); band.className = 'bf-band';
+      var tag = document.createElement('span');
+      tag.className = 'bf-tag ' + BRIEF_KIND_CLASS[kind];
+      tag.textContent = BRIEF_KIND_LABEL[kind];
+      band.appendChild(tag);
+      var ul = document.createElement('ul'); ul.className = 'bf-list';
+      for(var g = 0; g < group.length; g++){
+        var li = document.createElement('li');
+        var mk = document.createElement('span'); mk.className = 'bf-mk';
+        mk.textContent = BRIEF_KIND_MARK[kind];
+        li.appendChild(mk);
+        var tw = document.createElement('span');
+        briefAppendLine(tw, group[g].segs);
+        li.appendChild(tw);
+        ul.appendChild(li);
+      }
+      band.appendChild(ul);
+      box.appendChild(band);
+    }
+  }
+  function renderBriefScript(box, items, ranges){
+    var wrap = document.createElement('div'); wrap.className = 'bf-script';
+    // 開場句：先給這一輪的三個關鍵數字，再進條目（只放數字、不放方向詞，避免與數字不一致）
+    if(ranges){
+      var cur = briefRowsInRange(ranges.trendRows || [], ranges.range);
+      var p0 = document.createElement('p');
+      var s0 = document.createElement('span');
+      s0.textContent = '「各位好，先看本期幾個數字：新增 ' + cur.length + ' 件，' +
+        '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。以下分三塊說明。」';
+      p0.appendChild(s0);
+      wrap.appendChild(p0);
+    }
+    for(var i = 0; i < items.length; i++){
+      var it = items[i];
+      var p = document.createElement('p');
+      var txt = document.createElement('span');
+      txt.textContent = '「' + (it.speak || briefSegsText(it.segs)) + '」';
+      p.appendChild(txt);
+      if(it.kind === 'decide'){
+        var cue = document.createElement('span'); cue.className = 'bf-cue';
+        cue.textContent = '（今天要裁示的事）';
+        p.appendChild(document.createTextNode(' '));
+        p.appendChild(cue);
+      }
+      wrap.appendChild(p);
+      if(it.ask){
+        var q = document.createElement('p');
+        var qq = document.createElement('span'); qq.className = 'bf-ask';
+        qq.textContent = '→ 追問：' + it.ask;
+        q.appendChild(qq);
+        wrap.appendChild(q);
+      }
+    }
+    box.appendChild(wrap);
+  }
+  function renderBriefSection(rows, trendRows){
+    var sec = document.getElementById('briefSection');
+    var box = document.getElementById('brief');
+    var base = document.getElementById('briefBase');
+    if(!sec || !box) return;
+    if(!rows || !rows.length || !state.model || !state.model.rows){ sec.hidden = true; return; }
+    var ranges = briefRanges(state.period, new Date());
+    if(base) base.textContent = '比較基準：' + ranges.label +
+      '　·　風險與肯定類統計採目前篩選＋期間（與其他區塊一致）';
+    var all = buildBriefItems(rows, trendRows || rows, ranges);
+    var safe = [], bad = 0;
+    for(var i = 0; i < all.length; i++){
+      if(briefItemOk(all[i])) safe.push(all[i]); else bad++;
+    }
+    var items = rankBriefItems(safe);
+    box.textContent = '';
+    box.className = '';
+    renderBriefKpis(box, trendRows || rows, ranges, rows);
+    if(bad){
+      var w = document.createElement('p');
+      w.className = 'pending';
+      w.textContent = '（有 ' + bad + ' 條因「數字與語句方向不一致」而未顯示 —— 寧缺勿假）';
+      box.appendChild(w);
+    }
+    if(state.briefMode === 'script'){
+      renderBriefScript(box, items, { range: ranges.range, trendRows: trendRows || rows,
+                                      staleN: briefStaleRows(rows).length });
+    } else renderBriefList(box, items);
+    sec.hidden = false;
+  }
+  function syncBriefModeBtn(){
+    var btn = document.getElementById('briefModeBtn');
+    if(!btn) return;
+    var sc = state.briefMode === 'script';
+    btn.textContent = sc ? '切換條列模式' : '切換講稿模式';
+    btn.setAttribute('aria-pressed', sc ? 'true' : 'false');
+  }
+  function setBriefMode(mode){
+    state.briefMode = (mode === 'script') ? 'script' : 'list';
+    syncBriefModeBtn();
+    if(state.model && state.model.rows){
+      var filtered = applyFilters(state.model.rows, state.filters);
+      renderBriefSection(applyPeriod(filtered, state.period).rows, filtered);
+    }
+  }
+  function initBrief(){
+    state.briefMode = 'list';
+    var btn = document.getElementById('briefModeBtn');
+    if(btn) btn.addEventListener('click', function(){
+      setBriefMode(state.briefMode === 'script' ? 'list' : 'script');
+    });
+    syncBriefModeBtn();
+  }
+
   // 反向：高亮待留意事項內符合條件的項目並捲過去（回傳命中數）
   function focusAlertEntries(pred){
     var sec = document.getElementById('alertSection');
@@ -6399,6 +7009,7 @@ var state = {
     var m = { headers: state.model.headers, rows: pr.rows, sheetName: state.model.sheetName };
     // 先算一次警報註記：進度追蹤表（排在待留意事項之前渲染）要用它掛 ⚠N
     alertStamps = collectAlerts(pr.rows).stamps;
+    renderBriefSection(pr.rows, filtered);
     renderHighlightsSection(m);
     renderStats(m);
     renderKeQuickSection(m);
@@ -6734,6 +7345,8 @@ var state = {
         // 跳轉按鈕也一樣（操作介面不該進圖片）；整組工具列一起收掉較保險
         snapshotCss += '\n.shot-root .card-tools{ display:none !important; }';
         snapshotCss += '\n.shot-root #laser, .shot-root .lz-pulse{ display:none !important; }';
+        // 重點分析的「切換講稿模式」是操作介面，不進圖片
+        snapshotCss += '\n.shot-root .bf-mode, .shot-root .bf-modes{ display:none !important; }';
         // 存圖當下若剛好有一列被雷射筆高亮，不可以被拍進去
         snapshotCss += '\n.shot-root tr.lz-row{ background:none !important; outline:none !important; }';
         // 取代表單控件的偵測用 span 樣式（仿 .list-field select/input 外觀，高度近似）
@@ -7161,6 +7774,7 @@ var state = {
   //    只改 DOM 會變成「畫面一個順序、投影另一個順序」。
   var PRESENT_SLIDES = [
     { id: 'agendaSection', title: '本日議題' },
+    { id: 'briefSection', title: '重點分析' },
     { id: 'alertSection', title: '待留意事項' },
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection', title: '案件狀態統計' },
@@ -7196,6 +7810,7 @@ var state = {
   // 可列印區塊清單（依 main 內 section 順序；載入／分析期間為控制用，不列入）
   var PRINT_SECTIONS = [
     { id: 'agendaSection',    title: '本日議題' },
+    { id: 'briefSection',     title: '重點分析' },
     { id: 'alertSection',     title: '待留意事項' },
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection',      title: '案件狀態統計' },
@@ -7854,6 +8469,7 @@ var state = {
     initPeriodControls();
     initSnapshotControls();
     initLaser();
+    initBrief();
     if(!dropzone) return;
 
     window.addEventListener('dragover', function(e){ e.preventDefault(); });
@@ -8082,6 +8698,23 @@ var state = {
       laserZoneOf: laserZoneOf,
       setLaserOn: setLaserOn,
       initLaser: initLaser,
+      BRIEF_MAX: BRIEF_MAX,
+      briefRanges: briefRanges,
+      briefPreviousRange: briefPreviousRange,
+      briefRowsInRange: briefRowsInRange,
+      briefDelta: briefDelta,
+      briefDirWord: briefDirWord,
+      briefDirArrow: briefDirArrow,
+      briefDirMood: briefDirMood,
+      briefConsistent: briefConsistent,
+      buildBriefItems: buildBriefItems,
+      rankBriefItems: rankBriefItems,
+      checkBriefItems: checkBriefItems,
+      briefItemOk: briefItemOk,
+      briefStaleRows: briefStaleRows,
+      renderBriefSection: renderBriefSection,
+      setBriefMode: setBriefMode,
+      initBrief: initBrief,
       focusAlertEntries: focusAlertEntries,
       findListRowEl: findListRowEl,
       presentSlideIndexOf: presentSlideIndexOf,
