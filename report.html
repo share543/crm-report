@@ -1384,7 +1384,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.1.1';   // 1.1.1：LINE 短版補進講者版（原本拿不到）
+  var APP_VERSION = '1.1.2';   // 1.1.2：講者版手機排版修正（複製鈕被切）
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -8638,9 +8638,13 @@ var state = {
   var SPEAKER_CSS = [
     'body.spk-body{ padding:max(10px, env(safe-area-inset-top)) 12px calc(30px + env(safe-area-inset-bottom));',
     '  max-width:900px; margin:0 auto; }',
-    '#spkBar{ position:sticky; top:0; z-index:50; display:flex; gap:8px; align-items:center;',
+    // ⚠ 一定要 flex-wrap：手機（430px）放 4 顆模式鈕＋複製鈕會超出，
+    //    沒有 wrap 時最右邊的「複製」會被擠出畫面（外緣被切）。
+    '#spkBar{ position:sticky; top:0; z-index:50; display:flex; flex-wrap:wrap; gap:8px; align-items:center;',
     '  padding:9px 0 11px; background:var(--bg); border-bottom:1px solid var(--border); margin:0 0 14px; }',
     '#spkBar .spk-title{ font-size:12.5px; color:var(--muted); margin-right:auto; }',
+    // 窄螢幕：標題自己一列，按鈕才有整列可排
+    '@media (max-width:560px){ #spkBar .spk-title{ width:100%; margin-right:0; } }',
     '#spkMode{ font-size:13px; padding:6px 13px; }',
     '.spk-hide{ display:none !important; }',
     '.spk-sec.card{ border:none; background:transparent; padding:0; margin:0; }',
@@ -8664,8 +8668,10 @@ var state = {
     '#spkBar .spk-m{ font-size:12.5px; padding:5px 11px; }',
     '#spkBar .spk-m.on{ background:var(--accent); border-color:var(--accent); color:#0b1220; font-weight:700; }',
     '#spkCopy{ font-size:12.5px; padding:5px 12px; margin-left:auto; }',
+    '@media (max-width:560px){ #spkCopy{ margin-left:0; } }',
     '#spkFoot{ margin-top:22px; padding-top:12px; border-top:1px solid var(--border);',
-    '  font-size:11.5px; line-height:1.8; color:var(--muted); text-align:center; }'
+    '  font-size:11.5px; line-height:1.8; color:var(--muted); text-align:center;',
+    '  text-wrap:pretty; }',   // 避免「授權」被拆成單字行
   ].join('\n');
 
   // 頁腳純文字（報表與講者版共用同一份版權／版號來源）
