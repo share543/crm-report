@@ -4738,7 +4738,10 @@ var state = {
     // 停滯與其他區塊用同一份資料（篩選＋期間），避免同一數字兩個區塊互相打對台
     var stale = briefStaleRows(rows || allRows);
     var byKe = briefGroupCount(stale, '課別');
-    var share = stale.length ? Math.round(briefTopN(byKe, 3).sum * 1000 / stale.length) / 10 : 0;
+    // ⚠ 這裡原本顯示「Top3 課別佔 X%」—— 與洞見句同一個問題：
+    //    課別總數 <= 3 時該值恆為 100%，看了等於沒看。改為直接講「最集中的課別」。
+    var topKeK = byKe.length ? byKe[0] : null;
+    var topShareK = (topKeK && stale.length) ? Math.round(topKeK.count * 1000 / stale.length) / 10 : 0;
     var unstart = 0;
     for(var u = 0; u < allRows.length; u++) if(classifyStatus(allRows[u]) === '未啟動') unstart++;
     var avgCycle = briefAvgCycle(allRows);
@@ -4760,8 +4763,8 @@ var state = {
         s: '已導入 ' + opened + ' / 總 ' + allRows.length +
            (avgCycle ? '・平均開發 ' + avgCycle + ' 天' : '') },
       { l: '待留意（停滯>' + STALE_DAYS + '天）', v: String(stale.length),
-        d: 'Top3 課別佔 ' + briefNum(share) + '%', cl: 'bf-warn',
-        s: '未啟動另有 ' + unstart + ' 件' }
+        d: topKeK ? ('最集中：' + topKeK.name + ' ' + briefNum(topShareK) + '%') : '—',
+        cl: 'bf-warn', s: '未啟動另有 ' + unstart + ' 件' }
     ];
     var grid = document.createElement('div');
     grid.className = 'bf-kpis';
