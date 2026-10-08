@@ -1023,9 +1023,6 @@
   body.mobile .period-chips{ flex-wrap:wrap; }
   body.mobile .period-chip{ } 
   body.mobile .period-custom{ flex-wrap:wrap; }
-  /* 開場亮點摘要：卡片數少時不要被拉成半寬（2 張撐滿整排會看起來像「少了 3 張」）。
-     卡片維持自然寬度、靠左排列；左側那個 1fr 的拉伸是為了 5 張卡的舊版而設。 */
-  #highlight .stat-grid{ grid-template-columns:repeat(auto-fit,minmax(160px,240px)); justify-content:start; }
   body.mobile .stat-grid{ grid-template-columns:repeat(2,1fr); }
   body.mobile .ke-grid{ grid-template-columns:repeat(2,1fr); }
   body.mobile .stat-value{ font-size:24px; }
