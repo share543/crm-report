@@ -188,6 +188,10 @@
   .stat-cat .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
   .stat-cat .sc-name{ font-size:12px; color:var(--muted); }
   .stat-cat .sc-count{ font-size:12px; font-weight:700; color:var(--text); }
+  .ke-bar-legend{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-top:8px; }
+  .ke-bar-legend-item{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }
+  .ke-bar-legend-item .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .ke-category-chart svg{ overflow:visible; }
   .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
     padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
@@ -1093,6 +1097,8 @@
   body.mobile .list-toolbar{ gap:10px; }
   body.mobile svg{ max-width:100%; height:auto; }
   body.mobile .meeting-spark svg{ height:56px; }
+  body.mobile .ke-category-chart{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  body.mobile .ke-category-chart svg{ min-width:680px; max-width:none; }
   body.mobile .agenda-side{ padding:12px; }
   body.mobile .sort-arrow{ display:none; }
   /* Task 8：列印樣式（深色主題→白底黑字，隱藏操作型 UI，表格避免分頁切欄） */
@@ -1121,6 +1127,10 @@
     .stat-cat{ background:#fff; border-color:#bbb; }
     .stat-cat .sc-name{ color:#333; }
     .stat-cat .sc-count{ color:#000; }
+    .ke-category-chart svg, .ke-bar-legend-item .sc-dot{
+      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .ke-category-chart{ overflow:visible; }
+    body.mobile .ke-category-chart svg{ min-width:0; max-width:100%; }
     .ok, .stat-value.ok{ color:#157a3a; }
     .stat-card, .ke-card, .do-cat-block, .do-cust{ background:#fff; border-color:#bbb; }
     .pg-table th, .pg-table td, .pg-table td.pg-ke, .pg-table tr.pg-total td,
@@ -1419,8 +1429,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.3.1';   // 1.3.1：開場句「幾塊」由實際分組推導並寫出名稱
-  var APP_VERSION_DATE = '2026-10-08';
+  var APP_VERSION = '1.4.0';   // 1.4.0：案件狀態柱狀圖加入類別組成比例
+  var APP_VERSION_DATE = '2026-10-09';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -2287,8 +2297,12 @@ var state = {
     var keBarWrap = document.getElementById('keBarWrap');
     if(keBarWrap){
       keBarWrap.textContent = '';
+      var chartTitle = document.createElement('h3');
+      chartTitle.className = 'subtitle';
+      chartTitle.textContent = '各業務單位案件數與類別比例';
+      keBarWrap.appendChild(chartTitle);
       var keHost = document.createElement('div');
-      makeChart(keHost, 'bar', computeKeBars(stats.byKe), { colW: 92, barH: 130 });
+      makeKeCategoryChart(keHost, computeKeCategoryBars(stats.byKe, keCats), { colW: 92, barH: 130 });
       keBarWrap.appendChild(keHost);
     }
 
@@ -6720,6 +6734,44 @@ var state = {
     return entries.map(function(e){ return { label: e.label, count: e.count }; });
   }
 
+  // 純函式：案件狀態統計長條圖的類別組成；柱高保留總件數，色段表示各類別占比。
+  // categoriesByKe 由 catsByKe() 提供，並沿用 CAT_COLORS（與統計卡圓點同一色票）。
+  function computeKeCategoryBars(byKe, categoriesByKe){
+    var entries = computeKeBars(byKe || {});
+    categoriesByKe = categoriesByKe || {};
+    var catOrder = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
+    return entries.map(function(entry){
+      var counts = categoriesByKe[entry.label] || {};
+      var categories = [];
+      var sum = 0;
+      for(var i = 0; i < catOrder.length; i++){
+        var name = catOrder[i];
+        var count = Number(counts[name]) || 0;
+        if(count <= 0) continue;
+        sum += count;
+        categories.push({ label: name, count: count,
+          share: entry.count ? count / entry.count : 0,
+          color: CAT_COLORS[name] || CAT_COLORS['其他'] });
+      }
+      // 確保總數仍能由色段完整表示；資料分類缺漏時併入「其他」。
+      if(sum < entry.count){
+        var missing = entry.count - sum;
+        var other = null;
+        for(var j = 0; j < categories.length; j++){
+          if(categories[j].label === '其他'){ other = categories[j]; break; }
+        }
+        if(other){
+          other.count += missing;
+          other.share = entry.count ? other.count / entry.count : 0;
+        } else {
+          categories.push({ label: '其他', count: missing,
+            share: entry.count ? missing / entry.count : 0, color: CAT_COLORS['其他'] });
+        }
+      }
+      return { label: entry.label, count: entry.count, categories: categories };
+    });
+  }
+
   // 依「表頭名稱清單」依序取第一個非空白值；全空 → '(空白)'
   function fieldValue(row, keys){
     for(var i = 0; i < keys.length; i++){
@@ -7006,6 +7058,97 @@ var state = {
     var axis = svgEl('rect', { x: 0, y: baseline - 0.5, width: W, height: 1, fill: '#3a4150' });
     svg.appendChild(axis);
     container.appendChild(svg);
+    return svg;
+  }
+
+  // 案件狀態統計專用：柱高維持總件數，柱內按類別堆疊並標示比例。
+  // 各色直接取 CAT_COLORS，與上方各單位統計卡的圓點共用同一色票。
+  function makeKeCategoryChart(container, data, opts){
+    container.textContent = '';
+    opts = opts || {};
+    if(!data || !data.length){
+      container.className = 'pending';
+      container.textContent = '無資料';
+      return null;
+    }
+    container.className = 'ke-category-chart';
+    var colW = opts.colW || 92, barH = opts.barH || 130, mx = opts.mx || 42;
+    var padTop = 38, labH = 28, max = 1, legendNames = {};
+    for(var i = 0; i < data.length; i++){
+      if(data[i].count > max) max = data[i].count;
+      var cats = data[i].categories || [];
+      for(var c = 0; c < cats.length; c++) if(cats[c].count > 0) legendNames[cats[c].label] = true;
+    }
+    var baseline = padTop + barH;
+    var W = Math.max(mx + data.length * colW + 26, 340);
+    var H = baseline + labH + 10;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', role: 'img',
+      'aria-label': '各業務單位案件總數與服務類別比例' });
+    for(var d = 0; d < data.length; d++){
+      var item = data[d];
+      var cx = mx + d * colW + colW / 2;
+      var x = cx - colW / 2 + 8, bw = colW - 16;
+      var track = svgEl('rect', { x: x, y: padTop, width: bw, height: barH, rx: 4, fill: '#21262f' });
+      svg.appendChild(track);
+      var totalHeight = item.count > 0 ? item.count / max * barH : 0;
+      var yBottom = baseline;
+      var barCats = item.categories || [];
+      for(var j = 0; j < barCats.length; j++){
+        var cat = barCats[j];
+        if(cat.count <= 0) continue;
+        var segmentHeight = cat.count / max * barH;
+        var y = yBottom - segmentHeight;
+        var segment = svgEl('rect', { x: x, y: y, width: bw, height: segmentHeight,
+          fill: cat.color || CAT_COLORS['其他'], 'class': 'ke-bar-segment' });
+        segment.setAttribute('data-ke', item.label);
+        segment.setAttribute('data-category', cat.label);
+        segment.setAttribute('data-count', String(cat.count));
+        segment.setAttribute('data-share', String(cat.share));
+        var tip = svgEl('title', {});
+        tip.textContent = item.label + '・' + cat.label + '：' + cat.count + ' 筆（' + (cat.share * 100).toFixed(1) + '%）';
+        segment.appendChild(tip);
+        svg.appendChild(segment);
+        if(segmentHeight >= 18){
+          var pct = svgEl('text', { x: cx, y: y + segmentHeight / 2 + 3.5, 'text-anchor': 'middle',
+            'font-size': '10', 'font-weight': '700', fill: '#10131a', 'class': 'ke-bar-percent' });
+          pct.textContent = Math.round(cat.share * 100) + '%';
+          svg.appendChild(pct);
+        }
+        yBottom = y;
+      }
+      var total = svgEl('text', { x: cx, y: baseline - totalHeight - 7, 'text-anchor': 'middle',
+        'font-size': '13', 'font-weight': '650', fill: '#e8eaef' });
+      total.textContent = String(item.count);
+      svg.appendChild(total);
+      var label = svgEl('text', { x: cx, y: baseline + 18, 'text-anchor': 'middle', 'font-size': '12', fill: '#9aa3b2' });
+      label.textContent = item.label;
+      svg.appendChild(label);
+    }
+    svg.appendChild(svgEl('rect', { x: 0, y: baseline - 0.5, width: W, height: 1, fill: '#3a4150' }));
+    container.appendChild(svg);
+
+    var legend = document.createElement('div');
+    legend.className = 'ke-bar-legend';
+    var order = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
+    for(var k = 0; k < order.length; k++){
+      var name = order[k];
+      if(!legendNames[name]) continue;
+      var entry = document.createElement('span');
+      entry.className = 'ke-bar-legend-item';
+      var dot = document.createElement('span');
+      dot.className = 'sc-dot';
+      dot.style.background = CAT_COLORS[name];
+      var text = document.createElement('span');
+      text.textContent = name;
+      entry.appendChild(dot);
+      entry.appendChild(text);
+      legend.appendChild(entry);
+    }
+    if(legend.children.length) container.appendChild(legend);
+    var note = document.createElement('p');
+    note.className = 'note ke-bar-note';
+    note.textContent = '柱高表示該單位案件總數；柱內顏色表示類別比例。游標停留在色段可查看件數與精確比例；手機版可左右滑動查看。';
+    container.appendChild(note);
     return svg;
   }
 
@@ -10294,6 +10437,7 @@ var state = {
       renderTimingSection: renderTimingSection,
       computeStatusBuckets: computeStatusBuckets,
       computeKeBars: computeKeBars,
+      computeKeCategoryBars: computeKeCategoryBars,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
