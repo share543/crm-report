@@ -1419,7 +1419,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.3.0';   // 1.3.0：GM 開場三句話（由資料推導）
+  var APP_VERSION = '1.3.1';   // 1.3.1：開場句「幾塊」由實際分組推導並寫出名稱
   var APP_VERSION_DATE = '2026-10-08';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -5048,11 +5048,27 @@ var state = {
       box.appendChild(band);
     }
   }
-  function briefOpeningLine(ranges){
+  // 開場句。⚠「幾塊」必須由實際分組推導，不可寫死「三塊」——
+  //   分組是「有內容才出現」，只有兩組時說三塊就是假話；
+  //   而且講稿還有「開場三句話／本期數字／類別／課別」，不寫出名字會讓人搞不清指哪三塊。
+  function briefOpeningLine(ranges, groups){
     if(!ranges) return '';
     var cur = briefRowsInRange(ranges.trendRows || [], ranges.range);
+    var gs = groups || [];
+    var names = [];
+    for(var i = 0; i < gs.length; i++) names.push(gs[i].label);
+    var numCn = { 1: '一', 2: '兩', 3: '三', 4: '四', 5: '五' };
+    var tail;
+    if(!names.length){
+      tail = '本期沒有需要逐條說明的項目。';
+    } else if(names.length === 1){
+      tail = '以下說明一件事（' + names[0] + '）。';
+    } else {
+      tail = '以下分' + (numCn[names.length] || names.length) + '塊說明：' +
+             names.join('、') + '。';
+    }
     return '各位好，先看本期幾個數字：新增 ' + cur.length + ' 件，' +
-      '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。以下分三塊說明。';
+      '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。' + tail;
   }
   function renderBriefScript(box, items, ranges){
     var wrap = document.createElement('div'); wrap.className = 'bf-script';
@@ -5060,7 +5076,7 @@ var state = {
     if(ranges){
       var p0 = document.createElement('p');
       var s0 = document.createElement('span');
-      s0.textContent = briefOpeningLine(ranges);
+      s0.textContent = briefOpeningLine(ranges, briefGrouped(items));
       p0.appendChild(s0);
       wrap.appendChild(p0);
     }
@@ -5725,7 +5741,7 @@ var state = {
     }
     L = L.concat(briefTilesText(trendRows, ranges, rows));
     L.push('');
-    L.push(briefOpeningLine(opts));
+    L.push(briefOpeningLine(opts, briefGrouped(items)));
     L.push('');
     var groups = briefGrouped(items);
     for(var g = 0; g < groups.length; g++){
