@@ -379,6 +379,10 @@
   .do-cust-name{ font-weight:650; color:var(--text); }
   .do-chip{ color:var(--muted); font-size:12px; border:1px solid var(--border); border-radius:20px;
     padding:1px 8px; background:var(--card); white-space:nowrap; }
+  /* 原類別 chip：刻意用警示色邊框 —— 它表示「這筆的類別被程式改過」，
+     讀者要能一眼看出這不是人工填的。實心會與類別 chip 搶注意力，故只框線。 */
+  .do-chip-origin{ color:var(--warn,#c9a227); border-color:var(--warn,#c9a227); font-weight:650; }
+  .do-origin-line{ margin:0 0 6px; }
   .do-jiean{ font-size:13px; margin:2px 0; }
   .do-content{ font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.6; margin-top:2px; }
   .do-field-label{ color:var(--accent); font-weight:600; }
@@ -1133,6 +1137,10 @@
     .muted, .pending, .note, .list-summary, .pg-info, .subtitle,
     .type-bars-title, .type-count, .do-cat-total, .do-node-count,
     .stat-label, .ke-name, .rank-control, .do-node-label, .do-chip{ color:#333; }
+    /* 原類別 chip：上面的 .do-chip 會把顏色一起改成 #333，紙上就與一般 chip 無從分別。
+       這裡用深黃（#8a6d00，白底對比約 5.5:1）保留「這筆被改過」的視覺區隔。
+       列印是獨立的一套 CSS 路徑，只改畫面那一邊會漏。 */
+    .do-chip-origin{ color:#8a6d00; border-color:#8a6d00; }
     .stat-cats{ border-top-color:#bbb; }
     .stat-cat{ background:#fff; border-color:#bbb; }
     .stat-cat .sc-name{ color:#333; }
@@ -1446,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.5.0';   // 1.5.0：講者版加入「本期新增案件的類別分布」與「各業務單位×類別」兩張圖
+  var APP_VERSION = '1.6.0';   // 1.6.0：甲指成功轉甲配＋已簽約 → 類別推導為甲配（會改分類，明細顯示原類別）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1840,7 +1848,58 @@ var state = {
     return { total: list.length, items: items };
   }
 
-  // 純函式：案件類型填寫規則檢核（回傳結構化結果，不拋錯）
+  // ---------------------------------------------------------------------------
+  // 甲指成功轉甲配 → 類別推導（匯入時套用，會真的改分類）
+  // ---------------------------------------------------------------------------
+  // 規則（使用者 2026-10-12 定案）：
+  //   「簽約」有日期 且「甲指成功轉甲配」有填入值 → 該筆 類別 改為 甲配，
+  //   原類別保留在 row['原類別']，供案件明細顯示 chip。
+  //
+  // 兩條設計理由（改動前先讀）：
+  // 1. **兩個條件必須同時成立。** 欄位名稱雖已含「成功」，但簽約日期才是成交的
+  //    事實依據；只憑人打的一個勾就改分類，等於讓標記凌駕合約紀錄。
+  // 2. **原類別已經是甲配的不動、也不標記。** 沒有「轉」這件事，
+  //    標一個「原類別：甲配」在甲配案件上是噪音。
+  //    這也讓函式冪等 —— 重複套用第二次會因為 cur === '甲配' 而跳過，
+  //    所以掛在 applyModel（匯入與兩條還原路徑的共同入口）不會重複計數。
+  //
+  // 純函式：判斷是否為「打勾」值。回傳 boolean，不拋錯。
+  // 接受 V／v／全形ｖ 與 ✓／✔／☑／√ —— 「打勾」是語意，
+  // Excel 裡兩種都有人用；只認 'V' 會讓用 ✓ 的檔案靜默完全不生效。
+  function isTickMark(v){
+    var s = String((v === undefined || v === null) ? '' : v).trim();
+    if(!s) return false;
+    s = s.replace(/[\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/g, function(ch){
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    }).toUpperCase();
+    return s === 'V' || s === '✓' || s === '✔' || s === '☑' || s === '√';
+  }
+
+  // 純函式：套用推導。原地修改 rows（與 buildModel 其餘部分同一風格），
+  // 回傳 { changed, byFrom } 供 UI 顯示「本次匯入調整了 N 筆」。
+  // byFrom 以原類別為鍵（空白顯示為 '(空白)'），讓回報看得出調整來自哪些類別。
+  function applyCategoryOverride(rows){
+    var list = rows || [];
+    var changed = 0, byFrom = {};
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(!r) continue;
+      if(!isTickMark(r['甲指成功轉甲配'])) continue;
+      var sign = (r['簽約'] !== undefined && r['簽約'] !== null && String(r['簽約']).trim() !== '');
+      if(!sign) continue;
+      var cur = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+        ? String(r['類別']).trim() : '(空白)';
+      if(cur === '甲配') continue;              // 已是甲配：沒有「轉」這件事
+      r['原類別'] = cur;
+      r['類別'] = '甲配';
+      r._catOverridden = true;
+      changed++;
+      byFrom[cur] = (byFrom[cur] || 0) + 1;
+    }
+    return { changed: changed, byFrom: byFrom };
+  }
+
+  // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
   // 規則：導入 有值且 簽約 空白 → 類別應為 1P/3P；零擔/甲配 → 簽約＋導入皆有日期。
   // 僅簽約無導入（如已簽約未導入客戶）列為備註，不算不一致。
   function validateCategoryRule(rows){
@@ -6376,6 +6435,7 @@ var state = {
       head.appendChild(chipCat);
       head.appendChild(chipKe);
       head.appendChild(chipTotal);
+      appendOriginChip(head, r);       // 推導過的案件才會有，其餘不動
       item.appendChild(head);
       // 各階段 mini 表
       var grid = document.createElement('table');
@@ -6609,6 +6669,7 @@ var state = {
     head.appendChild(name);
     head.appendChild(chipCat);
     head.appendChild(chipKe);
+    appendOriginChip(head, r);       // 推導過的案件才會有，其餘不動
     item.appendChild(head);
     var jText = (r['結案'] !== undefined && r['結案'] !== null) ? String(r['結案']).trim() : '';
     item.appendChild(fieldLine('do-jiean', '結案', jText, '（無結案原因）'));
@@ -8167,10 +8228,36 @@ var state = {
     if(pt) pt.addEventListener('change', function(){ setPeriod({ preset: 'all', from: pf ? pf.value : '', to: pt.value }); });
   }
 
+  // 原類別 chip（甲指成功轉甲配 推導過的案件才會有）。
+  // ⚠ 只在真的推導過時附加 —— 沒推導卻掛一個「原類別」chip 會讓人以為每筆都被改過。
+  // 純 DOM，回傳是否附加（供呼叫端判斷要不要留空位）。
+  function appendOriginChip(container, r){
+    if(!container || !r || !r._catOverridden) return false;
+    var from = (r['原類別'] !== undefined && r['原類別'] !== null && String(r['原類別']).trim() !== '')
+      ? String(r['原類別']).trim() : '(空白)';
+    var chip = document.createElement('span');
+    chip.className = 'do-chip do-chip-origin';
+    chip.title = '此筆因「甲指成功轉甲配」且已簽約，由 ' + from + ' 調整為 甲配';
+    chip.textContent = '原類別：' + from;
+    container.appendChild(chip);
+    return true;
+  }
+
   // 展開列的明細子表格內容（洽談內容／說明／結案，保留換行；createTextNode 防 XSS）
   function buildListDetail(r){
     var inner = document.createElement('div');
     inner.className = 'list-detail-inner';
+    // 類別調整註記放在最前面：它是這筆資料的「來歷」，讀者先看到再讀內容才有意義
+    if(r && r._catOverridden){
+      var cp = document.createElement('p');
+      cp.className = 'do-origin-line';
+      var cl = document.createElement('span');
+      cl.className = 'do-field-label';
+      cl.textContent = '類別：';
+      cp.appendChild(cl);
+      appendOriginChip(cp, r);
+      inner.appendChild(cp);
+    }
     var fields = [
       { label: '洽談內容', key: '洽談內容', empty: '（無洽談內容）' },
       { label: '說明', key: '說明', empty: '（無說明）' },
@@ -9209,6 +9296,12 @@ var state = {
     opts = opts || {};
     state.model = model;
     state.fileName = name;
+    // 甲指成功轉甲配 → 甲配 推導。掛在這裡（而非 handleFile）是故意的：
+    // tryRestoreData 的兩條路徑（內嵌副本／localStorage 記憶）都經過 applyModel，
+    // 所以舊存檔還原時也會補上；函式冪等，已推導過的不會重複計數。
+    state.catOverride = (model && model.rows)
+      ? applyCategoryOverride(model.rows)
+      : { changed: 0, byFrom: {} };
     state.filters = defaultFilters();
     state.period = { preset: 'all', from: '', to: '' };
     state.sortCol = '序號';
@@ -10615,6 +10708,8 @@ var state = {
       computeKeBars: computeKeBars,
       computeKeCategoryBars: computeKeCategoryBars,
       computePeriodCategory: computePeriodCategory,
+      applyCategoryOverride: applyCategoryOverride,
+      isTickMark: isTickMark,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
