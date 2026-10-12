@@ -1500,7 +1500,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.8.2';   // 1.8.2：逾期監控每筆可點擊跳到案件清單並展開該筆明細
+  var APP_VERSION = '1.8.3';   // 1.8.3：點單一案件跳轉後可回跳來源區塊（含期間還原與逾期展開）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3245,10 +3245,14 @@ var state = {
   // 實測（218 列）：all 32/32 可跳、上個月只有 23/32、本年度 32/32。
   // 所以期間外的案件先切到「全部數據」再跳一次，並在區塊說明裡講明這件事。
   function jumpToOverdueCase(row){
-    if(jumpToCase(row)) return true;
+    var prevPeriod = state.period;
+    if(jumpToCaseFrom(document.getElementById('notStartedSection'), row,
+        { title: '案件追蹤與逾期監控', expandOd: true })) return true;
+    // 期間外的案件：切到全部數據再試一次，並記下原本的期間供回跳時還原
     if(state.period && state.period.preset !== 'all'){
       setPeriod({ preset:'all', from:'', to:'' });
-      return jumpToCase(row);
+      return jumpToCaseFrom(document.getElementById('notStartedSection'), row,
+        { title: '案件追蹤與逾期監控', expandOd: true, restorePeriod: prevPeriod });
     }
     return false;
   }
@@ -4768,13 +4772,51 @@ var state = {
     return true;
   }
 
+  // 從某個區塊的「單一案件連結」跳到案件清單，並記錄來源讓回跳可用。
+  //
+  // ⚠ 為什麼需要這一層：`jumpToCase()` 本身不記 `state.jumpFrom` ——
+  //   它也被不該出現回跳的路徑使用。所以由這一層補上來源，
+  //   回跳鈕（`← 回到「…」`）與浮動膠囊才會出現。
+  //   舊版逾期監控直接呼叫 jumpToCase，跳得過去但回不來（使用者回報的正是這個）。
+  // 回傳 true 表示跳轉成功（來源已記錄）。
+  function jumpToCaseFrom(card, row, opts){
+    opts = opts || {};
+    if(!jumpToCase(row)) return false;
+    if(card && card.id && card.id !== 'listSection'){
+      // 逾期監控的 h2 很長（含副標），回跳鈕會塞滿標題列 → 允許呼叫端給短標題
+      var t = opts.title;
+      if(!t){
+        var h2 = card.querySelector('h2');
+        t = h2 ? (snapshotTitleText(h2) || h2.textContent || '') : '';
+      }
+      state.jumpFrom = {
+        id: card.id,
+        title: String(t).replace(/\s+/g, ' ').trim() || '上一個區塊',
+        expandOd: !!opts.expandOd,
+        restorePeriod: opts.restorePeriod || null
+      };
+      updateBackControls();
+    }
+    return true;
+  }
+
   // 回到來源區塊
   function backToJumpFrom(){
     var from = state.jumpFrom;
     if(!from) return false;
     var card = document.getElementById(from.id);
     if(!card) return false;
+    // 若當初為了找到該筆而把分析期間切到「全部數據」，回跳時還原使用者原本選的期間。
+    // ⚠ 必須在展開之前做：setPeriod 會觸發 rebuild，重建後的收合狀態是預設值，
+    //   先展開會被 rebuild 沖掉。順序＝還原期間 → 展開區塊 → 展開逾期 → 捲動。
+    if(from.restorePeriod){ setPeriod(from.restorePeriod); }
     unfoldSection(card);
+    // 逾期監控預設收合：回到時展開，否則使用者看不到自己剛從哪一筆點過來
+    if(from.expandOd){
+      var h = card.querySelector('.ns-od-head');
+      var b = card.querySelector('.ns-od-body');
+      if(h && b && b.hidden) h.click();
+    }
     try{ card.scrollIntoView({ block: 'start', behavior: 'instant' }); }catch(e){ card.scrollIntoView(); }
     pulseClass(card, 'jump-target');
     updateBackControls();
@@ -6775,7 +6817,8 @@ var state = {
       var link = el.closest('.alert-link');
       if(link && link.__row){
         ev.preventDefault();
-        jumpToCase(link.__row);
+        // 與逾期監控同一套：記錄來源才回得去（舊版只呼叫 jumpToCase，跳過去回不來）
+        jumpToCaseFrom(document.getElementById('alertSection'), link.__row);
       }
     });
   }
@@ -11403,6 +11446,7 @@ var state = {
       alertStampsOf: function(){ return alertStamps; },
       jumpToCase: jumpToCase,
       jumpToOverdueCase: jumpToOverdueCase,
+      jumpToCaseFrom: jumpToCaseFrom,
       jumpToListSection: jumpToListSection,
       backToJumpFrom: backToJumpFrom,
       updateBackControls: updateBackControls,

@@ -177,6 +177,37 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 驗證：`<button>` 標籤與 `__row` 存在、期間內的案件點擊後期間不變且明細展開、
   期間外的案件點擊後期間變 `all` 且明細展開、監聽器只掛一次。
 
+#### v1.8.3：跳轉後要回得去（`jumpToCaseFrom`）
+
+使用者回報「點了會跳到案件清單並展開明細，但沒有辦法跳回去」。
+
+**根因**：`jumpToCase(row)` 本身**不記 `state.jumpFrom`** —— 回跳鈕與浮動膠囊都由
+`updateBackControls()` 依 `state.jumpFrom` 決定顯示，而 `jumpToCase` 從未設定它。
+區塊→清單的 `jumpToListSection(card)` 有記，**點單一案件的路徑沒有**。
+（待留意事項的 `.alert-link` 同一行老早就有這個缺口，一併修了。）
+
+新增 `jumpToCaseFrom(card, row, opts)`：`jumpToCase` 成功後才記來源，並呼叫
+`updateBackControls()`。`opts` 三個欄位：
+- `title` —— 逾期監控的 `h2` 含副標很長，回跳鈕會塞滿標題列，給短標題「案件追蹤與逾期監控」
+- `expandOd` —— 回跳時展開收合的逾期區塊，否則使用者看不到自己剛從哪一筆點過來
+- `restorePeriod` —— 當初為了找到該筆而切到「全部數據」時，回跳時還原原本選的期間
+
+⚠️ **`backToJumpFrom()` 裡的順序不可調**：`還原期間 → 展開區塊 → 展開逾期 → 捲動`。
+`setPeriod()` 會觸發 rebuild，重建後的收合狀態是預設值，**先展開會被 rebuild 沖掉**。
+
+⚠️ **回跳後 `state.jumpFrom` 刻意不清空、回跳鈕刻意保留** —— AGENTS.md 既有的設計是
+「標題列鈕常駐」（當成回到來源的快捷入口，浮動膠囊才是條件出現的那一個）。
+實測回跳後按鈕仍在、文字仍是「← 回到『案件追蹤與逾期監控』」，再按一次只是捲回同一處。
+**不要「順手修正」這個行為**，它與浮動膠囊的分工是刻意的。
+
+驗收（E2E 真實 Chromium，218 列）：
+- 跳轉後：期間 `lastMonth → all`（期間外樣本）、該列明細已展開、
+  `jumpFrom = {id:'notStartedSection', title:'案件追蹤與逾期監控', expandOd:true, restorePeriod:'lastMonth'}`、
+  回跳鈕可見且文字為「← 回到『案件追蹤與逾期監控』」、浮動膠囊可見
+- 回跳後：期間還原為 `lastMonth`、來源區塊已展開、逾期區塊已展開、已捲到該處
+- 期間內路徑：期間不變、`restorePeriod` 為 `null`、回跳後期間仍不變
+- 列印：回跳鈕不出現在 PDF（`@media print` 已隱藏）
+
 ## 改區塊順序（2026-10）
 
 三處要一起改：`<main>` 的 section、`PRESENT_SLIDES`、本檔的「區塊順序」。
