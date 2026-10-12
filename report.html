@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.6.0';   // 1.6.0：甲指成功轉甲配＋已簽約 → 類別推導為甲配（會改分類，明細顯示原類別）
+  var APP_VERSION = '1.6.1';   // 1.6.1：講者版補「分析期間」宣告列；兩張圖標題都帶期間；去掉重複標題
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1897,6 +1897,41 @@ var state = {
       byFrom[cur] = (byFrom[cur] || 0) + 1;
     }
     return { changed: changed, byFrom: byFrom };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 講者版：分析期間宣告列
+  // ---------------------------------------------------------------------------
+  // 為什麼需要：講者版是「已渲染 DOM 的快照」，期間在產生當下就烘進數字裡。
+  // 實測那份單檔 111KB 中「本期」出現 137 次，而期間明說只有 5 次（3 次還是同一個
+  // bf-base）—— 冷讀快照的人無從判斷「本期」指哪一段，數字再對也會被讀錯。
+  // 主報表本來有「開會資訊」這列（分析期間／案件件數），但它在 agendaSection、
+  // 不在 briefSection，所以沒進快照。這裡在講者版頂部補一條同等效力的一行式宣告。
+  //
+  // 純函式：回傳 { isAll, desc, inPeriod, total, text }，不碰 DOM。
+  // 期間為「全部」時不說「期間內 N 筆（全部 M 筆）」（那會出現 N === M 的贅語）。
+  function speakerPeriodLine(allRows, period, now){
+    var list = allRows || [];
+    var range = (typeof periodRange === 'function') ? periodRange(period, now) : null;
+    var inN = list.length, total = list.length;
+    if(range){
+      var pr = applyPeriod(list, period, now);
+      inN = pr.rows.length;
+      total = list.length;
+    }
+    var desc = describePeriod(period, now);
+    var text = range
+      ? '分析期間：' + desc + '｜期間內 ' + inN + ' 筆（全部 ' + total + ' 筆）'
+      : '分析期間：' + desc + '｜共 ' + total + ' 筆';
+    return { isAll: !range, desc: desc, inPeriod: inN, total: total, text: text };
+  }
+
+  // 純函式：圖表標題用的期間前綴。與 speakerPeriodLine 同一組判準 ——
+  // 一律問 periodRange 有沒有推出區間，不可用 (!from && !to)（具名預設的 from/to 本來就空）。
+  // 回傳 '' 表示「全部」，呼叫端自行組「全部案件的類別分布」這類完整標題。
+  function chartPeriodPrefix(period, now){
+    var range = (typeof periodRange === 'function') ? periodRange(period, now) : null;
+    return range ? describePeriod(period, now) : '';
   }
 
   // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
@@ -9398,9 +9433,8 @@ var state = {
     // ⚠ 不可用 (!from && !to) 判斷「是否全部」—— lastMonth／thisYear 等具名預設的
     //   from/to 本來就是空的（由 periodRange 推導），那樣寫會把它們誤判成「全部」，
     //   於是標題說「全部」而數字是期間筆數 → 假話。正確判準＝periodRange 有沒有推出區間。
-    var range = (typeof periodRange === 'function') ? periodRange(state.period) : null;
-    var isAll = !range;
-    var scope = isAll ? '全部' : describePeriod(state.period);
+    var scope = chartPeriodPrefix(state.period);
+    var isAll = !scope;
     var t = document.getElementById('spkCatTitle');
     if(t){
       t.textContent = isAll ? '全部案件的類別分布' : scope + '新增案件的類別分布';
@@ -9483,16 +9517,31 @@ var state = {
   // 講者版：案件狀態統計的類別組成圖（主報表 statSection 內的 #keBarWrap）。
   // ⚠ 快照的是「已渲染的 DOM」——圖由 makeKeCategoryChart 在建構時畫進 #keBarWrap，
   //   所以產生講者版前 statSection 必須已經渲染過（rebuild() 會做）。
+  //
+  // 標題帶上分析期間：這張圖的色段數會隨期間縮放（實測 20→17→20），
+  // 但舊版標題在三種期間下一字不差 —— 旁邊「類別分布」那張有期間、這張沒有，
+  // 主持人在同一份講者版裡會看到一張有標期間、一張沒有，等於要自己猜。
+  //
+  // ⚠ 標題只留一個：#keBarWrap 裡本來就有一個 .subtitle 同文字標題，
+  //   早先版本又另外加了一個 <h2>，結果同一個標題在檔裡出現兩次。現在移除內層那個。
   function snapshotKeCategoryChart(){
     var wrap = document.getElementById('keBarWrap');
     if(!wrap) return '';
     var holder = document.createElement('section');
     holder.className = 'card spk-sec';
     var h2 = document.createElement('h2');
-    h2.textContent = '各業務單位案件數與類別比例';
+    var scope = chartPeriodPrefix(state.period);
+    h2.textContent = scope
+      ? '各業務單位案件數與類別比例（' + scope + '）'
+      : '各業務單位案件數與類別比例（全部）';
     holder.appendChild(h2);
     var clone = wrap.cloneNode(true);
     clone.id = '';
+    // 移除內層重複的標題（.subtitle），避免同一個標題在講者版出現兩次
+    var inner = clone.querySelectorAll('.subtitle');
+    for(var i = 0; i < inner.length; i++){
+      if(inner[i].parentNode) inner[i].parentNode.removeChild(inner[i]);
+    }
     holder.appendChild(clone);
     return holder.outerHTML;
   }
@@ -9554,6 +9603,12 @@ var state = {
     '#spkCopy.done{ background:var(--ok); color:#0b1220; box-shadow:inset 0 0 0 1px var(--ok); }',
     '@media (max-width:560px){ #spkCopy{ margin-left:0; } }',
     '#spkBar .spk-gap{ flex:1 1 auto; }',
+    // 分析期間宣告列（見 speakerPeriodLine）。深色底＋中性邊框，與 sticky 工具列視覺相連但不搶焦點；
+    // 字級 13px 夠讀、白色（繼承 body.spk-body 的 --text），不在深色容器裡靠繼承冒險。
+    '#spkPeriod{ margin:0 0 16px; padding:9px 13px; background:var(--card-2);',
+    '  border:1px solid var(--border); border-radius:9px; font-size:13px;',
+    '  line-height:1.6; color:var(--text); font-weight:600; }',
+    '@media print{ #spkPeriod{ -webkit-print-color-adjust:exact; print-color-adjust:exact; } }',
     // ── 兩張圖（講者版新增）──
     /* 本期新增案件的類別分布：CSS 橫條，窄螢幕自然收縮，不需要滑動 */
     '.spk-sec .pc-head{ font-size:13.5px; }',
@@ -9609,6 +9664,10 @@ var state = {
     //       再「各業務單位 × 類別」（看結構差異）。與開場的敘述順序一致。
     var periodCatHtml = snapshotSpkCatSection();
     var keCatHtml = snapshotKeCategoryChart();
+    // 分析期間宣告列。放在 #spkBar 正下方、所有模式區塊之上 ——
+    // 它是「這份快照的數字是哪一段期間的」唯一宣告，必須不隨模式切換而消失，
+    // 否則講者切到 GM 模式就看不到期間，而檔內「本期」出現上百次。
+    var pl = speakerPeriodLine(state.model && state.model.rows, state.period);
     function escHtml(t){
       return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
@@ -9629,6 +9688,7 @@ var state = {
       + '<button type="button" class="spk-m" data-m="gmline">GM LINE</button>'
       + '</span><span class="spk-gap"></span>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
+      + '<div id="spkPeriod" class="spk-period">' + escHtml(pl.text) + '</div>\n'
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
@@ -10710,6 +10770,8 @@ var state = {
       computePeriodCategory: computePeriodCategory,
       applyCategoryOverride: applyCategoryOverride,
       isTickMark: isTickMark,
+      speakerPeriodLine: speakerPeriodLine,
+      chartPeriodPrefix: chartPeriodPrefix,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
