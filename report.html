@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.6.2';   // 1.6.2：開場三句話標明口徑（②③加「累計（全期）」；①在期間=全部時講近 30 天）
+  var APP_VERSION = '1.6.3';   // 1.6.3：講者版期間用語改用選項同一套詞（本週／上週／…／累計（全期）／自訂區間）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1919,7 +1919,7 @@ var state = {
       inN = pr.rows.length;
       total = list.length;
     }
-    var desc = describePeriod(period, now);
+    var desc = periodScopeLabel(period, now);
     var text = range
       ? '分析期間：' + desc + '｜期間內 ' + inN + ' 筆（全部 ' + total + ' 筆）'
       : '分析期間：' + desc + '｜共 ' + total + ' 筆';
@@ -1928,10 +1928,13 @@ var state = {
 
   // 純函式：圖表標題用的期間前綴。與 speakerPeriodLine 同一組判準 ——
   // 一律問 periodRange 有沒有推出區間，不可用 (!from && !to)（具名預設的 from/to 本來就空）。
-  // 回傳 '' 表示「全部」，呼叫端自行組「全部案件的類別分布」這類完整標題。
+  // 回傳 '' 表示「全部數據」，呼叫端自行組「累計（全期）案件的類別分布」這類完整標題。
+  // ⚠ 具名預設一律用按鈕同一套詞（本週／上週／…），不再吐日期 ——
+  //   舊版對「上個月」給「2026 年 9 月」，與畫面按鈕的「上個月」是兩個名字指同一件事。
   function chartPeriodPrefix(period, now){
     var range = (typeof periodRange === 'function') ? periodRange(period, now) : null;
-    return range ? describePeriod(period, now) : '';
+    if(!range) return '';
+    return periodScopeLabel(period, now);
   }
 
   // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
@@ -4492,11 +4495,52 @@ var state = {
     return { from: isoDate(pF), to: isoDate(pT) };
   }
   // 期間為「全部數據」時沒有上期可比 → 退回「近 30 天 vs 前 30 天」並標明
+  // ---------------------------------------------------------------------------
+  // 期間名稱：講者版所有「本期」字樣的單一來源
+  // ---------------------------------------------------------------------------
+  // 為什麼需要：使用者要求「選 全部數據 就用累計…、選本週就用本週、上週就用上週，
+  // 自訂區間就用自訂區間說明，文字要更明確」。
+  //
+  // ⚠️ 用詞與畫面期間按鈕**完全相同**（同一律：同一個詞只有一個意思）。
+  //    舊版講者版對「上個月」寫「2026 年 9 月」—— 按鈕寫上個月、講者版寫 9 月，
+  //    兩者指的是同一件事卻用兩個名字，主持人與與會者對不起來。
+  //
+  // 「全部數據」回 「累計（全期）」而非「全部數據」：講者版的數字在這種情況下
+  // 是累計口徑，用「累計」才能與②③的「累計（全期）」前綴、以及報表的
+  // 「累計轉換率（全期）」落在同一套詞彙裡。
+  var PERIOD_SCOPE_LABELS = {
+    all:         '累計（全期）',
+    thisWeek:    '本週',
+    lastWeek:    '上週',
+    thisMonth:   '本月',
+    lastMonth:   '上個月',
+    thisQuarter: '本季',
+    thisYear:    '本年度',
+    lastYear:    '去年'
+  };
+
+  // 純函式：期間名稱（講者版與開場文字共用）。不碰 DOM。
+  // ・具名預設 → 用按鈕同一套詞
+  // ・自訂區間（preset 'all' 但帶 from／to）→ 沒有具名詞可用，改用實際日期區間
+  // ・未知 preset（未來新增）→ 有區間就用日期描述，沒有才回 「累計（全期）」。
+  //   不可無條件回 '全部數據' —— 那會在有區間時變成假話。
+  function periodScopeLabel(period, now){
+    period = period || {};
+    var p = period.preset || 'all';
+    var hasCustom = (p === 'all') && (!!String(period.from || '').trim() || !!String(period.to || '').trim());
+    if(hasCustom) return describePeriod(period, now);
+    if(PERIOD_SCOPE_LABELS[p]) return PERIOD_SCOPE_LABELS[p];
+    var range = (typeof periodRange === 'function') ? periodRange(period, now) : null;
+    return range ? describePeriod(period, now) : '累計（全期）';
+  }
+
   function briefRanges(period, now){
     var r = periodRange(period, now);
+    var scope = periodScopeLabel(period, now);
     if(r){
       return { range: r, prev: briefPreviousRange(r), isFallback: false,
-               label: describePeriod(period, now) + '，與前一段等長期間比較' };
+               scopeLabel: scope, kpiLabel: scope,
+               label: scope + '，與前一段等長期間比較' };
     }
     now = now || new Date();
     var t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -4504,11 +4548,14 @@ var state = {
     var pT = new Date(tms - 30 * 86400000);
     return { range: { from: isoDate(new Date(tms - 29 * 86400000)), to: isoDate(t) },
              prev:  { from: isoDate(new Date(pT.getTime() - 29 * 86400000)), to: isoDate(pT) },
-             // ⚠ isFallback 必須為 true —— 開場①的量能句靠它決定講「本期」還是「近 30 天」。
-             //   期間為「全部數據」時沒有上期可比，briefRanges 自動退回近 30 天；
-             //   那時講「本期新增 156 件」是**不精確的**（實際是近 30 天），
-             //   而聽眾無從分辨，因為旁邊②③的數字又是全期、完全不變。
+             // ⚠ isFallback 必須為 true —— 期間為「全部數據」時沒有上期可比，
+             //   briefRanges 自動退回近 30 天。這時：
+             //   ・開場①改用**全期**數字並講「累計（全期）」（見 buildOpening3）
+             //   ・KPI 數字帶與細部仍用近 30 天，但標籤必須寫「近 30 天」而非「本期」——
+             //     寫「累計（全期）新增 156 件」會是假話（156 是近 30 天，全期是 218）。
              isFallback: true,
+             scopeLabel: scope,
+             kpiLabel: '近 30 天',
              label: '近 30 天 vs 前 30 天（分析期間為「全部數據」，故自動以最近 30 天為比較基準）' };
   }
 
@@ -5165,10 +5212,13 @@ var state = {
     var tiles = [
       // 「全期累計」的基準要與下面的開發轉換率一致（都是 allRows ＝ 篩選後全部資料），
       // 否則會出現「兩個全期數字」這種新的矛盾。
-      { l: '本期新增案件', v: String(cn), d: ranges.prev ? briefDirArrow(dN) : '—',
+      // ⚠ 標籤用 ranges.kpiLabel（本週／上週／…／自訂區間），期間為「全部數據」時是「近 30 天」
+      //    —— 那兩張卡吃的就是近 30 天的退回值，寫「累計（全期）」會是假話
+      //    （近 30 天 156 件 vs 全期 218 件）。開場①講的是全期，兩處口徑不同但都標明。
+      { l: ranges.kpiLabel + '新增案件', v: String(cn), d: ranges.prev ? briefDirArrow(dN) : '—',
         cl: briefDirClass(dN),
         s: (ranges.prev ? ('上期 ' + pn + ' 件') : '無上期可比') + '・全期累計 ' + allRows.length + ' 件' },
-      { l: '本期導入完成', v: String(co), d: ranges.prev ? briefDirArrow(dO) : '—',
+      { l: ranges.kpiLabel + '導入完成', v: String(co), d: ranges.prev ? briefDirArrow(dO) : '—',
         cl: briefDirClass(dO),
         s: (ranges.prev ? ('上期 ' + po + ' 件') : '無上期可比') + '・全期累計 ' + opened + ' 件' },
       // ⚠ 不以「本期導入 ÷ 本期新增」呈現轉換率：導入比新增落後一整個開發週期
@@ -5234,7 +5284,10 @@ var state = {
   //   而且講稿還有「開場三句話／本期數字／類別／課別」，不寫出名字會讓人搞不清指哪三塊。
   function briefOpeningLine(ranges, groups){
     if(!ranges) return '';
-    var cur = briefRowsInRange(ranges.trendRows || [], ranges.range);
+    var tr = ranges.trendRows || [];
+    // 期間為「全部數據」時與開場①同源：講全期，不講近 30 天的退回值
+    var cur = ranges.isFallback ? tr : briefRowsInRange(tr, ranges.range);
+    var scope = ranges.scopeLabel || '本期';
     var gs = groups || [];
     var names = [];
     for(var i = 0; i < gs.length; i++) names.push(gs[i].label);
@@ -5248,7 +5301,7 @@ var state = {
       tail = '以下分' + (numCn[names.length] || names.length) + '塊說明：' +
              names.join('、') + '。';
     }
-    return '各位好，先看本期幾個數字：新增 ' + cur.length + ' 件，' +
+    return '各位好，先看' + scope + '幾個數字：' + scope + '新增 ' + cur.length + ' 件，' +
       '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。' + tail;
   }
   function renderBriefScript(box, items, ranges){
@@ -5289,7 +5342,21 @@ var state = {
     var box = document.getElementById('brief');
     var base = document.getElementById('briefBase');
     if(!sec || !box) return;
-    if(!rows || !rows.length || !state.model || !state.model.rows){ sec.hidden = true; return; }
+    // ⚠ 期間內 0 筆時必須**清空內容**，不可只隱藏區塊就 return。
+    //    舊版在這裡 sec.hidden = true 後直接 return，DOM 裡留著上一個期間的數字 ——
+    //    畫面上看不到（區塊隱藏），但 snapshotBriefSection() 會把 clone 的 hidden 設成 false，
+    //    於是**講者版單檔會把舊期間的數字連著新期間的宣告一起輸出**（實測：期間切到 2025 年
+    //    （全年）0 筆，講者版卻出現「上個月新增 172 件」）。這是快照路徑專屬的漏音，
+    //    畫面與列印都看不出來。寧可顯示空狀態，也不留可被快照的舊數字。
+    if(!rows || !rows.length || !state.model || !state.model.rows){
+      sec.hidden = true;
+      box.textContent = '';
+      box.className = 'pending';
+      box.textContent = '本期沒有案件';
+      if(base) base.textContent = '';
+      state.briefCopyText = '';
+      return;
+    }
     var ranges = briefRanges(state.period, new Date());
     if(base) base.textContent = '比較基準：' + ranges.label +
       '　·　風險與肯定類統計採目前篩選＋期間（與其他區塊一致）' +
@@ -5360,21 +5427,28 @@ var state = {
   // 資料不支持就不產生那一句（寧缺勿假）。
   function buildOpening3(rows, trendRows, ranges){
     var all = trendRows || rows;
-    var cur = briefRowsInRange(all, ranges.range);
-    var prv = ranges.prev ? briefRowsInRange(all, ranges.prev) : [];
+    // ⚠ 期間為「全部數據」時，①改吃**全期**列並講「累計（全期）」。
+    //    舊版在這種情況下吃的是「近 30 天」退回值（156 件）卻講「本期」，
+    //    現在若只改標籤不改資料，就會出現「累計（全期）新增 156 件」這種假話
+    //    （全期實際是 218 件）。數字與標籤必須同源 —— 這是「要聰明智慧」的關鍵：
+    //    不是把字換漂亮，而是讓每個數字都配得上它自己的說法。
+    //    成長率在此情況下不予計算（全期沒有上期可比），改由 KPI 數字帶提供近 30 天的動能。
+    var useAll = !!(ranges && ranges.isFallback);
+    var cur = useAll ? all : briefRowsInRange(all, ranges.range);
+    var prv = useAll ? [] : (ranges.prev ? briefRowsInRange(all, ranges.prev) : []);
     var coop = function(l){ var n = 0; for(var i = 0; i < l.length; i++)
       if(classifyStatus(l[i]) === '合作成功') n++; return n; };
     var curN = cur.length, curOp = coop(cur), prvN = prv.length, prvOp = coop(prv);
-    var dN = ranges.prev ? briefDelta(curN, prvN) : null;
-    var dO = ranges.prev ? briefDelta(curOp, prvOp) : null;
+    var dN = (!useAll && ranges.prev) ? briefDelta(curN, prvN) : null;
+    var dO = (!useAll && ranges.prev) ? briefDelta(curOp, prvOp) : null;
     var out = [];
 
     // ① 量能：方向詞一律由數字推導
-    // ⚠ 範圍詞由 ranges.isFallback 推導，不可寫死「本期」——
-    //   期間為「全部數據」時 briefRanges 會自動退回近 30 天，那時講「本期」不精確，
-    //   而聽眾無從分辨（旁邊②③是全期、切期間時完全不變）。
+    //    範圍詞一律取自 ranges.scopeLabel（本週／上週／本月／上個月／本季／本年度／去年／
+    //    累計（全期）／自訂區間的日期描述），不再有寫死的「本期」。
     if(curN > 0){
-      var s1 = openingScopeWord(ranges) + '新增 ' + curN + ' 件、導入 ' + curOp + ' 件';
+      var s1 = (ranges && ranges.scopeLabel ? ranges.scopeLabel : '本期') +
+               '新增 ' + curN + ' 件、導入 ' + curOp + ' 件';
       if(dN !== null){
         // ⚠ 不要寫「新增增 158.6%」（疊字贅字）→ 用「成長／下滑／持平」
         var dirWord = function(v){ return v > 0.05 ? '成長' : (v < -0.05 ? '下滑' : '持平'); };
@@ -5472,15 +5546,17 @@ var state = {
     if(cat.total){
       var d1 = document.createElement('div'); d1.className = 'bf-dblock';
       var t1 = document.createElement('p'); t1.className = 'bf-dtitle';
-      t1.textContent = '本期新增案件的類別分佈';
+      t1.textContent = (ranges.kpiLabel || '本期') + '新增案件的類別分佈';
       d1.appendChild(t1);
       var n1 = document.createElement('p'); n1.className = 'bf-dnote';
-      n1.textContent = '本期（' + ranges.range.from + ' ~ ' + ranges.range.to + '）新增 ' + cat.total +
+      n1.textContent = (ranges.kpiLabel || '本期') + '（' + ranges.range.from + ' ~ ' + ranges.range.to +
+        '）新增 ' + cat.total +
         ' 件' + (ranges.prev ? ('，上期 ' + cat.prevTotal + ' 件') : '') +
-        '。長條為本期件數（相對最大值），右側數字為件數與佔比' + (ranges.prev ? '、「±」為佔比較上期的百分點變化' : '') +
-        '。下方一列為「導入完成件數」與本期轉換率（導入 ÷ 本期新增，括號為實際件數）以及停滯件數；' +
+        '。長條為' + (ranges.kpiLabel || '本期') + '件數（相對最大值），右側數字為件數與佔比' + (ranges.prev ? '、「±」為佔比較上期的百分點變化' : '') +
+        '。下方一列為「導入完成件數」與' + (ranges.kpiLabel || '本期') + '轉換率（導入 ÷ ' +
+        (ranges.kpiLabel || '本期') + '新增，括號為實際件數）以及停滯件數；' +
         '停滯以全資料最新進度計算。注意：報表其他地方的「累計轉換率」是全期口徑，'
-        + '與此處的本期轉換率不可互相比較。';
+        + '與此處的' + (ranges.kpiLabel || '本期') + '轉換率不可互相比較。';
       d1.appendChild(n1);
       // 一句可以直接講的說明（與課別區塊的 bf-dsum 對稱）
       if(cat.list.length && cat.list[0].count){
@@ -5885,7 +5961,8 @@ var state = {
   }
   function briefTilesText(trendRows, ranges, rows){
     var tiles = briefKpiTiles(trendRows, ranges, rows);
-    var out = ['▍本期數字'];
+    // 區塊標題也用期間名稱（舊版寫死「▍本期數字」，期間為本週時應講「▍本週數字」）
+    var out = ['▍' + (ranges && ranges.kpiLabel ? ranges.kpiLabel : '本期') + '數字'];
     for(var i = 0; i < tiles.length; i++){
       var t = tiles[i], extra = [];
       if(t.d && t.d !== '—') extra.push(t.d);
@@ -9465,7 +9542,7 @@ var state = {
     var isAll = !scope;
     var t = document.getElementById('spkCatTitle');
     if(t){
-      t.textContent = isAll ? '全部案件的類別分布' : scope + '新增案件的類別分布';
+      t.textContent = isAll ? '累計（全期）案件的類別分布' : scope + '案件的類別分布';
     }
     box.textContent = '';
     if(!data.total){
@@ -9477,7 +9554,7 @@ var state = {
     box.className = 'pc-wrap';
     var head = document.createElement('p');
     head.className = 'pc-head';
-    head.textContent = (isAll ? '全部 ' : scope + '新增 ') + data.total + ' 件，依類別分布：';
+    head.textContent = (isAll ? '累計（全期）' : scope + '新增') + ' ' + data.total + ' 件，依類別分布：';
     box.appendChild(head);
     var max = 1;
     for(var i = 0; i < data.items.length; i++) if(data.items[i].count > max) max = data.items[i].count;
@@ -9561,7 +9638,7 @@ var state = {
     var scope = chartPeriodPrefix(state.period);
     h2.textContent = scope
       ? '各業務單位案件數與類別比例（' + scope + '）'
-      : '各業務單位案件數與類別比例（全部）';
+      : '各業務單位案件數與類別比例（累計全期）';
     holder.appendChild(h2);
     var clone = wrap.cloneNode(true);
     clone.id = '';
@@ -9668,6 +9745,11 @@ var state = {
   function buildSpeakerHtml(){
     var sec = document.getElementById('briefSection');
     if(!sec) return '';
+    // ⚠ 期間內 0 筆時 renderBriefSection 已把內容清成「本期沒有案件」，
+    //    但三種模式的快照若仍取得到舊 DOM 就會把空狀態也輸出三遍。
+    //    這裡統一改成同一句空狀態，不隨模式重複 —— 與「不產生假話」同一個原則。
+    var noData = !state.model || !state.model.rows || !applyPeriod(
+      applyFilters(state.model.rows, state.filters || defaultFilters()), state.period).rows.length;
     var css = '', st = document.querySelectorAll('style');
     for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
     var prevMode = state.briefMode, prevVar = state.briefGmVariant;
@@ -9687,6 +9769,13 @@ var state = {
     var lineHtml = '<pre class="bf-gm">' + escHtml(lineText) + '</pre>';
     setBriefMode(prevMode);
     state.briefGmVariant = prevVar;
+    // 期間內 0 筆：三種模式都給同一句空狀態，不重複、不留舊數字
+    if(noData){
+      var emptyHtml = '<p class="pending">' + escHtml(
+        periodScopeLabel(state.period) + '沒有案件，無法產生重點分析。') + '</p>';
+      listHtml = emptyHtml; scriptHtml = emptyHtml; gmHtml = emptyHtml; lineHtml = emptyHtml;
+      listText = ''; scriptText = ''; gmText = ''; lineText = '';
+    }
     // 兩張圖不隨模式變化 → 放在模式區塊之外，只快照一次（放進各模式會讓檔案變成三份圖）。
     // 順序：先「本期新增 × 類別」（開場三句話①量能②類別落差的數字依據），
     //       再「各業務單位 × 類別」（看結構差異）。與開場的敘述順序一致。
@@ -10800,6 +10889,7 @@ var state = {
       isTickMark: isTickMark,
       speakerPeriodLine: speakerPeriodLine,
       chartPeriodPrefix: chartPeriodPrefix,
+      periodScopeLabel: periodScopeLabel,
       openingScopeWord: openingScopeWord,
       buildOpening3: buildOpening3,
       briefRanges: briefRanges,
