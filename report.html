@@ -276,8 +276,16 @@
   .ns-detail .ns-multiline{ white-space:pre-line; }
   .ns-empty{ padding:14px; text-align:center; color:var(--muted); font-size:13px; }
   /* ── 逾期監控（v1.8.0）── 天數用警示色、狀態用中性色：一個顏色只代表一件事 */
-  .ns-od-title{ font-size:15px; font-weight:700; color:var(--text);
-    margin:20px 0 6px; padding-top:14px; border-top:1px solid var(--border); }
+  /* 收合列：與未啟動各課別的 .ns-grow 同一套視覺（按鈕、箭頭、筆數靠右） */
+  .ns-od-head{ display:flex; align-items:center; gap:9px; width:100%;
+    padding:9px 12px; margin:20px 0 0; background:var(--card-2);
+    border:1px solid var(--border); border-radius:9px; cursor:pointer;
+    font:inherit; font-size:14px; color:var(--text); text-align:left; }
+  .ns-od-head:hover{ border-color:var(--warning); }
+  .ns-od-head-title{ font-weight:700; }
+  .ns-od-head-count{ margin-left:auto; color:var(--warning); font-weight:700;
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .ns-od-body{ padding:10px 2px 0; }
   .ns-od-grp{ margin:0 0 12px; }
   .ns-od-grp-head{ font-size:13.5px; font-weight:700; color:var(--warning);
     padding:6px 0 5px; border-bottom:1px solid var(--cell-border); }
@@ -300,8 +308,13 @@
     /* 列印時一律展開案件清單與明細（否則紙上看不到內容），並隱藏收合指示 */
     .ns-cases[hidden]{ display:block !important; }
     .ns-detail[hidden]{ display:block !important; }
+    /* ⚠ 逾期監控也一樣：預設收合，列印必須強制展開，
+       否則紙上只剩「逾期 32 筆」一行、四條規則與明細全部消失 */
+    .ns-od-body[hidden]{ display:block !important; }
     .ns-caret{ display:none !important; }
     .ns-grow{ cursor:default; }
+    .ns-od-head{ cursor:default; margin-top:16px; }
+    .ns-od-head:hover{ border-color:var(--border); }
     .ns-item{ cursor:default; }
     /* 長條圖保留底色 */
     .ns-seg{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -1477,7 +1490,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.8.0';   // 1.8.0：未啟動追蹤表擴張為「案件追蹤與逾期監控」
+  var APP_VERSION = '1.8.1';   // 1.8.1：逾期監控改為可收合，收合列顯示筆數
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3102,10 +3115,28 @@ var state = {
       box.appendChild(e0);
       return;
     }
-    var h = document.createElement('h3');
-    h.className = 'ns-od-title';
-    h.textContent = '逾期監控（依時限規則挑出，逾期天數多 → 少）';
+    var h = document.createElement('button');
+    h.type = 'button';
+    h.className = 'ns-od-head';
+    h.setAttribute('aria-expanded', 'false');
+    var caret = document.createElement('span');
+    caret.className = 'ns-caret';
+    caret.textContent = '▸';
+    h.appendChild(caret);
+    var hTitle = document.createElement('span');
+    hTitle.className = 'ns-od-head-title';
+    hTitle.textContent = '逾期監控';
+    h.appendChild(hTitle);
+    var hCount = document.createElement('span');
+    hCount.className = 'ns-od-head-count';
+    // 「收合筆數」＝使用者要求的重點：收合時一眼看到有幾筆要跟進
+    hCount.textContent = '逾期 ' + s.total + ' 筆';
+    h.appendChild(hCount);
     box.appendChild(h);
+
+    var body = document.createElement('div');
+    body.className = 'ns-od-body';
+    body.hidden = true;                               // 預設收合（與未啟動各課別一致）
 
     var note = document.createElement('p');
     note.className = 'pg-note';
@@ -3113,15 +3144,15 @@ var state = {
       .map(function(r){ return r.label; }).join('；') + '。' +
       '天數由「填單日期」算到 ' + today + '；「未結案」指結案欄空白' +
       '（婉拒／聯繫失敗／考慮中／暫緩等視為已結案，不列入）。';
-    box.appendChild(note);
+    body.appendChild(note);
 
     var cap = document.createElement('p');
     cap.className = 'list-summary';
-    cap.textContent = '逾期 ' + s.total + ' 筆・' + s.rules.filter(function(r){ return r.n; }).length +
+    cap.textContent = s.total + ' 筆逾期・' + s.rules.filter(function(r){ return r.n; }).length +
       ' 條規則命中。其中 ' + s.overlap + ' 筆同時也是「未啟動」案件；' +
       '本區塊去重後合計 ' + s.union + ' 筆（未啟動 ' + s.nsTotal + ' ＋ 逾期 ' +
       (s.union - s.nsTotal) + ' 筆不在未啟動名單內）。';
-    box.appendChild(cap);
+    body.appendChild(cap);
 
     // 依規則分組
     var table = document.createElement('div');
@@ -3163,7 +3194,15 @@ var state = {
       grp.appendChild(list);
       table.appendChild(grp);
     }
-    box.appendChild(table);
+    body.appendChild(table);
+    box.appendChild(body);
+
+    h.addEventListener('click', function(){
+      var open = body.hidden;
+      body.hidden = !open;
+      h.setAttribute('aria-expanded', String(open));
+      caret.textContent = open ? '▾' : '▸';
+    });
   }
 
   // 純函式：今天的 ISO 日期（逾期是相對於現在的現況，不可用固定值）
