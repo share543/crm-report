@@ -151,6 +151,32 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
   點擊後展開（`aria-expanded=true`、箭頭 `▾`、`display=block`）、再點收回。
   只驗「能展開」會漏掉「預設就展開」這個回退。
 
+#### v1.8.2：每筆可點擊跳到案件清單並展開該筆明細
+
+`.ns-od-row` 由 `<div>` 改為 `<button type="button">`，帶 `__row` 與 `aria-label`；
+`box` 上用事件委派（與待留意事項的 `.alert-link` 同一套）呼叫 `jumpToOverdueCase(row)`。
+
+- ⚠️ **委派監聽器必須有 `__odWired` 守門**：`renderNotStartedSection()` 每次 rebuild 都會跑，
+  不加守門會疊加多個監聽器 → 點一下跳好幾次。
+- ⚠️ **不能直接呼叫 `jumpToCase`** —— 兩者的資料口徑不同：
+  逾期監控吃 `state.model.rows`（**不隨分析期間縮放**），而 `jumpToCase` 會套用
+  `applyFilters`＋`applyPeriod`。實測（218 列）選「上個月」時 32 筆逾期裡有 **9 筆**落在期間外，
+  直接呼叫會 `return false` 而**完全沒有反應**（靜默失敗，比報錯更難查）。
+  實測可跳轉率：`all` 32/32、`上個月` 23/32、`本年度` 32/32。
+  所以 `jumpToOverdueCase()` 先在原期間試一次，失敗才 `setPeriod({preset:'all'})` 再試一次。
+  這件事**必須寫進區塊說明**（已加一句「若該筆不在目前的分析期間內，會自動切到全部數據再開啟」）——
+  否則使用者會發現分析期間被改動而不知道為什麼。
+- ⚠️ **改成 `<button>` 就要一起處理列印**：`.ns-grow`／`.ns-item` 曾因
+  `@media print{ button{display:none} }` 整批消失，本輪 `.ns-od-head` 與 `.ns-od-row` 同樣中招。
+  還原清單已改為 `.ns-grow, .ns-item, .ns-od-head, .ns-od-row, #notStartedBox .ns-od-head, #notStartedBox .ns-od-row`。
+  **只寫 class 選擇器不夠** —— 後面還有一個更大的 `@media print` 區塊含 `button{display:none!important}`，
+  實測單靠 `.ns-od-head{display:flex!important}` 沒生效，補上 `#notStartedBox` 前綴提高特異性才印出來。
+- ⚠️ **列印時要把 `margin-left:auto` 關掉**（`.ns-od-head-count{ margin-left:8px }`）：
+  右對齊會讓「逾期 32 筆」被拆成獨立文字 run，`pdftotext` 抽取時跑到別行，
+  grep 驗證會**誤判成「沒印出來」**而回去改本來正確的程式。
+- 驗證：`<button>` 標籤與 `__row` 存在、期間內的案件點擊後期間不變且明細展開、
+  期間外的案件點擊後期間變 `all` 且明細展開、監聽器只掛一次。
+
 ## 改區塊順序（2026-10）
 
 三處要一起改：`<main>` 的 section、`PRESENT_SLIDES`、本檔的「區塊順序」。
