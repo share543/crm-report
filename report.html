@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.6.3';   // 1.6.3：講者版期間用語改用選項同一套詞（本週／上週／…／累計（全期）／自訂區間）
+  var APP_VERSION = '1.6.4';   // 1.6.4：開場三句話改為嚴格期間一致（②③跟①同範圍，樣本不足就不出現）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4789,15 +4789,18 @@ var state = {
   // ⚠ 寧缺勿假：資料不足以支持結論時回空字串，不要硬擠一句。
   // 類別的「結構落差」偵測（純函式）：量大但轉換明顯偏低的那一個
   // 回傳 { name, n, rank, share, imp, rate, bestName, bestRate } 或 null
-  function briefCatGap(st){
+  function briefCatGap(st, minN){
+    // minN：可引用為「落差」的最小件數。開場三句話傳 10（5 件的分母算出的百分比是雜訊，
+    // 實測本月「南二課 5 件導入 100%」而同期全期 79.3%）；其餘呼叫端沿用預設 5。
+    var minCount = (minN === undefined) ? 5 : minN;
     if(!st || st.length < 2) return null;
     var valid = [], i;
     for(i = 0; i < st.length; i++) if(st[i].count > 0) valid.push(st[i]);
     if(valid.length < 2) return null;
-    // 轉換率最高者當基準（樣本 <5 不看，避免「導入 1 件 = 100%」的假象）
+    // 轉換率最高者當基準（樣本太小不看，避免「導入 1 件 = 100%」的假象）
     var best = null;
     for(i = 0; i < valid.length; i++){
-      if(valid[i].count < 5) continue;
+      if(valid[i].count < minCount) continue;
       if(!best || valid[i].rate > best.rate) best = valid[i];
     }
     if(!best) return null;
@@ -4807,7 +4810,7 @@ var state = {
     var worst = null;
     for(i = 0; i < valid.length; i++){
       var it = valid[i];
-      if(it.count < 5 || it.name === best.name) continue;
+      if(it.count < minCount || it.name === best.name) continue;
       // 量占比 >= 15% 且轉換率不到最佳的一半 → 才算「落差」
       if(it.share >= 15 && it.rate < best.rate * 0.5 && best.rate > 0){
         if(!worst || it.rate < worst.rate ||
@@ -5442,6 +5445,16 @@ var state = {
     var dN = (!useAll && ranges.prev) ? briefDelta(curN, prvN) : null;
     var dO = (!useAll && ranges.prev) ? briefDelta(curOp, prvOp) : null;
     var out = [];
+    // 範圍標籤：②③與①同一個範圍（嚴格一致）。
+    // ⚠ 分母只在「累計（全期）」時附加 —— 使用者指定「只有累計那句帶分母」。
+    //   理由：具名期間（上個月／本週…）的範圍已由名字說完，再加「（172 件）」是贅語；
+    //   而「累計（全期）」光憑名字看不出涵蓋多少，必須把分母攤開
+    //   （61 件是 218 裡的 61 件，不是某個期間的 61 件）。
+    // ⚠ 結尾一律加「：」：沒有分隔符時會變成「上個月1P(SCM) 50 件」，
+    //   範圍標籤與類別名黏在一起，唸出來會糊（實測就是這樣）。
+    var isCum = (ranges && ranges.scopeLabel === OPENING_CUMULATIVE_PREFIX);
+    var scopeTag = (ranges && ranges.scopeLabel ? ranges.scopeLabel : '本期') +
+                   (isCum ? (curN + ' 件') : '') + '：';
 
     // ① 量能：方向詞一律由數字推導
     //    範圍詞一律取自 ranges.scopeLabel（本週／上週／本月／上個月／本季／本年度／去年／
@@ -5457,29 +5470,30 @@ var state = {
       }
       out.push(s1);
     }
-    // ② 類別：全期最大的結構落差（轉換率最低那個，不是件數最大那個）
-    //    ⚠ 必須標明「累計（全期）」：這句吃的是 all（全期），而①吃的是期間列。
-    //      實測期間由上個月切到全部時，①由 172 件變 156 件，這句卻一字不差
-    //      （1P(SCM) 61 件只導入 5 件）—— 不標明，主持人唸出去聽眾一定以為它也是本期。
-    //      另外展開的「細部」用的是**本期**類別數字（同期 1P(SCM) 為 50 件），
-    //      兩者對不起來也是因為沒標口徑。
-    var catAll = computeBriefCategory(all, [], briefStaleRows(rows));
-    var cg = briefCatGap(catAll.list);
+    // ② 類別：落差（轉換率最低那個，不是件數最大那個）
+    //    ⚠ 口徑與①**完全一致**（都吃 cur＝選定期間的列）。舊版②③吃的是全期，
+    //      於是選「上個月」時①講上個月、②③講全期 —— 三句話相連卻兩個範圍。
+    //      現在改成嚴格一致：期間樣本不足以支撐一個可靠的轉換率時，這句**就不出現**
+    //      （寧缺勿假）。實測：上週 10 件、本月 17 件都會只剩①；上個月 172 件三句俱全。
+    //    ⚠ 門檻 minCat＝10（不是舊有的 5）：本月實測「南二課 5 件導入 100%」，
+    //      而同期全期是 79.3% —— 5 件的分母算出的百分比不是訊號是雜訊。
+    var catAll = computeBriefCategory(cur, [], briefStaleRows(rows));
+    var cg = briefCatGap(catAll.list, 10);
     if(cg){
-      out.push(OPENING_CUMULATIVE_PREFIX + cg.name + ' ' + cg.n + ' 件只導入 ' + cg.imp +
+      out.push(scopeTag + cg.name + ' ' + cg.n + ' 件只導入 ' + cg.imp +
                ' 件（轉換率 ' + cg.rate.toFixed(1) + '%）—— 量在做、轉不動');
     }
     // ③ 課別：標竿（轉換率最高）與缺口（最低）的差距
-    //    門檻：兩邊都要 >= 5 件、差距 >= 15 個百分點，否則不講
-    //    ⚠ 同②：吃的是 computeBriefKeProgress(all)＝全期，必須標明。
-    var kes = computeBriefKeProgress(all), hi = null, lo = null;
+    //    門檻：兩邊都要 >= minKe 件、差距 >= 15 個百分點，否則不講
+    //    ⚠ minKe＝10，理由同②。
+    var kes = computeBriefKeProgress(cur), hi = null, lo = null, minKe = 10;
     for(var i = 0; i < kes.length; i++){
-      if(kes[i].n < 5) continue;
+      if(kes[i].n < minKe) continue;
       if(!hi || kes[i].rate > hi.rate) hi = kes[i];
       if(!lo || kes[i].rate < lo.rate || (kes[i].rate === lo.rate && kes[i].n > lo.n)) lo = kes[i];
     }
     if(hi && lo && hi.name !== lo.name && hi.rate - lo.rate >= 15){
-      out.push(OPENING_CUMULATIVE_PREFIX + lo.name + ' ' + lo.n + ' 件導入 ' + lo.rate.toFixed(1) +
+      out.push(scopeTag + lo.name + ' ' + lo.n + ' 件導入 ' + lo.rate.toFixed(1) +
                '%、' + hi.name + ' ' + hi.n + ' 件導入 ' + hi.rate.toFixed(1) +
                '% —— 課別差距 ' + (hi.rate - lo.rate).toFixed(1) + ' 個百分點');
     }
@@ -10893,6 +10907,7 @@ var state = {
       openingScopeWord: openingScopeWord,
       buildOpening3: buildOpening3,
       briefRanges: briefRanges,
+      briefCatGap: briefCatGap,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
