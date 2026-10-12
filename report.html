@@ -290,9 +290,13 @@
   .ns-od-grp-head{ font-size:13.5px; font-weight:700; color:var(--warning);
     padding:6px 0 5px; border-bottom:1px solid var(--cell-border); }
   .ns-od-list{ display:flex; flex-direction:column; }
-  .ns-od-row{ display:flex; align-items:baseline; gap:10px; padding:5px 0;
-    font-size:13.5px; line-height:1.55; border-bottom:1px dashed var(--cell-border); }
+  .ns-od-row{ display:flex; align-items:baseline; gap:10px; width:100%;
+    padding:5px 0; font:inherit; font-size:13.5px; line-height:1.55;
+    background:none; border:0; border-bottom:1px dashed var(--cell-border);
+    cursor:pointer; text-align:left; color:var(--text); }
   .ns-od-row:last-child{ border-bottom:0; }
+  .ns-od-row:hover{ background:var(--card-2); }
+  .ns-od-row:hover .ns-od-co{ color:var(--accent); }
   .ns-od-co{ flex:1 1 auto; min-width:0; color:var(--text); font-weight:600;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ns-od-meta{ flex:0 0 auto; color:var(--muted); font-size:12.5px; }
@@ -304,7 +308,8 @@
   @media print{
     /* ⚠ .ns-grow / .ns-item 是 button，列印樣式有 button{display:none} 會把它們藏掉
        （實測：PDF 只剩表頭與明細，課別/類別/數量/比例與案件名稱全消失）→ 必須還原 */
-    .ns-grow, .ns-item{ display:flex !important; }
+    .ns-grow, .ns-item, .ns-od-head, .ns-od-row,
+    #notStartedBox .ns-od-head, #notStartedBox .ns-od-row{ display:flex !important; }
     /* 列印時一律展開案件清單與明細（否則紙上看不到內容），並隱藏收合指示 */
     .ns-cases[hidden]{ display:block !important; }
     .ns-detail[hidden]{ display:block !important; }
@@ -315,6 +320,11 @@
     .ns-grow{ cursor:default; }
     .ns-od-head{ cursor:default; margin-top:16px; }
     .ns-od-head:hover{ border-color:var(--border); }
+    /* ⚠ 列印時把 margin-left:auto 關掉：推齊會讓「逾期 32 筆」被拆成獨立文字run，
+       pdftotext 抽取時跑到別行，grep 驗證會誤判成「沒印出來」。
+       列印是橫向流向，不需要視覺上的右對齊。 */
+    .ns-od-head-count{ margin-left:8px; }
+    .ns-od-head{ gap:6px; }
     .ns-item{ cursor:default; }
     /* 長條圖保留底色 */
     .ns-seg{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -1490,7 +1500,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.8.1';   // 1.8.1：逾期監控改為可收合，收合列顯示筆數
+  var APP_VERSION = '1.8.2';   // 1.8.2：逾期監控每筆可點擊跳到案件清單並展開該筆明細
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3143,12 +3153,14 @@ var state = {
     note.textContent = '門檻：' + s.rules.filter(function(r){ return r.n; })
       .map(function(r){ return r.label; }).join('；') + '。' +
       '天數由「填單日期」算到 ' + today + '；「未結案」指結案欄空白' +
-      '（婉拒／聯繫失敗／考慮中／暫緩等視為已結案，不列入）。';
+      '（婉拒／聯繫失敗／考慮中／暫緩等視為已結案，不列入）。' +
+      '點任一案件可跳到案件清單並展開該筆明細；若該筆不在目前的分析期間內，' +
+      '會自動切到「全部數據」再開啟（本區塊不隨分析期間縮放）。';
     body.appendChild(note);
 
     var cap = document.createElement('p');
     cap.className = 'list-summary';
-    cap.textContent = s.total + ' 筆逾期・' + s.rules.filter(function(r){ return r.n; }).length +
+    cap.textContent = '逾期 ' + s.total + ' 筆・' + s.rules.filter(function(r){ return r.n; }).length +
       ' 條規則命中。其中 ' + s.overlap + ' 筆同時也是「未啟動」案件；' +
       '本區塊去重後合計 ' + s.union + ' 筆（未啟動 ' + s.nsTotal + ' ＋ 逾期 ' +
       (s.union - s.nsTotal) + ' 筆不在未啟動名單內）。';
@@ -3171,8 +3183,11 @@ var state = {
       for(var k = 0; k < s.items.length; k++){
         var it = s.items[k];
         if(it.code !== ru.code) continue;
-        var row = document.createElement('div');
+        var row = document.createElement('button');
+        row.type = 'button';
         row.className = 'ns-od-row' + (it.isNotStarted ? ' is-ns' : '');
+        row.__row = it.row;
+        row.setAttribute('aria-label', '開啟 ' + it.co + ' 的案件明細');
         var main = document.createElement('span');
         main.className = 'ns-od-co';
         main.textContent = it.co;
@@ -3197,12 +3212,45 @@ var state = {
     body.appendChild(table);
     box.appendChild(body);
 
+    // 事件委派：點任一逾期案件 → 跳到案件清單並展開該筆明細（與待留意事項的 .alert-link 同一套）
+    // ⚠ 必須有 __wired 守門：renderNotStartedSection() 每次 rebuild 都會跑，
+    //   不加守門會疊加多個監聽器 → 點一下跳好幾次。
+    if(!box.__odWired){
+      box.__odWired = true;
+      box.addEventListener('click', function(ev){
+        var el = ev.target;
+        if(!el || !el.closest) return;
+        var r = el.closest('.ns-od-row');
+        if(r && r.__row){
+          ev.preventDefault();
+          jumpToOverdueCase(r.__row);
+        }
+      });
+    }
+
     h.addEventListener('click', function(){
       var open = body.hidden;
       body.hidden = !open;
       h.setAttribute('aria-expanded', String(open));
       caret.textContent = open ? '▾' : '▸';
     });
+  }
+
+  // 從逾期監控跳到案件清單的該筆明細。
+  //
+  // ⚠ 為什麼需要這一層而不是直接呼叫 jumpToCase：逾期監控吃 state.model.rows
+  //   （**不隨分析期間縮放**，這是使用者指定的既有行為），而 jumpToCase 會套用
+  //   applyFilters + applyPeriod → 選「上個月」時，逾期清單裡有 9/32 筆落在期間外，
+  //   直接呼叫會 return false 而**完全沒有反應**（靜默失敗，比報錯更難查）。
+  // 實測（218 列）：all 32/32 可跳、上個月只有 23/32、本年度 32/32。
+  // 所以期間外的案件先切到「全部數據」再跳一次，並在區塊說明裡講明這件事。
+  function jumpToOverdueCase(row){
+    if(jumpToCase(row)) return true;
+    if(state.period && state.period.preset !== 'all'){
+      setPeriod({ preset:'all', from:'', to:'' });
+      return jumpToCase(row);
+    }
+    return false;
   }
 
   // 純函式：今天的 ISO 日期（逾期是相對於現在的現況，不可用固定值）
@@ -11354,6 +11402,7 @@ var state = {
       alertCountsBy: alertCountsBy,
       alertStampsOf: function(){ return alertStamps; },
       jumpToCase: jumpToCase,
+      jumpToOverdueCase: jumpToOverdueCase,
       jumpToListSection: jumpToListSection,
       backToJumpFrom: backToJumpFrom,
       updateBackControls: updateBackControls,
