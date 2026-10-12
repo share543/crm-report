@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.6.4';   // 1.6.4：開場三句話改為嚴格期間一致（②③跟①同範圍，樣本不足就不出現）
+  var APP_VERSION = '1.7.0';   // 1.7.0：講者版改為六段會議流程（開場數字／表揚／注意／各課排名／各課簡表／結尾）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1935,6 +1935,210 @@ var state = {
     var range = (typeof periodRange === 'function') ? periodRange(period, now) : null;
     if(!range) return '';
     return periodScopeLabel(period, now);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 講者版：六段會議流程（2026-10-12 新增）
+  // ---------------------------------------------------------------------------
+  // 使用者描述的會議節奏：
+  //   1 開場亮點摘要：本月新增幾件、導入完成幾件、各類別幾個、進行中幾件、未啟動幾件
+  //   2 依導入數量與類別表揚，by 課與個人
+  //   3 各種注意事項提醒
+  //   4 依案件狀態統計說明各課開發排名，並依客戶類別件數補充
+  //   5 依各課追蹤簡表說明各課別×類別的 新增／開發累計／已導入
+  //   6 請各課業務代表分享進行中案件的進度與狀況
+  // 用詞要求「自然」→ 一律口語講稿式，不用報表用語。
+  //
+  // ⚠ 三處口徑分工（不可混，這是全部設計的地基）：
+  //   新增／導入完成／各類別件數 → **選定期間**（事件）
+  //   進行中／未啟動             → **目前全部**（現況，標明「目前」）
+  //   各課追蹤簡表的開發累計／已導入累計 → **全量累計**（不隨期間縮放，與主報表同規格）
+
+  // 純函式：第 1 段「這個月的數字」。回傳 { scope, newN, impN, cats, doing, unstarted, text }
+  // cats: [{name,count}] 依件數多→少，只列有件數的（0 的不列，避免「零擔 0 件」這種空句）
+  function buildOpeningDigest(periodRows, allRows, ranges){
+    var cur = periodRows || [], all = allRows || [];
+    var cats = computePeriodCategory(cur).items.filter(function(c){ return c.count > 0; });
+    var impN = 0;
+    for(var i = 0; i < cur.length; i++) if(classifyStatus(cur[i]) === '合作成功') impN++;
+    var doing = 0, unstarted = 0;
+    for(var j = 0; j < all.length; j++){
+      var s = classifyStatus(all[j]);
+      if(s === '進行中') doing++;
+      else if(s === '未啟動') unstarted++;
+    }
+    var scope = (ranges && ranges.scopeLabel) || '本期';
+    var catTxt = cats.map(function(c){ return c.cat + ' ' + c.count + ' 件'; }).join('、');
+    var text = scope + '新進來 ' + cur.length + ' 件，導入完成 ' + impN + ' 件。' +
+      (catTxt ? ('各類別來看，' + catTxt + '。') : '') +
+      '目前進行中 ' + doing + ' 件，還沒開始接觸的還有 ' + unstarted + ' 件。';
+    return { scope: scope, newN: cur.length, impN: impN, cats: cats,
+             doing: doing, unstarted: unstarted, text: text };
+  }
+
+  // 純函式：第 2 段「表揚」。依導入完成件數，分類別、分課別與個人。
+  // ⚠ 三條規則（都是為了不出假排名）：
+  //   1. **只列 >= minN 件**（預設 2）。1 件不算「最佳」—— 實測 3P(MO+) 的站所
+  //      是「TS1 1、CS4 1、Nt17 1…」全部 1 筆，取 Top 3 會產生假的並列第一。
+  //   2. **不列站所**：分類別後站所幾乎都是 1 筆（實測 1P 5 個皆 1 筆、3P 6 個皆 1 筆）。
+  //   3. 每組最多 topK 名（預設 3），不足就列實際有幾個。
+  // 回傳 { total, byCat: [{cat, kes:[{name,n}], devs:[{name,n}]}], text }
+  function computePraise(rows, opts){
+    opts = opts || {};
+    var minN = (opts.minN === undefined) ? 2 : opts.minN;
+    var topK = (opts.topK === undefined) ? 3 : opts.topK;
+    var cats = opts.cats || ['零擔', '1P(SCM)', '3P(MO+)'];
+    var list = rows || [];
+    // 先把「導入完成」的列依 類別 分堆
+    var byCat = {};
+    var total = 0;
+    for(var i = 0; i < list.length; i++){
+      if(classifyStatus(list[i]) !== '合作成功') continue;
+      total++;
+      var c = String(list[i]['類別'] || '').trim() || '(未填)';
+      byCat[c] = byCat[c] || [];
+      byCat[c].push(list[i]);
+    }
+    function tally(arr, field){
+      var m = {};
+      for(var k = 0; k < arr.length; k++){
+        var v = String(arr[k][field] || '').trim() || '(未填)';
+        m[v] = (m[v] || 0) + 1;
+      }
+      return Object.keys(m).map(function(name){
+        return { name: name, n: m[name] };
+      }).filter(function(e){ return e.n >= minN; })
+        .sort(function(a, b){ return (b.n - a.n) || (a.name < b.name ? -1 : 1); })
+        .slice(0, topK);
+    }
+    var out = [];
+    cats.forEach(function(c){
+      var arr = byCat[c];
+      if(!arr || !arr.length) return;
+      out.push({ cat: c, n: arr.length, kes: tally(arr, '課別'), devs: tally(arr, '開發者') });
+    });
+    // 未在固定清單裡的類別也保留（例如甲配、未填），否則導入完成會被漏算
+    Object.keys(byCat).forEach(function(c){
+      if(cats.indexOf(c) !== -1) return;
+      var arr = byCat[c];
+      out.push({ cat: c, n: arr.length, kes: tally(arr, '課別'), devs: tally(arr, '開發者') });
+    });
+    // 總表揚（不分類別）
+    var allImp = [];
+    for(var i2 = 0; i2 < list.length; i2++) if(classifyStatus(list[i2]) === '合作成功') allImp.push(list[i2]);
+    var overall = { kes: tally(allImp, '課別'), devs: tally(allImp, '開發者') };
+    var parts = [];
+    if(overall.kes.length) parts.push('課別是 ' + overall.kes.map(function(e){ return e.name + ' ' + e.n + ' 件'; }).join('、'));
+    if(overall.devs.length) parts.push('個人是 ' + overall.devs.map(function(e){ return e.name + ' ' + e.n + ' 件'; }).join('、'));
+    var text = total ? ('這段時間一共導入完成 ' + total + ' 件。' +
+      (parts.length ? ('整體來看，' + parts.join('；') + '。') : '')) : '';
+    // ⚠ 每個類別獨立一行（講者版用 white-space:pre-wrap，\n 會真的換行）。
+    //   舊版全部接在同一行，六個類別連成一片，主持人照著唸會找不到位置。
+    var catLines = [];
+    out.forEach(function(g){
+      var seg = [];
+      if(g.kes.length) seg.push('課別是 ' + g.kes.map(function(e){ return e.name + ' ' + e.n + ' 件'; }).join('、'));
+      if(g.devs.length) seg.push('個人是 ' + g.devs.map(function(e){ return e.name + ' ' + e.n + ' 件'; }).join('、'));
+      if(seg.length) catLines.push(g.cat + '導入完成 ' + g.n + ' 件，' + seg.join('；') + '。');
+    });
+    if(catLines.length) text += '\n' + catLines.join('\n');
+    return { total: total, overall: overall, byCat: out, text: text };
+  }
+
+  // 純函式：第 4 段「各課開發排名」。依案件總數多→少，附各類別件數。
+  // ⚠ 吃的是**目前全部**（不是選定期間）—— 「各課手上現在有多少案件」是現況，
+  //   不是期間事件；與主報表「案件狀態統計」同一口徑。
+  function buildKeRanking(allRows){
+    var list = allRows || [];
+    var m = {};
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      var ke = String(r['課別'] || '').trim() || '(未填)';
+      var cat = String(r['類別'] || '').trim() || '(未填)';
+      m[ke] = m[ke] || { name: ke, n: 0, cats: {} };
+      m[ke].n++;
+      m[ke].cats[cat] = (m[ke].cats[cat] || 0) + 1;
+    }
+    var order = ['零擔','甲配','1P(SCM)','3P(MO+)'];
+    var out = Object.keys(m).map(function(k){
+      var o = m[k];
+      var cats = Object.keys(o.cats).map(function(c){
+        return { name: c, n: o.cats[c] };
+      }).sort(function(a, b){
+        var ia = order.indexOf(a.name), ib = order.indexOf(b.name);
+        if(ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        return b.n - a.n;
+      });
+      return { name: o.name, n: o.n, cats: cats };
+    }).sort(function(a, b){ return (b.n - a.n) || (a.name < b.name ? -1 : 1); });
+    // ⚠ 每名一行（pre-wrap 換行）。舊版全部接在同一行，六個課別連成一片。
+    var text = out.map(function(o, i){
+      var catTxt = o.cats.map(function(c){ return c.name + ' ' + c.n; }).join('、');
+      return '第 ' + (i + 1) + ' 名　' + o.name + '，手上 ' + o.n + ' 件' +
+             (catTxt ? ('（' + catTxt + '）') : '');
+    }).join('。\n');
+    return { rows: out, text: text ? (text + '。') : '' };
+  }
+
+  // 純函式：第 5 段「各課追蹤簡表」。課別 × 類別 的 新增／開發累計／已導入。
+  // ⚠ 與主報表各課追蹤簡表**同一口徑**：新增＝選定期間內填單；開發累計／已導入累計＝全量，
+  //   不隨期間縮放。兩處數字必須一致，否則會議上會被打對台。
+  function buildKeQuickSummary(periodRows, allRows){
+    var cur = periodRows || [], all = allRows || [];
+    var order = ['零擔','甲配','1P(SCM)','3P(MO+)'];
+    function blank(){ return { newN: 0, dev: 0, imp: 0 }; }
+    var m = {};
+    function ensure(ke){ return (m[ke] = m[ke] || {}); }
+    for(var i = 0; i < all.length; i++){
+      var r = all[i];
+      var ke = String(r['課別'] || '').trim() || '(未填)';
+      var cat = String(r['類別'] || '').trim() || '(未填)';
+      var cell = ensure(ke)[cat] = ensure(ke)[cat] || blank();
+      cell.dev++;
+      if(classifyStatus(r) === '合作成功') cell.imp++;
+    }
+    for(var j = 0; j < cur.length; j++){
+      var r2 = cur[j];
+      var ke2 = String(r2['課別'] || '').trim() || '(未填)';
+      var cat2 = String(r2['類別'] || '').trim() || '(未填)';
+      (ensure(ke2)[cat2] = ensure(ke2)[cat2] || blank()).newN++;
+    }
+    var rows = Object.keys(m).map(function(ke){
+      var cats = Object.keys(m[ke]).map(function(c){
+        return { name: c, newN: m[ke][c].newN, dev: m[ke][c].dev, imp: m[ke][c].imp };
+      }).sort(function(a, b){
+        var ia = order.indexOf(a.name), ib = order.indexOf(b.name);
+        if(ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        return b.dev - a.dev;
+      });
+      var t = cats.reduce(function(s, c){
+        return { newN: s.newN + c.newN, dev: s.dev + c.dev, imp: s.imp + c.imp };
+      }, { newN: 0, dev: 0, imp: 0 });
+      return { name: ke, cats: cats, total: t };
+    }).sort(function(a, b){ return (b.total.dev - a.total.dev) || (a.name < b.name ? -1 : 1); });
+    // ⚠ 每課一行（pre-wrap 換行）。舊版六個課別接在同一行，主持人照著唸會找不到位置。
+    var text = rows.map(function(o){
+      var seg = o.cats.map(function(c){
+        return '　' + c.name + '：新增 ' + c.newN + '／開發累計 ' + c.dev + '／已導入 ' + c.imp;
+      }).join('\n');
+      return o.name + '（新增 ' + o.total.newN + '／開發累計 ' + o.total.dev +
+             '／已導入 ' + o.total.imp + '）\n' + seg;
+    }).join('\n');
+    // 行式格式：不加結尾句號（最後一行結尾掛一個「。」看起來像沒寫完）
+    return { rows: rows, text: text };
+  }
+
+  // 純函式：第 6 段結尾提示（固定文字，不隨資料變）
+  function buildClosingLine(){
+    return '接下來請各課業務代表，輪流說明手上進行中案件的進度與狀況，' +
+           '卡住的地方我們現場一起看。';
+  }
+
+  // 講者版流程段落的 HTML（純字串，不碰 DOM）。標題與內文分兩行，
+  // 內文用講稿式換行保留（white-space:pre-wrap），讓主持人照著唸。
+  function flowBlockHtml(title, body){
+    return '<section class="spk-flow"><h2>' + String(title || '') + '</h2>' +
+           '<p class="spk-flow-body">' + String(body || '') + '</p></section>';
   }
 
   // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
@@ -9727,6 +9931,15 @@ var state = {
     '#spkPeriod{ margin:0 0 16px; padding:9px 13px; background:var(--card-2);',
     '  border:1px solid var(--border); border-radius:9px; font-size:13px;',
     '  line-height:1.6; color:var(--text); font-weight:600; }',
+    // ── 六段會議流程 ──
+    // 段落標題用與模式區塊相同的 h2 尺寸（講者版是給主持人掃讀的，不是給大家投影的）；
+    // 內文 16.5px 與講稿同級 —— 這些是要照著唸的句子，寧可大一點。
+    '.spk-flow{ margin:0 0 18px; }',
+    '.spk-flow h2{ font-size:16px; margin:0 0 7px; color:var(--text); }',
+    '.spk-flow-body{ font-size:16.5px; line-height:1.95; margin:0; color:var(--text);',
+    '  white-space:pre-wrap; word-break:break-word; }',
+    '#spkFlow{ margin:0 0 20px; }',
+    '#spkFlow2{ margin:22px 0 0; padding-top:18px; border-top:1px solid var(--border); }',
     '@media print{ #spkPeriod{ -webkit-print-color-adjust:exact; print-color-adjust:exact; } }',
     // ── 兩張圖（講者版新增）──
     /* 本期新增案件的類別分布：CSS 橫條，窄螢幕自然收縮，不需要滑動 */
@@ -9795,6 +10008,25 @@ var state = {
     //       再「各業務單位 × 類別」（看結構差異）。與開場的敘述順序一致。
     var periodCatHtml = snapshotSpkCatSection();
     var keCatHtml = snapshotKeCategoryChart();
+    // 六段會議流程。分兩個容器是為了保住使用者描述的順序：
+    //   第 1、2 段 → #spkFlow（模式區塊之前）
+    //   第 3 段（要注意／要決定／值得肯定）→ 既有模式區塊
+    //   第 4、5、6 段 → #spkFlow2（模式區塊之後）
+    // 兩者都在模式區塊**之外**：不隨條列／講稿／GM 切換而消失，也只產生一次（不放進各模式
+    // 會讓檔案變成三份一樣的內容）。
+    var flowRows = state.model ? state.model.rows : [];
+    var filteredRows = applyFilters(flowRows, state.filters || defaultFilters());
+    var periodRows = applyPeriod(filteredRows, state.period).rows;
+    var rangesF = briefRanges(state.period, new Date());
+    var digest = buildOpeningDigest(periodRows, filteredRows, rangesF);
+    var praise = computePraise(periodRows, { minN: 2, topK: 3 });
+    var keRank = buildKeRanking(filteredRows);
+    var keQuick = buildKeQuickSummary(periodRows, filteredRows);
+    var flow1 = flowBlockHtml('一、這個' + digest.scope + '的數字', digest.text);
+    var flow2 = flowBlockHtml('二、導入完成表揚', praise.text || '這段時間還沒有導入完成的案件。');
+    var flow4 = flowBlockHtml('四、各課開發排名（目前手上案件數）', keRank.text);
+    var flow5 = flowBlockHtml('五、各課追蹤：新增／開發累計／已導入', keQuick.text);
+    var flow6 = flowBlockHtml('六、接下來的會議進行', buildClosingLine());
     // 分析期間宣告列。放在 #spkBar 正下方、所有模式區塊之上 ——
     // 它是「這份快照的數字是哪一段期間的」唯一宣告，必須不隨模式切換而消失，
     // 否則講者切到 GM 模式就看不到期間，而檔內「本期」出現上百次。
@@ -9820,12 +10052,15 @@ var state = {
       + '</span><span class="spk-gap"></span>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
       + '<div id="spkPeriod" class="spk-period">' + escHtml(pl.text) + '</div>\n'
+      + '<div id="spkFlow">' + flow1 + flow2 + '</div>\n'
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
       + '<div id="spkGmLine" class="spk-sec spk-hide">' + lineHtml + '</div>\n'
       // 兩張圖：不隨模式切換（放在模式區塊之外），三種模式都看得到
       + '<div id="spkCharts" class="spk-sec">' + periodCatHtml + keCatHtml + '</div>\n'
+      // 第 4／5／6 段：模式區塊之後（第 3 段「要注意」在模式區塊內，順序因此正確）
+      + '<div id="spkFlow2">' + flow4 + flow5 + flow6 + '</div>\n'
       // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
@@ -10908,6 +11143,12 @@ var state = {
       buildOpening3: buildOpening3,
       briefRanges: briefRanges,
       briefCatGap: briefCatGap,
+      buildOpeningDigest: buildOpeningDigest,
+      computePraise: computePraise,
+      buildKeRanking: buildKeRanking,
+      buildKeQuickSummary: buildKeQuickSummary,
+      buildClosingLine: buildClosingLine,
+      flowBlockHtml: flowBlockHtml,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
