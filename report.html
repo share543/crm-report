@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.6.1';   // 1.6.1：講者版補「分析期間」宣告列；兩張圖標題都帶期間；去掉重複標題
+  var APP_VERSION = '1.6.2';   // 1.6.2：開場三句話標明口徑（②③加「累計（全期）」；①在期間=全部時講近 30 天）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4495,7 +4495,7 @@ var state = {
   function briefRanges(period, now){
     var r = periodRange(period, now);
     if(r){
-      return { range: r, prev: briefPreviousRange(r),
+      return { range: r, prev: briefPreviousRange(r), isFallback: false,
                label: describePeriod(period, now) + '，與前一段等長期間比較' };
     }
     now = now || new Date();
@@ -4504,8 +4504,27 @@ var state = {
     var pT = new Date(tms - 30 * 86400000);
     return { range: { from: isoDate(new Date(tms - 29 * 86400000)), to: isoDate(t) },
              prev:  { from: isoDate(new Date(pT.getTime() - 29 * 86400000)), to: isoDate(pT) },
+             // ⚠ isFallback 必須為 true —— 開場①的量能句靠它決定講「本期」還是「近 30 天」。
+             //   期間為「全部數據」時沒有上期可比，briefRanges 自動退回近 30 天；
+             //   那時講「本期新增 156 件」是**不精確的**（實際是近 30 天），
+             //   而聽眾無從分辨，因為旁邊②③的數字又是全期、完全不變。
+             isFallback: true,
              label: '近 30 天 vs 前 30 天（分析期間為「全部數據」，故自動以最近 30 天為比較基準）' };
   }
+
+  // 純函式：開場①量能句的範圍詞。有實際期間 → 「本期」；期間為「全部數據」的退回情境 → 「近 30 天」。
+  // 不傳 period 而讀 ranges.isFallback 是故意的：判準只有一處（briefRanges），
+  // 兩邊各寫一次就會漂移（v1.5.0／v1.6.1 已在「是否全部」上漂移過兩次）。
+  function openingScopeWord(ranges){
+    return (ranges && ranges.isFallback) ? '近 30 天' : '本期';
+  }
+
+  // 純函式：開場②③的口徑前綴。這兩句吃的是**全期**列（computeBriefCategory(all)／
+  // computeBriefKeProgress(all)），而①吃的是期間列 —— 三句話相連卻口徑不同，
+  // 實測期間從「上個月」切到「全部」時①從 172 變 156，②③卻一字不差完全不變
+  // （因為本來就是全期）。不標明，主持人唸出去聽眾一定以為②③也是本期。
+  // 用語與 briefBase 的「轉換率一律為累計（全期）口徑」一致（同一律：同一個詞只有一個意思）。
+  var OPENING_CUMULATIVE_PREFIX = '累計（全期）';
 
   // ---- 分組小工具 ----
   function briefFirstReal(list){
@@ -5351,8 +5370,11 @@ var state = {
     var out = [];
 
     // ① 量能：方向詞一律由數字推導
+    // ⚠ 範圍詞由 ranges.isFallback 推導，不可寫死「本期」——
+    //   期間為「全部數據」時 briefRanges 會自動退回近 30 天，那時講「本期」不精確，
+    //   而聽眾無從分辨（旁邊②③是全期、切期間時完全不變）。
     if(curN > 0){
-      var s1 = '本期新增 ' + curN + ' 件、導入 ' + curOp + ' 件';
+      var s1 = openingScopeWord(ranges) + '新增 ' + curN + ' 件、導入 ' + curOp + ' 件';
       if(dN !== null){
         // ⚠ 不要寫「新增增 158.6%」（疊字贅字）→ 用「成長／下滑／持平」
         var dirWord = function(v){ return v > 0.05 ? '成長' : (v < -0.05 ? '下滑' : '持平'); };
@@ -5362,14 +5384,20 @@ var state = {
       out.push(s1);
     }
     // ② 類別：全期最大的結構落差（轉換率最低那個，不是件數最大那個）
+    //    ⚠ 必須標明「累計（全期）」：這句吃的是 all（全期），而①吃的是期間列。
+    //      實測期間由上個月切到全部時，①由 172 件變 156 件，這句卻一字不差
+    //      （1P(SCM) 61 件只導入 5 件）—— 不標明，主持人唸出去聽眾一定以為它也是本期。
+    //      另外展開的「細部」用的是**本期**類別數字（同期 1P(SCM) 為 50 件），
+    //      兩者對不起來也是因為沒標口徑。
     var catAll = computeBriefCategory(all, [], briefStaleRows(rows));
     var cg = briefCatGap(catAll.list);
     if(cg){
-      out.push(cg.name + ' ' + cg.n + ' 件只導入 ' + cg.imp + ' 件（' + cg.rate.toFixed(1) +
-               '%）—— 量在做、轉不動');
+      out.push(OPENING_CUMULATIVE_PREFIX + cg.name + ' ' + cg.n + ' 件只導入 ' + cg.imp +
+               ' 件（轉換率 ' + cg.rate.toFixed(1) + '%）—— 量在做、轉不動');
     }
     // ③ 課別：標竿（轉換率最高）與缺口（最低）的差距
     //    門檻：兩邊都要 >= 5 件、差距 >= 15 個百分點，否則不講
+    //    ⚠ 同②：吃的是 computeBriefKeProgress(all)＝全期，必須標明。
     var kes = computeBriefKeProgress(all), hi = null, lo = null;
     for(var i = 0; i < kes.length; i++){
       if(kes[i].n < 5) continue;
@@ -5377,8 +5405,8 @@ var state = {
       if(!lo || kes[i].rate < lo.rate || (kes[i].rate === lo.rate && kes[i].n > lo.n)) lo = kes[i];
     }
     if(hi && lo && hi.name !== lo.name && hi.rate - lo.rate >= 15){
-      out.push(lo.name + ' ' + lo.n + ' 件導入 ' + lo.rate.toFixed(1) + '%、' +
-               hi.name + ' ' + hi.n + ' 件導入 ' + hi.rate.toFixed(1) +
+      out.push(OPENING_CUMULATIVE_PREFIX + lo.name + ' ' + lo.n + ' 件導入 ' + lo.rate.toFixed(1) +
+               '%、' + hi.name + ' ' + hi.n + ' 件導入 ' + hi.rate.toFixed(1) +
                '% —— 課別差距 ' + (hi.rate - lo.rate).toFixed(1) + ' 個百分點');
     }
     return out.slice(0, 3);
@@ -10772,6 +10800,9 @@ var state = {
       isTickMark: isTickMark,
       speakerPeriodLine: speakerPeriodLine,
       chartPeriodPrefix: chartPeriodPrefix,
+      openingScopeWord: openingScopeWord,
+      buildOpening3: buildOpening3,
+      briefRanges: briefRanges,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
