@@ -1454,7 +1454,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.7.0';   // 1.7.0：講者版改為六段會議流程（開場數字／表揚／注意／各課排名／各課簡表／結尾）
+  var APP_VERSION = '1.7.1';   // 1.7.0：講者版改為六段會議流程（開場數字／表揚／注意／各課排名／各課簡表／結尾）
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1956,22 +1956,29 @@ var state = {
 
   // 純函式：第 1 段「這個月的數字」。回傳 { scope, newN, impN, cats, doing, unstarted, text }
   // cats: [{name,count}] 依件數多→少，只列有件數的（0 的不列，避免「零擔 0 件」這種空句）
+  //
+  // ⚠ 五個數字全部吃**選定期間**（periodRows），沒有例外。
+  //   使用者指示：「全期／上週／上個月等用語與數字，都要對得上選擇的分析期間」。
+  //   舊版進行中／未啟動吃全期（45／20），而主報表開場亮點摘要吃期間（39／19）、
+  //   未啟動追蹤表又不隨期間縮放（20）—— 同一個詞三處三個數字。
+  //   現已三處統一為期間口徑（未啟動追蹤表也改成 periodFilteredRows()）。
   function buildOpeningDigest(periodRows, allRows, ranges){
     var cur = periodRows || [], all = allRows || [];
     var cats = computePeriodCategory(cur).items.filter(function(c){ return c.count > 0; });
-    var impN = 0;
-    for(var i = 0; i < cur.length; i++) if(classifyStatus(cur[i]) === '合作成功') impN++;
-    var doing = 0, unstarted = 0;
-    for(var j = 0; j < all.length; j++){
-      var s = classifyStatus(all[j]);
-      if(s === '進行中') doing++;
+    var impN = 0, doing = 0, unstarted = 0;
+    for(var i = 0; i < cur.length; i++){
+      var s = classifyStatus(cur[i]);
+      if(s === '合作成功') impN++;
+      else if(s === '進行中') doing++;
       else if(s === '未啟動') unstarted++;
     }
     var scope = (ranges && ranges.scopeLabel) || '本期';
     var catTxt = cats.map(function(c){ return c.cat + ' ' + c.count + ' 件'; }).join('、');
+    // 用語一律掛期間名，不寫「目前」—— 「目前進行中 45 件」會被聽成全期現況，
+    // 而數字其實是期間內的，正是使用者要避免的對不上。
     var text = scope + '新進來 ' + cur.length + ' 件，導入完成 ' + impN + ' 件。' +
       (catTxt ? ('各類別來看，' + catTxt + '。') : '') +
-      '目前進行中 ' + doing + ' 件，還沒開始接觸的還有 ' + unstarted + ' 件。';
+      '這些案件目前進行中的有 ' + doing + ' 件，還沒開始接觸的還有 ' + unstarted + ' 件。';
     return { scope: scope, newN: cur.length, impN: impN, cats: cats,
              doing: doing, unstarted: unstarted, text: text };
   }
@@ -2119,10 +2126,10 @@ var state = {
     // ⚠ 每課一行（pre-wrap 換行）。舊版六個課別接在同一行，主持人照著唸會找不到位置。
     var text = rows.map(function(o){
       var seg = o.cats.map(function(c){
-        return '　' + c.name + '：新增 ' + c.newN + '／開發累計 ' + c.dev + '／已導入 ' + c.imp;
+        return '　' + c.name + '：新增 ' + c.newN + '／累計開發 ' + c.dev + '／累計已導入 ' + c.imp;
       }).join('\n');
-      return o.name + '（新增 ' + o.total.newN + '／開發累計 ' + o.total.dev +
-             '／已導入 ' + o.total.imp + '）\n' + seg;
+      return o.name + '（新增 ' + o.total.newN + '／累計開發 ' + o.total.dev +
+             '／累計已導入 ' + o.total.imp + '）\n' + seg;
     }).join('\n');
     // 行式格式：不加結尾句號（最後一行結尾掛一個「。」看起來像沒寫完）
     return { rows: rows, text: text };
@@ -2858,6 +2865,9 @@ var state = {
     if(!sec || !box || !state.model || !state.model.rows) return;
     box.textContent = '';
     box.className = '';
+    // ⚠ 主報表本表刻意**不隨分析期間縮放**（2026-10-12 使用者指示「主報表不要動」，維持原樣）。
+    //   因此這裡與「開場亮點摘要」的未啟動數字會有差異：該段吃期間、本表吃全量。
+    //   講者版第 1 段已改為跟著選定期間（與開場亮點摘要同口徑）。
     var data = notStartedGroups(state.model.rows);
 
     var note = document.createElement('p');
@@ -10025,7 +10035,7 @@ var state = {
     var flow1 = flowBlockHtml('一、這個' + digest.scope + '的數字', digest.text);
     var flow2 = flowBlockHtml('二、導入完成表揚', praise.text || '這段時間還沒有導入完成的案件。');
     var flow4 = flowBlockHtml('四、各課開發排名（目前手上案件數）', keRank.text);
-    var flow5 = flowBlockHtml('五、各課追蹤：新增／開發累計／已導入', keQuick.text);
+    var flow5 = flowBlockHtml('五、各課追蹤：新增／累計開發／累計已導入', keQuick.text);
     var flow6 = flowBlockHtml('六、接下來的會議進行', buildClosingLine());
     // 分析期間宣告列。放在 #spkBar 正下方、所有模式區塊之上 ——
     // 它是「這份快照的數字是哪一段期間的」唯一宣告，必須不隨模式切換而消失，
