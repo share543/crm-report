@@ -275,6 +275,24 @@
   /* 多行值（如多站所）逐行呈現 */
   .ns-detail .ns-multiline{ white-space:pre-line; }
   .ns-empty{ padding:14px; text-align:center; color:var(--muted); font-size:13px; }
+  /* ── 逾期監控（v1.8.0）── 天數用警示色、狀態用中性色：一個顏色只代表一件事 */
+  .ns-od-title{ font-size:15px; font-weight:700; color:var(--text);
+    margin:20px 0 6px; padding-top:14px; border-top:1px solid var(--border); }
+  .ns-od-grp{ margin:0 0 12px; }
+  .ns-od-grp-head{ font-size:13.5px; font-weight:700; color:var(--warning);
+    padding:6px 0 5px; border-bottom:1px solid var(--cell-border); }
+  .ns-od-list{ display:flex; flex-direction:column; }
+  .ns-od-row{ display:flex; align-items:baseline; gap:10px; padding:5px 0;
+    font-size:13.5px; line-height:1.55; border-bottom:1px dashed var(--cell-border); }
+  .ns-od-row:last-child{ border-bottom:0; }
+  .ns-od-co{ flex:1 1 auto; min-width:0; color:var(--text); font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ns-od-meta{ flex:0 0 auto; color:var(--muted); font-size:12.5px; }
+  .ns-od-days{ flex:0 0 auto; color:var(--warning); font-weight:700;
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .ns-od-tag{ flex:0 0 auto; font-size:11.5px; padding:1px 7px; border-radius:9px;
+    background:var(--card-2); color:var(--muted); border:1px solid var(--border); }
+  .ns-od-row.is-ns .ns-od-tag{ color:var(--warning); border-color:var(--warning); }
   @media print{
     /* ⚠ .ns-grow / .ns-item 是 button，列印樣式有 button{display:none} 會把它們藏掉
        （實測：PDF 只剩表頭與明細，課別/類別/數量/比例與案件名稱全消失）→ 必須還原 */
@@ -1326,7 +1344,7 @@
     <div id="keQuickTable" class="pending">待產生</div>
   </section>
   <section class="card" id="notStartedSection" hidden>
-    <h2>未啟動案件追蹤表 <span class="muted">已填單但尚未啟動 · 依課別（多→少）分組，組內依類別</span></h2>
+    <h2>案件追蹤與逾期監控 <span class="muted">未啟動案件 ＋ 依時限規則挑出的逾期案件 · 依課別（多→少）分組，組內依類別</span></h2>
     <div id="notStartedBox" class="pending">待產生</div>
   </section>
   <section class="card" id="progressSection" hidden>
@@ -1459,7 +1477,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.7.3';   // 1.7.3：修正 CSS 壞軌（.bf-mk／.bf-num 曾被丟棄，影響主報表與存圖）
+  var APP_VERSION = '1.8.0';   // 1.8.0：未啟動追蹤表擴張為「案件追蹤與逾期監控」
   var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2798,6 +2816,112 @@ var state = {
   // 類別顯示順序（沿用既有慣例；僅用於同數量時的次要排序）
   var NS_CAT_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
 
+  // ---------------------------------------------------------------------------
+  // 案件逾期監控（2026-10-12 新增，v1.8.0）
+  // ---------------------------------------------------------------------------
+  // 使用者要求：未啟動案件追蹤表除了未啟動案件，加上針對類別 1P 與 3P 的監控。
+  // 定案的規則（天數一律由「填單日期」算到「今天」，未結案＝結案欄空白）：
+  //
+  //   零擔   : 超過 5 天未完成初步接洽；超過 30 天未結案
+  //   1P/3P  : 有初步接洽但沒有需求確認（卡在初步接洽）且超過 2 天；超過 5 天未結案
+  //
+  // ⚠ 三條設計決定（都是為了讓規則真的抓得到東西，而不是字面正確卻恆不觸發）：
+  // 1 「初步接洽沒有進度」判準是「**有**初步接洽但沒有需求確認」，不是「初步接洽欄空白」。
+  //   實測 1P(SCM) 61 筆**全部**都有初步接洽（全期填充率 194/218），
+  //   照字面做這條規則對 1P 命中 0 筆；改成「卡在初步接洽」後命中 8 筆。
+  // 2 「未結案」只認結案欄**空白**。該欄有 18 種值（導入完成／客戶婉拒／五日三聯皆失敗／
+  //   客戶考慮中／暫緩開發…），一律視為已結案、不監控 —— 否則已婉拒的案件會一直被列為逾期。
+  // 3 天數統一由「填單日期」算到「今天」（不各自選基準日）—— 逾期是相對於現在的現況，
+  //   而填單日期是唯一每筆都有的基準。
+  var OVERDUE_RULES = {
+    // code            : { label, cats, needContact, needReq, noCloseDays }
+    LT_NO_CONTACT : { label: '零擔：超過 {N} 天未完成初步接洽', cats:['零擔'],
+                      needContact:true,  needReq:false, days:5 },
+    LT_NO_CLOSE   : { label: '零擔：超過 {N} 天未結案',           cats:['零擔'],
+                      needContact:false, needReq:false, days:30, noClose:true },
+    P13_STUCK     : { label: '1P／3P：超過 {N} 天卡在初步接洽（未進需求確認）',
+                      cats:['1P(SCM)','3P(MO+)'],
+                      needContact:false, needReq:true,  days:2 },
+    P13_NO_CLOSE  : { label: '1P／3P：超過 {N} 天未結案',         cats:['1P(SCM)','3P(MO+)'],
+                      needContact:false, needReq:false, days:5,  noClose:true }
+  };
+  var OVERDUE_ORDER = ['LT_NO_CONTACT', 'P13_STUCK', 'LT_NO_CLOSE', 'P13_NO_CLOSE'];
+
+  // 純函式：天數差（YYYY-MM-DD → 今天），任一欄無效回 null
+  function overdueDays(dateStr, todayStr){
+    if(!dateStr || !todayStr) return null;
+    var a = new Date(dateStr + 'T00:00:00'), b = new Date(todayStr + 'T00:00:00');
+    if(isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+    return Math.round((b - a) / 86400000);
+  }
+
+  // 純函式：挑出逾期案件。回傳
+  //   { today, total, byRule, byCat, byKe, items:[{row,code,days,label}] }
+  // 一筆只回**第一條**命中的規則（優先序 OVERDUE_ORDER），避免同一筆在四條規則下重複出現。
+  // opts 可覆寫門檻天數（供日後調教，不寫死在函式裡）。
+  function collectOverdue(rows, todayStr, opts){
+    opts = opts || {};
+    var rules = OVERDUE_ORDER.map(function(code){
+      var r = OVERDUE_RULES[code];
+      return { code: code, label: r.label, cats: r.cats,
+               needContact: r.needContact, needReq: r.needReq, noClose: !!r.noClose,
+               days: (opts[code] === undefined ? r.days : opts[code]) };
+    });
+    var items = [];
+    var list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(!r) continue;
+      // 已結案（婉拒／聯繫失敗／考慮中／暫緩等 18 種值）一律不監控
+      if(fieldStr(r, '結案').trim() !== '') continue;
+      var fill = fieldStr(r, '填單日期');
+      if(fill === '') continue;                       // 沒有基準日無法計算
+      var d = overdueDays(fill, todayStr);
+      if(d === null) continue;
+      var cat = fieldStr(r, '類別').trim() || '(未填)';
+      var cj = fieldStr(r, '初步接洽');
+      var xq = fieldStr(r, '需求確認');
+      for(var k = 0; k < rules.length; k++){
+        var ru = rules[k];
+        if(ru.cats.indexOf(cat) === -1) continue;
+        var hit = false;
+        if(ru.needContact){
+          // 未完成初步接洽 且 逾期
+          hit = (cj === '' && d > ru.days);
+        } else if(ru.needReq){
+          // 有初步接洽、但沒有需求確認（卡住）且 逾期
+          hit = (cj !== '' && xq === '' && d > ru.days);
+        } else {
+          // 未結案 且 逾期（noClose 由前面的結案空白把關）
+          hit = (d > ru.days);
+        }
+        if(!hit) continue;
+        items.push({
+          row: r, code: ru.code, days: d,
+          label: ru.label.replace('{N}', String(ru.days)),
+          ke: fieldStr(r, '課別').trim() || '(未填)',
+          cat: cat,
+          co: fieldStr(r, '公司名稱').trim() || '(未填公司)',
+          dev: fieldStr(r, '開發者').trim() || '(未填)',
+          isNotStarted: classifyStatus(r) === '未啟動'
+        });
+        break;                                        // 一筆只認第一條命中的規則
+      }
+    }
+    var byRule = {}, byCat = {}, byKe = {};
+    items.forEach(function(it){
+      byRule[it.code] = (byRule[it.code] || 0) + 1;
+      byCat[it.cat] = (byCat[it.cat] || 0) + 1;
+      byKe[it.ke] = (byKe[it.ke] || 0) + 1;
+    });
+    // 逾期天數多→少（最緊迫的排在前面）
+    items.sort(function(a, b){
+      return (b.days - a.days) || (a.ke < b.ke ? -1 : (a.ke > b.ke ? 1 : 0));
+    });
+    return { today: todayStr, total: items.length, byRule: byRule, byCat: byCat,
+             byKe: byKe, items: items };
+  }
+
   // 純函式：挑出「有填單日期 且 狀態為未啟動」的案件
   function collectNotStarted(rows){
     var out = [];
@@ -2890,9 +3014,10 @@ var state = {
 
     var note = document.createElement('p');
     note.className = 'pg-note';
-    note.textContent = '條件：已填「填單日期」但狀態為「未啟動」的案件。' +
+    note.textContent = '上半：已填「填單日期」但狀態為「未啟動」的案件。' +
       '本表不隨「分析期間」與篩選縮放，固定顯示全部符合條件者。' +
-      '點任一列可展開該課別的案件清單。';
+      '點任一列可展開該課別的案件清單。' +
+      '下半：逾期監控，依時限規則挑出需要跟進的案件。';
     box.appendChild(note);
 
     var cap = document.createElement('p');
@@ -2900,7 +3025,6 @@ var state = {
     cap.textContent = '共 ' + data.total + ' 筆・' + data.items.length + ' 個課別' +
       '（長條以最大值 ' + data.max + ' 為 100%）';
     box.appendChild(cap);
-
     if(!data.total){
       var e = document.createElement('p');
       e.className = 'ns-empty';
@@ -2926,7 +3050,128 @@ var state = {
       table.appendChild(buildNotStartedGroupRow(data.items[i], data.max));
     }
     box.appendChild(table);
+
+    // ── 逾期監控（v1.8.0 新增）──
+    // 未啟動與逾期是兩個不同判準，交集很大（實測 20 筆未啟動裡有 17 筆同時逾期），
+    // 所以這裡要**顯式給出去重後的總數**，否則 20 ＋ 32 會被讀成 52。
+    appendOverdueSection(box, state.model.rows);
+
     sec.hidden = false;
+  }
+
+  // 純函式：逾期監控的摘要列（供渲染與測試共用）
+  // 回傳 { total, overlap, union, byRule, rules:[{code,label,n}], items }
+  function overdueSummary(rows, todayStr){
+    var od = collectOverdue(rows, todayStr);
+    var ns = collectNotStarted(rows);
+    var nsKeys = {};
+    ns.forEach(function(r){
+      nsKeys[fieldStr(r, '序號') || fieldStr(r, '公司名稱')] = true;
+    });
+    var overlap = 0;
+    od.items.forEach(function(it){
+      if(nsKeys[fieldStr(it.row, '序號') || fieldStr(it.row, '公司名稱')]) overlap++;
+    });
+    var unionKeys = {};
+    ns.forEach(function(r){
+      unionKeys[fieldStr(r, '序號') || fieldStr(r, '公司名稱')] = true;
+    });
+    od.items.forEach(function(it){
+      unionKeys[fieldStr(it.row, '序號') || fieldStr(it.row, '公司名稱')] = true;
+    });
+    return {
+      total: od.total, nsTotal: ns.length, overlap: overlap,
+      union: Object.keys(unionKeys).length,
+      byRule: od.byRule, byKe: od.byKe, byCat: od.byCat,
+      rules: OVERDUE_ORDER.map(function(code){
+        return { code: code, label: OVERDUE_RULES[code].label.replace('{N}', String(OVERDUE_RULES[code].days)),
+                 days: OVERDUE_RULES[code].days, n: od.byRule[code] || 0 };
+      }),
+      items: od.items
+    };
+  }
+
+  // 逾期監控區塊：依規則分組列出案件，每組一條規則標題
+  function appendOverdueSection(box, rows){
+    var today = todayIso();
+    var s = overdueSummary(rows, today);
+    if(!s.total){
+      var e0 = document.createElement('p');
+      e0.className = 'ns-empty';
+      e0.textContent = '逾期監控：目前沒有案件超出時限。';
+      box.appendChild(e0);
+      return;
+    }
+    var h = document.createElement('h3');
+    h.className = 'ns-od-title';
+    h.textContent = '逾期監控（依時限規則挑出，逾期天數多 → 少）';
+    box.appendChild(h);
+
+    var note = document.createElement('p');
+    note.className = 'pg-note';
+    note.textContent = '門檻：' + s.rules.filter(function(r){ return r.n; })
+      .map(function(r){ return r.label; }).join('；') + '。' +
+      '天數由「填單日期」算到 ' + today + '；「未結案」指結案欄空白' +
+      '（婉拒／聯繫失敗／考慮中／暫緩等視為已結案，不列入）。';
+    box.appendChild(note);
+
+    var cap = document.createElement('p');
+    cap.className = 'list-summary';
+    cap.textContent = '逾期 ' + s.total + ' 筆・' + s.rules.filter(function(r){ return r.n; }).length +
+      ' 條規則命中。其中 ' + s.overlap + ' 筆同時也是「未啟動」案件；' +
+      '本區塊去重後合計 ' + s.union + ' 筆（未啟動 ' + s.nsTotal + ' ＋ 逾期 ' +
+      (s.union - s.nsTotal) + ' 筆不在未啟動名單內）。';
+    box.appendChild(cap);
+
+    // 依規則分組
+    var table = document.createElement('div');
+    table.className = 'ns-od-table';
+    for(var i = 0; i < s.rules.length; i++){
+      var ru = s.rules[i];
+      if(!ru.n) continue;
+      var grp = document.createElement('div');
+      grp.className = 'ns-od-grp';
+      var gh = document.createElement('div');
+      gh.className = 'ns-od-grp-head';
+      gh.textContent = ru.label + '（' + ru.n + ' 筆）';
+      grp.appendChild(gh);
+      var list = document.createElement('div');
+      list.className = 'ns-od-list';
+      for(var k = 0; k < s.items.length; k++){
+        var it = s.items[k];
+        if(it.code !== ru.code) continue;
+        var row = document.createElement('div');
+        row.className = 'ns-od-row' + (it.isNotStarted ? ' is-ns' : '');
+        var main = document.createElement('span');
+        main.className = 'ns-od-co';
+        main.textContent = it.co;
+        row.appendChild(main);
+        var meta = document.createElement('span');
+        meta.className = 'ns-od-meta';
+        meta.textContent = it.ke + '／' + it.cat + '／' + it.dev;
+        row.appendChild(meta);
+        var day = document.createElement('span');
+        day.className = 'ns-od-days';
+        day.textContent = '逾期 ' + it.days + ' 天';
+        row.appendChild(day);
+        var tag = document.createElement('span');
+        tag.className = 'ns-od-tag';
+        tag.textContent = it.isNotStarted ? '未啟動' : '進行中';
+        row.appendChild(tag);
+        list.appendChild(row);
+      }
+      grp.appendChild(list);
+      table.appendChild(grp);
+    }
+    box.appendChild(table);
+  }
+
+  // 純函式：今天的 ISO 日期（逾期是相對於現在的現況，不可用固定值）
+  function todayIso(){
+    var d = new Date();
+    var m = String(d.getMonth() + 1), day = String(d.getDate());
+    return d.getFullYear() + '-' + (m.length < 2 ? '0' + m : m) +
+           '-' + (day.length < 2 ? '0' + day : day);
   }
 
   function nsCell(cls, text){
@@ -11240,6 +11485,11 @@ var state = {
       keQuickNote: keQuickNote,
       NS_CAT_ORDER: NS_CAT_ORDER,
       collectNotStarted: collectNotStarted,
+      collectOverdue: collectOverdue,
+      overdueSummary: overdueSummary,
+      overdueDays: overdueDays,
+      OVERDUE_RULES: OVERDUE_RULES,
+      OVERDUE_ORDER: OVERDUE_ORDER,
       notStartedGroups: notStartedGroups,
       groupNotStarted: groupNotStarted,
       renderNotStartedSection: renderNotStartedSection,
