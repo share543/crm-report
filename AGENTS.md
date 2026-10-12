@@ -379,6 +379,39 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 ⚠ **圖示只出現在畫面上，不進複製出去的講稿文字** —— 唸的時候不會多出一個圖示名。
 ⚠ 段號不認識時**不掛 span**（掛了會留下一個空白 inline-block 把標題推開）。
 
+### 🔴 v1.7.3 重大修正：CSS 不可寫成 JS 陣列語法（造成主報表與存圖一起壞）
+
+**教訓**：改 `.bf-mk` 時把 SPEAKER_CSS（JS 字串陣列）的寫法照抄進了 HTML 的 `<style>` 區塊：
+
+```css
+/* 錯 —— 這是 JS 陣列元素，不是 CSS */
+.bf-mk{ flex:0 0 20px; text-align:center; font-size:14px; line-height:1.7;',
+'  font-family:\'Apple Color Emoji\',\'Segoe UI Emoji\',sans-serif; }',
+```
+
+兩個獨立的錯疊加：
+1. **CSS 不支援 `//` 註解**（必須 `/* */`）—— 上面兩行 `//` 讓解析器從那裡開始錯誤恢復
+2. **規則內含 JS 語法**（結尾 `;',`）—— `.bf-mk` 這條規則整條被丟棄，
+   頂層殘留的 `',` 又讓**下一條 `.bf-num` 一起被丟棄**
+
+**症狀**（回報時描述為「主報表按鈕風格與本日議題格式變了」「存圖也有問題」）：
+- `.bf-mk`、`.bf-num` 樣式消失 → 主報表重點分析的項目符號與數字樣式跑掉
+- 存圖的 `generateSnapshot()` 讀 `styles[0].textContent` 帶進 SVG foreignObject，
+  壞掉的 CSS 一起進去
+
+**防呆**：`<style>` 與 `SPEAKER_CSS` 是兩個不同的容器，語法不同。
+改 CSS 後必須跑一次結構檢查：
+```python
+css = 所有 <style> 內容（去掉 /* */ 註解後）
+assert 沒有以 // 開頭的行
+assert 沒有以 ' 或 ', 結尾的行
+assert css.count('{') == css.count('}')
+```
+本次就是靠第三條（789/789 平衡）與前兩條定位的。
+另外用 `document.styleSheets[i].cssRules` 逐條確認關鍵選擇器還在
+（`.bf-mk`、`.bf-num`、`.bf-who`、`.bf-list`、`.bf-tag-good`、`.ag`、`.ag-key`）——
+純文字 grep 會漏掉「寫了但被解析器丟棄」這種情況。
+
 
 ⚠ 唯一的全量口徑是第 5 段的兩個累計欄。它們標名就寫「累計開發」／「累計已導入」，
 唸得出來是全期累計，不是期間數字。這與「全部跟隨期間」不衝突 —— 衝突的是**不標明的全量**。

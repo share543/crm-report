@@ -527,10 +527,12 @@
   .bf-list > li{ display:flex; gap:9px; align-items:flex-start; padding:6px 0; font-size:14.5px;
     line-height:1.65; border-bottom:1px solid var(--cell-border); }
   .bf-list > li:last-child{ border-bottom:0; }
-  // v1.7.2：項目符號改為圓點。文字（？／！／＋）需要讀完才知種類，圓點掃一眼就定位。
-  // 寬度 1.15em 固定，讓三種圓點寬度一致（emoji 在不同字型下寬度會飄）。
-  .bf-mk{ flex:0 0 20px; text-align:center; font-size:14px; line-height:1.7;',
-  '  font-family:\'Apple Color Emoji\',\'Segoe UI Emoji\',\'Noto Color Emoji\',sans-serif; }',
+  /* v1.7.2：項目符號改為圓點。文字（？／！／＋）需讀完才知種類，圓點掃一眼就定位。
+     寬度固定 1.15em，讓三種圓點寬度一致（emoji 在不同字型下寬度會飄）。
+     ⚠ 註解必須用 /* *\/（CSS 不支援 //）；本檔 <style> 是 CSS，不是 JS 陣列，
+        寫成 JS 字串語法會讓整條規則與下一條一起被解析器丟棄。 */
+  .bf-mk{ flex:0 0 20px; text-align:center; font-size:14px; line-height:1.7;
+    font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif; }
   .bf-num{ color:var(--warning); font-weight:700; }
   .bf-who{ color:var(--accent); }
   .bf-m{ color:var(--muted); font-size:13px; }
