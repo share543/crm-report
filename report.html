@@ -192,6 +192,16 @@
   .ke-bar-legend-item{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }
   .ke-bar-legend-item .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
   .ke-category-chart svg{ overflow:visible; }
+  /* 講者版：本期新增案件的類別分布（CSS 橫條，非 SVG —— 見 renderSpkCatSection） */
+  .pc-head{ font-size:13px; color:var(--muted); margin:0 0 10px; }
+  .pc-row{ display:flex; align-items:center; gap:10px; margin:0 0 7px; }
+  .pc-name{ flex:0 0 92px; font-size:13px; font-weight:600; text-align:right;
+    color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pc-track{ flex:1 1 auto; height:16px; background:var(--card-2); border:1px solid var(--border);
+    border-radius:4px; overflow:hidden; }
+  .pc-fill{ display:block; height:100%; border-radius:3px 0 0 3px; }
+  .pc-num{ flex:0 0 108px; font-size:12.5px; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .pc-warn{ font-size:12px; color:var(--warn,#c9a227); margin:8px 0 0; }
   .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
     padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
@@ -1407,6 +1417,13 @@
     </div>
     <div id="briefDetail" hidden></div>
   </section>
+  <!-- 講者版專用：本期新增案件的類別分布。
+       與「案件類型分析」不同 —— 那個吃全部列，這個吃分析期間篩選後的列，
+       是開場三句話①「量能」②「類別落差」的數字依據。 -->
+  <section class="card" id="spkCatSection" hidden>
+    <h2 id="spkCatTitle"></h2>
+    <div id="spkCatChart" class="pending">待產生</div>
+  </section>
 </div>
 <script>
 'use strict';
@@ -1429,8 +1446,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.4.0';   // 1.4.0：案件狀態柱狀圖加入類別組成比例
-  var APP_VERSION_DATE = '2026-10-09';
+  var APP_VERSION = '1.5.0';   // 1.5.0：講者版加入「本期新增案件的類別分布」與「各業務單位×類別」兩張圖
+  var APP_VERSION_DATE = '2026-10-12';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -1792,7 +1809,38 @@ var state = {
     return sorted;
   }
 
-  // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
+  // 純函式：本期新增案件的類別分布（講者版用）。
+  // ⚠ 與 computeCategoryAnalysis 的差別只有「餵進去的列」：那個吃全部列，
+  //   這個吃 applyPeriod 篩選後的列 —— 所以開場三句話①「量能」②「類別落差」
+  //   講的數字與這張圖是同一個來源，不會出現「講 150 件、圖上 115 件」。
+  // 回傳：{ total, items:[{cat,count,share,coop,rate}] }，依件數多→少，
+  //       share 以 total 為分母（未填類別獨立成一類，不併進「其他」——
+  //       講者要看得出來那是沒填，不是被歸類掉了）。
+  function computePeriodCategory(rows){
+    var list = rows || [];
+    var byCat = {}, order = [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i] || {};
+      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
+        ? String(r['類別']).trim() : '(未填)';
+      if(!byCat[cat]){ byCat[cat] = { cat: cat, count: 0, coop: 0 }; order.push(cat); }
+      byCat[cat].count++;
+      if(classifyStatus(r) === '合作成功') byCat[cat].coop++;
+    }
+    var items = order.map(function(c){
+      var o = byCat[c];
+      return { cat: o.cat, count: o.count, coop: o.coop,
+               share: list.length ? o.count / list.length : 0,
+               rate: o.count ? Math.round(o.coop / o.count * 100) : 0 };
+    });
+    // 件數多→少；同件數依名稱，讓排序穩定（快照才可重現）
+    items.sort(function(a, b){
+      return (b.count - a.count) || (a.cat < b.cat ? -1 : (a.cat > b.cat ? 1 : 0));
+    });
+    return { total: list.length, items: items };
+  }
+
+  // 純函式：案件類型填寫規則檢核（回傳結構化結果，不拋錯）
   // 規則：導入 有值且 簽約 空白 → 類別應為 1P/3P；零擔/甲配 → 簽約＋導入皆有日期。
   // 僅簽約無導入（如已簽約未導入客戶）列為備註，不算不一致。
   function validateCategoryRule(rows){
@@ -3118,8 +3166,14 @@ var state = {
   // ---------------------------------------------------------------------------
   // 共用：類別細分（統計卡與課別小卡的「零擔 ：N」藥丸排）
   // ---------------------------------------------------------------------------
-  var CATS_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
-  var CAT_COLORS = { '零擔': '#4f8eff', '1P(SCM)': '#5ad98b', '3P(MO+)': '#ffc94d', '其他': '#9aa3b2' };
+  // ⚠ 甲指／甲配 必須在清單內：真實資料的類別就是 零擔／甲指／甲配
+  //   （各課追蹤簡表的欄位也是這三個），漏掉會被 catOf 全數併成「其他」——
+  //   統計卡圓點與類別組成圖就再也分不出甲指與甲配（實測兩者都變灰色）。
+  var CATS_ORDER = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
+  // 色票：與統計卡圓點／類別組成圖／本期新增類別分布共用同一套。
+  // 新增色刻意避開既有四色（藍／綠／黃／灰），並都夠亮 —— 段內百分比用深色字才看得清。
+  var CAT_COLORS = { '零擔': '#4f8eff', '甲指': '#f472b6', '甲配': '#a78bfa',
+    '1P(SCM)': '#5ad98b', '3P(MO+)': '#ffc94d', '其他': '#9aa3b2' };
 
   function catOf(r){
     var cv = r && r['類別'];
@@ -6739,7 +6793,7 @@ var state = {
   function computeKeCategoryBars(byKe, categoriesByKe){
     var entries = computeKeBars(byKe || {});
     categoriesByKe = categoriesByKe || {};
-    var catOrder = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
+    var catOrder = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
     return entries.map(function(entry){
       var counts = categoriesByKe[entry.label] || {};
       var categories = [];
@@ -7129,7 +7183,7 @@ var state = {
 
     var legend = document.createElement('div');
     legend.className = 'ke-bar-legend';
-    var order = ['零擔', '1P(SCM)', '3P(MO+)', '其他'];
+    var order = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
     for(var k = 0; k < order.length; k++){
       var name = order[k];
       if(!legendNames[name]) continue;
@@ -8476,6 +8530,7 @@ var state = {
     // 先算一次警報註記：進度追蹤表（排在待留意事項之前渲染）要用它掛 ⚠N
     alertStamps = collectAlerts(pr.rows).stamps;
     renderBriefSection(pr.rows, filtered);
+    renderSpkCatSection(pr.rows);          // 講者版：本期新增案件的類別分布（吃期間列）
     renderHighlightsSection(m, filtered);   // 第二個參數＝篩選後全部資料（算全期累計用）
     renderStats(m);
     renderKeQuickSection(m);
@@ -8628,7 +8683,8 @@ var state = {
       if(!card || !card.querySelector) continue;
       if(card.querySelector('.card-tools')) continue;   // 已處理過（幂等）
       // 重點分析已移出主報表（改成講者版），不需要存圖／跳轉鈕
-      if(card.id === 'briefSection') continue;
+      // spkCatSection 同為講者版專用區塊，同理不加（加了會出現在講者版快照裡）
+      if(card.id === 'briefSection' || card.id === 'spkCatSection') continue;
       var h2 = card.querySelector('h2');
       if(!h2) continue;
       // 右上工具列：一個 flex 群組，之後要再加按鈕只要往這裡 append，不必改任何座標。
@@ -9235,6 +9291,75 @@ var state = {
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
   }
 
+  // 渲染：講者版「本期新增案件的類別分布」。
+  // ⚠ 用 CSS 橫條，不用 SVG：講者版是可攜單檔、會開在手機上，
+  //   SVG 一旦 viewBox 寬 ≠ 實際渲染寬就會整張等比縮放（字級一起縮），
+  //   而橫條用 % 寬＋絕對 px 字級在任何寬度都一致。
+  // 標題跟著期間走：期間 ≠ 全部 → 「本期新增」；期間 = 全部 → 「全部案件」。
+  //   寫死「本期」會在篩選成全部時變成假話（那時圖上數的是全部案件）。
+  function renderSpkCatSection(periodRows){
+    var sec = document.getElementById('spkCatSection');
+    var box = document.getElementById('spkCatChart');
+    if(!sec || !box) return;
+    var data = computePeriodCategory(periodRows);
+    // ⚠ 不可用 (!from && !to) 判斷「是否全部」—— lastMonth／thisYear 等具名預設的
+    //   from/to 本來就是空的（由 periodRange 推導），那樣寫會把它們誤判成「全部」，
+    //   於是標題說「全部」而數字是期間筆數 → 假話。正確判準＝periodRange 有沒有推出區間。
+    var range = (typeof periodRange === 'function') ? periodRange(state.period) : null;
+    var isAll = !range;
+    var scope = isAll ? '全部' : describePeriod(state.period);
+    var t = document.getElementById('spkCatTitle');
+    if(t){
+      t.textContent = isAll ? '全部案件的類別分布' : scope + '新增案件的類別分布';
+    }
+    box.textContent = '';
+    if(!data.total){
+      box.className = 'pending';
+      box.textContent = '本期沒有案件';
+      sec.hidden = false;
+      return;
+    }
+    box.className = 'pc-wrap';
+    var head = document.createElement('p');
+    head.className = 'pc-head';
+    head.textContent = (isAll ? '全部 ' : scope + '新增 ') + data.total + ' 件，依類別分布：';
+    box.appendChild(head);
+    var max = 1;
+    for(var i = 0; i < data.items.length; i++) if(data.items[i].count > max) max = data.items[i].count;
+    for(var j = 0; j < data.items.length; j++){
+      var it = data.items[j];
+      var row = document.createElement('div');
+      row.className = 'pc-row';
+      var name = document.createElement('span');
+      name.className = 'pc-name';
+      name.textContent = it.cat;
+      var track = document.createElement('span');
+      track.className = 'pc-track';
+      var fill = document.createElement('span');
+      fill.className = 'pc-fill';
+      fill.style.width = (it.count / max * 100).toFixed(2) + '%';
+      // 色票與統計卡圓點／類別組成圖同一套，講者版與主報表對得起來
+      fill.style.background = (typeof CAT_COLORS !== 'undefined' && CAT_COLORS[it.cat])
+        ? CAT_COLORS[it.cat] : 'var(--muted)';
+      track.appendChild(fill);
+      var num = document.createElement('span');
+      num.className = 'pc-num';
+      num.textContent = it.count + ' 件（' + (it.share * 100).toFixed(1) + '%）';
+      row.appendChild(name); row.appendChild(track); row.appendChild(num);
+      box.appendChild(row);
+    }
+    // 未填類別要主動講，否則講者會以為分類是完整的
+    var blank = null;
+    for(var b = 0; b < data.items.length; b++) if(data.items[b].cat === '(未填)'){ blank = data.items[b]; break; }
+    if(blank){
+      var warn = document.createElement('p');
+      warn.className = 'pc-warn';
+      warn.textContent = '⚠ 其中 ' + blank.count + ' 件未填類別，占比與落差判定會受影響。';
+      box.appendChild(warn);
+    }
+    sec.hidden = false;
+  }
+
   // ---------------------------------------------------------------------------
   // 講者版：把「重點分析」抽成單檔 HTML，給主持人在另一台裝置（手機／平板）離線看。
   //   動機：會議時簡報電腦分享同一個畫面，與會者看的是主報表／簡報；
@@ -9243,8 +9368,9 @@ var state = {
   //   所以不會出現兩套算法漂移（同一份數字，只是換一個容器呈現）。
   // ⚠ 重點分析仍必須被渲染（宿主 #speakerHost 只是 hidden）——否則這裡取不到內容。
   // ---------------------------------------------------------------------------
-  function snapshotBriefSection(){
-    var sec = document.getElementById('briefSection');
+  // 通用：把一個區塊 clone 成講者版用的片段（去掉互動裝飾、改 class）
+  function snapshotSectionToSpeaker(id, extraClass){
+    var sec = document.getElementById(id);
     if(!sec) return '';
     var clone = sec.cloneNode(true);
     var kill = clone.querySelectorAll('.card-tools, .bf-modes');
@@ -9253,8 +9379,34 @@ var state = {
     }
     clone.hidden = false;
     clone.removeAttribute('id');
-    clone.className = 'card spk-sec';
+    clone.className = 'card spk-sec' + (extraClass ? ' ' + extraClass : '');
     return clone.outerHTML;
+  }
+
+  function snapshotBriefSection(){
+    return snapshotSectionToSpeaker('briefSection');
+  }
+
+  // 講者版：案件狀態統計的類別組成圖（主報表 statSection 內的 #keBarWrap）。
+  // ⚠ 快照的是「已渲染的 DOM」——圖由 makeKeCategoryChart 在建構時畫進 #keBarWrap，
+  //   所以產生講者版前 statSection 必須已經渲染過（rebuild() 會做）。
+  function snapshotKeCategoryChart(){
+    var wrap = document.getElementById('keBarWrap');
+    if(!wrap) return '';
+    var holder = document.createElement('section');
+    holder.className = 'card spk-sec';
+    var h2 = document.createElement('h2');
+    h2.textContent = '各業務單位案件數與類別比例';
+    holder.appendChild(h2);
+    var clone = wrap.cloneNode(true);
+    clone.id = '';
+    holder.appendChild(clone);
+    return holder.outerHTML;
+  }
+
+  // 講者版：本期新增案件的類別分布
+  function snapshotSpkCatSection(){
+    return snapshotSectionToSpeaker('spkCatSection');
   }
 
   // 講者版專屬版面（不動主報表）：手機優先、深色、一眼掃到
@@ -9309,6 +9461,23 @@ var state = {
     '#spkCopy.done{ background:var(--ok); color:#0b1220; box-shadow:inset 0 0 0 1px var(--ok); }',
     '@media (max-width:560px){ #spkCopy{ margin-left:0; } }',
     '#spkBar .spk-gap{ flex:1 1 auto; }',
+    // ── 兩張圖（講者版新增）──
+    /* 本期新增案件的類別分布：CSS 橫條，窄螢幕自然收縮，不需要滑動 */
+    '.spk-sec .pc-head{ font-size:13.5px; }',
+    '.spk-sec .pc-row{ margin:0 0 9px; }',
+    '.spk-sec .pc-name{ flex:0 0 96px; font-size:14px; }',
+    '.spk-sec .pc-track{ height:18px; }',
+    '.spk-sec .pc-num{ flex:0 0 116px; font-size:13px; }',
+    '.spk-sec .pc-warn{ font-size:12.5px; }',
+    /* 各業務單位 × 類別（SVG）：手機上整張縮放會讓字級一起縮到看不見，
+       所以與主報表手機版同一套做法 —— 容器可橫向滑動、SVG 維持 680px 最小寬。 */
+    '.spk-sec .ke-category-chart{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }',
+    '.spk-sec .ke-category-chart svg{ min-width:680px; max-width:none; }',
+    '.spk-sec .ke-bar-legend{ font-size:13px; }',
+    '.spk-sec .ke-bar-note{ font-size:12.5px; }',
+    /* 兩張圖之間留白，並與上方模式區塊拉開 */
+    '#spkCharts{ margin-top:26px; padding-top:18px; border-top:1px solid var(--border); }',
+    '#spkCharts .spk-sec + .spk-sec{ margin-top:26px; }',
     '#spkFoot{ margin-top:22px; padding-top:12px; border-top:1px solid var(--border);',
     '  font-size:11.5px; line-height:1.8; color:var(--muted); text-align:center;',
     '  word-break:keep-all; }',   // ⚠ text-wrap:pretty 對 CJK 無效：要靠 keep-all 才不會把「授權」拆行
@@ -9342,6 +9511,11 @@ var state = {
     var lineHtml = '<pre class="bf-gm">' + escHtml(lineText) + '</pre>';
     setBriefMode(prevMode);
     state.briefGmVariant = prevVar;
+    // 兩張圖不隨模式變化 → 放在模式區塊之外，只快照一次（放進各模式會讓檔案變成三份圖）。
+    // 順序：先「本期新增 × 類別」（開場三句話①量能②類別落差的數字依據），
+    //       再「各業務單位 × 類別」（看結構差異）。與開場的敘述順序一致。
+    var periodCatHtml = snapshotSpkCatSection();
+    var keCatHtml = snapshotKeCategoryChart();
     function escHtml(t){
       return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
@@ -9350,7 +9524,7 @@ var state = {
     return '<!DOCTYPE html>\n<html lang="zh-Hant" data-theme="dark">\n<head>\n'
       + '<meta charset="utf-8">\n'
       + '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
-      + '<title>重點分析（講者版）</title>\n'
+      + '<title>重點分析與類別分布（講者版）</title>\n'
       + '<style>\n' + css + '</style>\n'
       + '<style>\n' + SPEAKER_CSS + '</style>\n'
       + '</head>\n<body class="spk-body">\n'
@@ -9366,6 +9540,8 @@ var state = {
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
       + '<div id="spkGmLine" class="spk-sec spk-hide">' + lineHtml + '</div>\n'
+      // 兩張圖：不隨模式切換（放在模式區塊之外），三種模式都看得到
+      + '<div id="spkCharts" class="spk-sec">' + periodCatHtml + keCatHtml + '</div>\n'
       // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
@@ -10438,6 +10614,7 @@ var state = {
       computeStatusBuckets: computeStatusBuckets,
       computeKeBars: computeKeBars,
       computeKeCategoryBars: computeKeCategoryBars,
+      computePeriodCategory: computePeriodCategory,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
       stationNamesOf: stationNamesOf,
