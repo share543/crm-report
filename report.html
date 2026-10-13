@@ -1500,8 +1500,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.8.3';   // 1.8.3：點單一案件跳轉後可回跳來源區塊（含期間還原與逾期展開）
-  var APP_VERSION_DATE = '2026-10-12';
+  var APP_VERSION = '1.9.0';   // 1.9.0：週會固定期間回顧、分階段品質檢核與會後 GM Executive Summary
+  var APP_VERSION_DATE = '2026-10-13';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -2188,10 +2188,195 @@ var state = {
     return { rows: rows, text: text };
   }
 
-  // 純函式：第 6 段結尾提示（固定文字，不隨資料變）
+  // ---- 週會固定期間回顧／在手進度／品質檢核（講者版專用） ----
+  // cohort 的期間以「填單日期」切分；狀態是本次載入資料所示的目前狀態，不能解讀成該期間內完成。
+  function weeklyCohortRows(rows, preset, now){
+    return applyPeriod(rows || [], { preset: preset, from: '', to: '' }, now).rows;
+  }
+  function weeklyStatusBucket(status){
+    if(status === '合作成功') return '合作成功';
+    if(status === '進行中') return '進行中';
+    if(status === '未啟動') return '未啟動';
+    return '未合作（含婉拒、失聯、暫緩等）';
+  }
+  function weeklyCountBy(rows, field){
+    var counts = {};
+    for(var i = 0; i < (rows || []).length; i++){
+      var value = String((rows[i] && rows[i][field]) || '').trim() || '(未填)';
+      counts[value] = (counts[value] || 0) + 1;
+    }
+    return Object.keys(counts).map(function(name){ return { name: name, count: counts[name] }; })
+      .sort(function(a,b){ return (b.count - a.count) || (a.name < b.name ? -1 : 1); });
+  }
+  function weeklyCoverage(rows){
+    var days = [];
+    for(var i = 0; i < (rows || []).length; i++){
+      var d = String((rows[i] && rows[i]['填單日期']) || '').slice(0,10);
+      if(d.length === 10 && d.charAt(4) === '-' && d.charAt(7) === '-') days.push(d);
+    }
+    days.sort();
+    function displayDate(d){ return d ? (d.slice(0,7) + '-' + d.slice(8,10)) : ''; }
+    return { from: days.length ? days[0] : '', to: days.length ? days[days.length - 1] : '',
+             text: days.length ? (displayDate(days[0]) + '～' + displayDate(days[days.length - 1])) : '無有效填單日期' };
+  }
+  function weeklyRangeBounds(range){
+    function startDate(key){
+      key=String(key||'');
+      if(key.length>=10) return key.slice(0,10);
+      var year=Number(key.slice(0,4)), month=Number(key.slice(5,7));
+      return year&&month ? isoDate(new Date(year,month-1,1)) : '';
+    }
+    function endDate(key){
+      key=String(key||'');
+      if(key.length>=10) return key.slice(0,10);
+      var year=Number(key.slice(0,4)), month=Number(key.slice(5,7));
+      return year&&month ? isoDate(new Date(year,month,0)) : '';
+    }
+    return { from:startDate(range&&range.from), to:endDate(range&&range.to) };
+  }
+  function weeklyCohort(rows, label, preset, now){
+    var cohort = weeklyCohortRows(rows, preset, now);
+    var status = { '合作成功':0, '進行中':0, '未啟動':0, '未合作（含婉拒、失聯、暫緩等）':0 };
+    for(var i = 0; i < cohort.length; i++) status[weeklyStatusBucket(classifyStatus(cohort[i]))]++;
+    var range = periodRange({ preset: preset, from:'', to:'' }, now);
+    var coverage = weeklyCoverage(rows);
+    var outside = !coverage.from || !coverage.to;
+    if(range && coverage.from && coverage.to){
+      var bounds = weeklyRangeBounds(range);
+      var rangeStart = bounds.from;
+      var rangeEnd = bounds.to;
+      // YTD stops today; future dates are not expected to exist in the source file.
+      if(preset === 'thisYear'){
+        var today = isoDate(now || new Date());
+        if(rangeEnd > today) rangeEnd = today;
+      }
+      // Mark partial as well as wholly uncovered intervals: loaded rows are only a snapshot.
+      outside = (coverage.from > rangeStart || coverage.to < rangeEnd);
+    }
+    return { label:label, preset:preset, count:cohort.length, rows:cohort,
+      categories:weeklyCountBy(cohort,'類別'), teams:weeklyCountBy(cohort,'課別'),
+      statuses:status, range:range, coverage:coverage, outsideCoverage:outside };
+  }
+  function weeklyCohortReviews(rows, now){
+    now = now || new Date();
+    return [
+      weeklyCohort(rows,'今年累計新增（截至載入資料）','thisYear',now),
+      weeklyCohort(rows,'上個月新增','lastMonth',now),
+      weeklyCohort(rows,'上週新增','lastWeek',now)
+    ];
+  }
+  function weeklyCohortText(cohorts){
+    return (cohorts || []).map(function(c){
+      var status = ['合作成功','進行中','未啟動','未合作（含婉拒、失聯、暫緩等）']
+        .map(function(k){ return k + ' ' + c.statuses[k]; }).join('／');
+      var cats = c.categories.length ? c.categories.map(function(x){ return x.name + ' ' + x.count; }).join('、') : '無案件';
+      var teams = c.teams.length ? c.teams.map(function(x){ return x.name + ' ' + x.count; }).join('、') : '無案件';
+      if(c.outsideCoverage){
+        return c.label + '：載入資料命中 ' + c.count + ' 件；來源日期範圍 ' + c.coverage.text + ' 未完整涵蓋此期間，以下狀態／類別／各課分布僅供參考，不能視為完整期間統計。' +
+          '目前狀態：' + status + '。類別：' + cats + '。各課：' + teams + '。';
+      }
+      return c.label + '：新增 ' + c.count + ' 件；目前狀態：' + status + '。類別：' + cats + '。各課：' + teams + '。';
+    }).join(String.fromCharCode(10));
+  }
+  function weeklyCurrentProgress(rows){
+    var list = rows || [], teams = {}, inProgress = 0, unstarted = 0;
+    for(var i = 0; i < list.length; i++){
+      var status = classifyStatus(list[i]);
+      if(status === '未啟動'){ unstarted++; continue; }
+      if(status !== '進行中') continue;
+      inProgress++;
+      var team = String(list[i]['課別'] || '').trim() || '(未填)';
+      if(!teams[team]) teams[team] = { name:team, total:0, stages:{} };
+      var stageIndex = lastMilestone(list[i]);
+      var stage = stageIndex >= 0 ? MILESTONES[stageIndex] : '(無里程碑)';
+      teams[team].total++;
+      teams[team].stages[stage] = (teams[team].stages[stage] || 0) + 1;
+    }
+    var stageOrder = ['填單日期','初步接洽','需求確認','報價','簽約','導入','(無里程碑)'];
+    var out = Object.keys(teams).map(function(k){ return teams[k]; })
+      .sort(function(a,b){ return (b.total-a.total) || (a.name < b.name ? -1 : 1); });
+    var lines = out.map(function(t){
+      var parts=[];
+      for(var j=0;j<stageOrder.length;j++) if(t.stages[stageOrder[j]]) parts.push(stageOrder[j]+' '+t.stages[stageOrder[j]]);
+      return t.name+'：進行中 '+t.total+' 件（'+parts.join('、')+'）';
+    });
+    return { total:inProgress, unstarted:unstarted, teams:out, text:lines.join(String.fromCharCode(10)) };
+  }
+  function weeklyDateOrderIssues(rows){
+    var out=[], list=rows||[];
+    for(var i=0;i<list.length;i++){
+      var prev=null, bad=[];
+      for(var j=0;j<MILESTONES.length;j++){
+        var field=MILESTONES[j], value=String((list[i]&&list[i][field])||'').slice(0,10);
+        if(value.length !== 10 || value.charAt(4) !== '-' || value.charAt(7) !== '-') continue;
+        if(prev && value < prev.date) bad.push({ earlierField:prev.field, earlierDate:prev.date, laterField:field, laterDate:value });
+        prev={field:field,date:value};
+      }
+      if(bad.length) out.push({row:list[i],issues:bad});
+    }
+    return out;
+  }
+  function weeklyQualityReview(rows){
+    var list=rows||[], active=[], progressed=[];
+    for(var i=0;i<list.length;i++){
+      var s=classifyStatus(list[i]);
+      if(s==='進行中' || s==='未啟動') active.push(list[i]);
+      if(s==='進行中') progressed.push(list[i]);
+    }
+    var missing={ '公司名稱':0, '填單日期':0, '類別':0, '開發者':0, '課別':0, '收貨站所':0, '聯絡窗口':0, '洽談內容':0 };
+    var issueRows={};
+    function mark(row,field){ missing[field]++; issueRows[String(list.indexOf(row))]=1; }
+    for(var a=0;a<active.length;a++){
+      var r=active[a];
+      ['公司名稱','填單日期','類別','開發者','課別'].forEach(function(f){ if(!String(r[f]||'').trim()) mark(r,f); });
+      if(stationNamesOf(r).length===0) mark(r,'收貨站所');
+    }
+    for(var p=0;p<progressed.length;p++){
+      var row=progressed[p], stage=lastMilestone(row);
+      if(stage>=1){
+        if(!String(row['聯絡窗口']||'').trim()) mark(row,'聯絡窗口');
+        if(!String(row['洽談內容']||'').trim()) mark(row,'洽談內容');
+      }
+    }
+    var category=validateCategoryRule(progressed);
+    var dateOrder=weeklyDateOrderIssues(progressed);
+    var counts={}; for(var k in missing) if(missing[k]) counts[k]=missing[k];
+    var missingSummary=Object.keys(counts).map(function(k){ return k+' '+counts[k]+' 筆'; }).join('、') || '無基本欄位缺漏';
+    var incompleteRows=Object.keys(issueRows).length;
+    return { activeCount:active.length, progressedCount:progressed.length,
+      incompleteRows:incompleteRows, missing:counts,
+      dateOrderReviewRows:dateOrder, categoryReviewRows:category.mismatches,
+      text:'進行中 '+progressed.length+' 件、未啟動 '+(active.length-progressed.length)+' 件；資料待補 '+incompleteRows+' 件（'+missingSummary+'；案件可能重疊）。日期先後待人工確認 '+dateOrder.length+' 件；類別與里程碑組合待人工確認 '+category.mismatches.length+' 件。' };
+  }
+  function weeklyReviewBundle(rows, now){
+    var list=rows||[], cohorts=weeklyCohortReviews(list,now), progress=weeklyCurrentProgress(list), quality=weeklyQualityReview(list);
+    return { cohorts:cohorts, cohortText:weeklyCohortText(cohorts), coverage:weeklyCoverage(list), progress:progress, quality:quality };
+  }
+  function weeklyEmailText(bundle, decisions, escalations){
+    bundle=bundle||weeklyReviewBundle([],new Date());
+    var annual=(bundle.cohorts&&bundle.cohorts[0])||weeklyCohort([], '今年累計新增（截至載入資料）','thisYear',new Date());
+    var summaryStatus=['合作成功','進行中','未啟動','未合作（含婉拒、失聯、暫緩等）']
+      .map(function(k){ return k+' '+annual.statuses[k]; }).join('／');
+    var gmSummary=(annual.outsideCoverage?'今年累計新增（載入資料命中） ':'今年累計新增 ') + annual.count + ' 件；目前狀態：'+summaryStatus+'。';
+    var out=['CRM 業務開發週會｜Executive Summary','',
+      'GM 摘要',gmSummary,
+      '資料品質／輔導焦點：'+(bundle.quality?bundle.quality.text:'尚無檢核結果。'),
+      '資料口徑：今年累計、上個月、上週均依填單日期統計新增案件；各組狀態為本次載入資料所示，不代表案件在該新增期間完成。年度／月份／週期間重疊，分開閱讀，不相加。',
+      '來源資料填單日期涵蓋：'+(bundle.coverage?bundle.coverage.text:'未提供')+'。',
+      '', '會議資料｜期間新增與狀態摘要', bundle.cohortText||'期間新增摘要：尚無資料。','','各課代表分享｜目前在手開發進度：',
+      bundle.progress&&bundle.progress.text?bundle.progress.text:'目前沒有可列示的進行中案件。',
+      '日期先後與類別規則為人工確認提示，不自動判定錯誤；洽談內容有值不代表內容品質已驗證。',
+      '', '會議決議／追蹤事項（由主持人會後填入；不得以系統推測代替）：',
+      String(decisions||'').trim()||'（待主持人補入決議｜負責人｜期限）',
+      '', '需跨課協調或 GM 介入的具名個案（僅列必要個案）：',
+      String(escalations||'').trim()||'（無／待主持人確認）'];
+    return out.join(String.fromCharCode(10));
+  }
+
+  // 純函式：會議結尾提示（固定文字，不隨資料變）
   function buildClosingLine(){
-    return '接下來請各課業務代表，輪流說明手上進行中案件的進度與狀況，' +
-           '卡住的地方我們現場一起看。';
+    return '接下來請各課業務代表，依序分享目前手上進行中的案件、開發進度、卡點與下一步；' +
+           '報表標示的資料缺漏與待確認項目，請一併說明補正或確認安排。';
   }
 
   // 講者版流程段落的 HTML（純字串，不碰 DOM）。標題與內文分兩行，
@@ -6550,7 +6735,7 @@ var state = {
       L.push('■ 建議下一步');
       L.push('・本週：定義「已簽約未導入」的判定標準與處理時限');
       if(topKe) L.push('・兩週內：提出 ' + topKe.name + ' 停滯 ' + topKe.count + ' 件的支援方案');
-      L.push('・下期起：報表補上「量體（金額）」與「停滯天數」，讓影響可量化');
+      L.push('・下期起：依週會檢核結果，檢視各階段資料品質改善情形');
       L.push('');
       L.push('Arthur Hu');
     }
@@ -10355,6 +10540,14 @@ var state = {
     '  margin-right:2px; font-size:15px; vertical-align:-1px; }',
     '.spk-flow-body{ font-size:16.5px; line-height:1.95; margin:0; color:var(--text);',
     '  white-space:pre-wrap; word-break:break-word; }',
+    '.spk-email-panel label{ display:block; margin:10px 0 4px; color:var(--muted); font-size:13px; }',
+    '.spk-email-panel textarea{ display:block; width:100%; box-sizing:border-box; margin:0 0 8px; padding:10px;',
+    '  border:1px solid var(--border); border-radius:8px; background:var(--card-2); color:var(--text);',
+    '  font-family:inherit; font-size:14px; line-height:1.6; resize:vertical; }',
+    '.spk-email-panel button{ margin:6px 8px 8px 0; padding:7px 13px; border:1px solid var(--accent);',
+    '  border-radius:8px; background:transparent; color:var(--accent); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; }',
+    '.spk-email-panel #spkEmailOutput{ font:13px/1.65 ui-monospace,monospace; }',
+    '@media print{ .spk-email-panel textarea,.spk-email-panel button{ display:none !important; } }',
     '#spkFlow{ margin:0 0 20px; }',
     '#spkFlow2{ margin:22px 0 0; padding-top:18px; border-top:1px solid var(--border); }',
     '@media print{ #spkPeriod{ -webkit-print-color-adjust:exact; print-color-adjust:exact; } }',
@@ -10389,11 +10582,9 @@ var state = {
   function buildSpeakerHtml(){
     var sec = document.getElementById('briefSection');
     if(!sec) return '';
-    // ⚠ 期間內 0 筆時 renderBriefSection 已把內容清成「本期沒有案件」，
-    //    但三種模式的快照若仍取得到舊 DOM 就會把空狀態也輸出三遍。
-    //    這裡統一改成同一句空狀態，不隨模式重複 —— 與「不產生假話」同一個原則。
-    var noData = !state.model || !state.model.rows || !applyPeriod(
-      applyFilters(state.model.rows, state.filters || defaultFilters()), state.period).rows.length;
+    var allRows = state.model && state.model.rows ? state.model.rows : [];
+    // 只有來源沒有任何資料才整份顯示空狀態；分析期間本身為 0 筆不會抹去其他 cohort。
+    var noData = !allRows.length;
     var css = '', st = document.querySelectorAll('style');
     for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
     var prevMode = state.briefMode, prevVar = state.briefGmVariant;
@@ -10433,22 +10624,41 @@ var state = {
     // 會讓檔案變成三份一樣的內容）。
     var flowRows = state.model ? state.model.rows : [];
     var filteredRows = applyFilters(flowRows, state.filters || defaultFilters());
-    var periodRows = applyPeriod(filteredRows, state.period).rows;
-    var rangesF = briefRanges(state.period, new Date());
-    var digest = buildOpeningDigest(periodRows, filteredRows, rangesF);
-    var praise = computePraise(periodRows, { minN: 2, topK: 3 });
-    // 第 4 段 v1.7.2 起改吃選定期間（舊版吃全期）—— 使用者指示排名的數據要跟著分析期間
-    var keRank = buildKeRanking(periodRows, rangesF.scopeLabel);
-    var keQuick = buildKeQuickSummary(periodRows, filteredRows);
-    var flow1 = flowBlockHtml('一、這個' + digest.scope + '的數字', digest.text);
-    var flow2 = flowBlockHtml('二、導入完成表揚', praise.text || '這段時間還沒有導入完成的案件。');
-    var flow4 = flowBlockHtml('四、各課開發排名', keRank.text || '這段期間沒有案件，無法排名。');
-    var flow5 = flowBlockHtml('五、各課追蹤：新增／累計開發／累計已導入', keQuick.text);
-    var flow6 = flowBlockHtml('六、接下來的會議進行', buildClosingLine());
+    // 週會固定三個填單 cohort；取全年度而不跟來源主報表單一 period 共用。
+    var reviewNow = new Date();
+    var weekly = weeklyReviewBundle(flowRows, reviewNow);
+    var weeklyFlowHtml = weekly.cohorts.map(function(c){
+      return flowBlockHtml(c.label, c.count ? weeklyCohortText([c]) :
+        (c.outsideCoverage ? '來源檔日期範圍為 ' + c.coverage.text + '，未完整涵蓋此期間；無法判定實際新增數。' : '來源資料涵蓋此期間，但目前沒有填單日期符合的新案件。'));
+    }).join('');
+    weeklyFlowHtml += flowBlockHtml('各課目前開發進度（在手案件）', weekly.progress.text || '目前沒有可列示的進行中案件。');
+    weeklyFlowHtml += flowBlockHtml('各課代表分享目前開發進度', buildClosingLine());
+    weeklyFlowHtml += flowBlockHtml('分階段資料品質檢核（待輔導／待確認）', weekly.quality.text);
+    var emailPanel = '<section class="spk-flow spk-email-panel"><h2>會後郵件草稿（Executive Summary）</h2>' +
+      '<p class="spk-flow-body">同一封郵件：GM 摘要在前、完整會議資料與行動追蹤在後。先由主持人補入會議中實際確認的決議與需升級個案，再複製本文寄送；不自動產生負責人或期限，也不附講者版 HTML。</p>' +
+      '<label for="spkDecisionInput">會議決議／追蹤事項（決議｜負責人｜期限）</label>' +
+      '<textarea id="spkDecisionInput" rows="5" placeholder="請填入會議中已確認的決議、負責人與期限"></textarea>' +
+      '<label for="spkEscalationInput">需跨課協調或 GM 介入的具名個案（必要時填寫）</label>' +
+      '<textarea id="spkEscalationInput" rows="3" placeholder="只填需升級處理的個案；一般案件不列名"></textarea>' +
+      '<button type="button" id="spkBuildEmail">更新郵件本文</button>' +
+      '<textarea id="spkEmailOutput" rows="18" readonly aria-label="Executive Summary 郵件本文"></textarea>' +
+      '<button type="button" id="spkCopyEmail">複製郵件本文</button></section>';
+    var emailText = weeklyEmailText(weekly, '', '');
+    // 代表分享緊接三段新增 cohort；品質檢核置於分享後作輔導清單。
+    // 講者版另含既有補充洞見模式；清楚標明它跟隨產生快照時所選期間。
+    var rangesF = briefRanges(state.period, reviewNow);
+    var pl = speakerPeriodLine(flowRows, state.period, reviewNow);
+    pl.text = '固定週會數字：今年累計／上月／上週新增（依填單日期）。補充洞見分析期間：' + pl.text.replace(/^分析期間：/, '');
+    // 原主報表與原洞見模式保留，不改其算法。固定週會三期間則在前面的獨立區塊計算。
+    // 使用既有快照期間摘要只作補充，不再複製進週會流程段落。
+    //
+    // 宣告列放在 #spkBar 下，明示後續條列／講稿／圖表採用的單一補充期間。
+    // 所有固定年度／月份／週 cohort 在此列之前已各自計算完成。
+    //
+    // 這一組原始快照區塊仍需渲染，供講者切換既有補充洞見模式使用。
     // 分析期間宣告列。放在 #spkBar 正下方、所有模式區塊之上 ——
     // 它是「這份快照的數字是哪一段期間的」唯一宣告，必須不隨模式切換而消失，
     // 否則講者切到 GM 模式就看不到期間，而檔內「本期」出現上百次。
-    var pl = speakerPeriodLine(state.model && state.model.rows, state.period);
     function escHtml(t){
       return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
@@ -10470,7 +10680,8 @@ var state = {
       + '</span><span class="spk-gap"></span>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
       + '<div id="spkPeriod" class="spk-period">' + escHtml(pl.text) + '</div>\n'
-      + '<div id="spkFlow">' + flow1 + flow2 + '</div>\n'
+      + '<div id="spkWeeklyReview">' + weeklyFlowHtml + '</div>\n'
+      + '<div id="spkEmailPanel">' + emailPanel + '</div>\n'
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
@@ -10478,7 +10689,6 @@ var state = {
       // 兩張圖：不隨模式切換（放在模式區塊之外），三種模式都看得到
       + '<div id="spkCharts" class="spk-sec">' + periodCatHtml + keCatHtml + '</div>\n'
       // 第 4／5／6 段：模式區塊之後（第 3 段「要注意」在模式區塊內，順序因此正確）
-      + '<div id="spkFlow2">' + flow4 + flow5 + flow6 + '</div>\n'
       // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
@@ -10506,6 +10716,15 @@ var state = {
       + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
       + 'navigator.clipboard.writeText(txt).then(function(){done("已複製"+tag);},legacy);}else legacy();}'
       + 'catch(e){legacy();}});'
+      + 'var ep=document.getElementById("spkEmailOutput"),di=document.getElementById("spkDecisionInput"),ei=document.getElementById("spkEscalationInput");'
+      + 'if(ep) ep.value=' + JSON.stringify(emailText) + ';'
+      + 'var EB_DEC=' + JSON.stringify('（待主持人補入決議｜負責人｜期限）') + ',EB_ESC=' + JSON.stringify('（無／待主持人確認）') + ',EB_BASE=ep?ep.value:"";'
+      + 'var eb=document.getElementById("spkBuildEmail");if(eb) eb.addEventListener("click",function(){'
+      + 'var t=EB_BASE;if(t&&di&&di.value)t=t.replace(EB_DEC,di.value);'
+      + 'if(t&&ei&&ei.value)t=t.replace(EB_ESC,ei.value);if(ep)ep.value=t;});'
+      + 'var cb=document.getElementById("spkCopyEmail");if(cb)cb.addEventListener("click",function(){'
+      + 'var ta=ep,ok=false;if(ta){ta.focus();ta.select();try{ok=document.execCommand("copy");}catch(e){ok=false;}}'
+      + 'cb.textContent=ok?"已複製":"請長按選取";setTimeout(function(){cb.textContent="複製郵件本文";},1600);});'
       + 'show("list");})();' + E + '\n'
       + '</body>\n</html>\n';
   }
@@ -11568,6 +11787,19 @@ var state = {
       buildKeRanking: buildKeRanking,
       buildKeQuickSummary: buildKeQuickSummary,
       buildClosingLine: buildClosingLine,
+      weeklyCohortRows: weeklyCohortRows,
+      weeklyStatusBucket: weeklyStatusBucket,
+      weeklyCountBy: weeklyCountBy,
+      weeklyCoverage: weeklyCoverage,
+      weeklyRangeBounds: weeklyRangeBounds,
+      weeklyCohort: weeklyCohort,
+      weeklyCohortReviews: weeklyCohortReviews,
+      weeklyCohortText: weeklyCohortText,
+      weeklyCurrentProgress: weeklyCurrentProgress,
+      weeklyDateOrderIssues: weeklyDateOrderIssues,
+      weeklyQualityReview: weeklyQualityReview,
+      weeklyReviewBundle: weeklyReviewBundle,
+      weeklyEmailText: weeklyEmailText,
       flowBlockHtml: flowBlockHtml,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
