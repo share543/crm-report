@@ -1500,8 +1500,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.9.0';   // 1.9.0：週會固定期間回顧、分階段品質檢核與會後 GM Executive Summary
-  var APP_VERSION_DATE = '2026-10-13';
+  var APP_VERSION = '1.9.1';   // 1.9.1：空值標籤改為維度自我說明（(課別未填)／(類別未填)），不再只寫 (空白)
+  var APP_VERSION_DATE = '2026-10-14';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -1559,6 +1559,17 @@ var state = {
   }
 
   // 純函式：模板列判定——除「序號」外無任何非空白值（含整列空白）視為樣板列
+  // 空值欄位的顯示標籤：一定要寫出「哪個維度」。
+  // 只寫 (空白) 會讓使用者把空值歸到錯的維度 —— 實例：「進度追蹤表」的
+  // (空白) 列被讀成「課別空白」，其實那是類別空白（該區塊第一張表是依類別）。
+  function blankLabel(dim){
+    return '(' + String(dim || '值') + '未填)';
+  }
+  // 判斷是不是「未填」標籤 —— 給「略過空值桶」這類比較用，取代字串硬比對。
+  function isBlankLabel(v){
+    return typeof v === 'string' && v.indexOf('未填)') === v.length - 3;
+  }
+
   function isTemplateRow(row){
     for(var k in row){
       if(k === '_raw' || k === '序號') continue;
@@ -1607,9 +1618,9 @@ var state = {
       var r = rows[i];
       var s = classifyStatus(r);
       byStatus[s] = (byStatus[s] || 0) + 1;
-      var ke = r['課別'] || '(空白)';
+      var ke = r['課別'] || blankLabel('課別');
       byKe[ke] = (byKe[ke] || 0) + 1;
-      var cat = r['類別'] || '(空白)';
+      var cat = r['類別'] || blankLabel('類別');
       byCategory[cat] = (byCategory[cat] || 0) + 1;
       if(s === '合作成功') coop++;
       else if(s !== '進行中' && s !== '未啟動') nonCoop++;
@@ -1656,7 +1667,7 @@ var state = {
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       var g = (r && r[field] !== undefined && r[field] !== null && String(r[field]).trim() !== '')
-        ? String(r[field]).trim() : '(空白)';
+        ? String(r[field]).trim() : blankLabel(field);
       if(!by[g]) by[g] = { group: g, total: 0, stages: {}, coop: 0, _o: (order.indexOf(g) === -1) ? 999 : order.indexOf(g) };
       var o = by[g];
       o.total++;
@@ -1818,7 +1829,7 @@ var state = {
       var r = rows[i];
       if(classifyStatus(r) === '合作成功') continue;
       var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : '(空白)';
+        ? String(r['類別']).trim() : blankLabel('類別');
       var idx = lastMilestone(r);
       if(idx < 0) continue;
       var bucket = nodeLabels[idx];
@@ -1838,7 +1849,7 @@ var state = {
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : '(空白)';
+        ? String(r['類別']).trim() : blankLabel('類別');
       if(!byCat[cat]){
         byCat[cat] = { cat: cat, total: 0, coop: 0 };
         order.push(cat);
@@ -1876,7 +1887,7 @@ var state = {
     for(var i = 0; i < list.length; i++){
       var r = list[i] || {};
       var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : '(未填)';
+        ? String(r['類別']).trim() : blankLabel('類別');
       if(!byCat[cat]){ byCat[cat] = { cat: cat, count: 0, coop: 0 }; order.push(cat); }
       byCat[cat].count++;
       if(classifyStatus(r) === '合作成功') byCat[cat].coop++;
@@ -1923,7 +1934,7 @@ var state = {
 
   // 純函式：套用推導。原地修改 rows（與 buildModel 其餘部分同一風格），
   // 回傳 { changed, byFrom } 供 UI 顯示「本次匯入調整了 N 筆」。
-  // byFrom 以原類別為鍵（空白顯示為 '(空白)'），讓回報看得出調整來自哪些類別。
+  // byFrom 以原類別為鍵（空白顯示為 (原類別未填)），讓回報看得出調整來自哪些類別。
   function applyCategoryOverride(rows){
     var list = rows || [];
     var changed = 0, byFrom = {};
@@ -1934,7 +1945,7 @@ var state = {
       var sign = (r['簽約'] !== undefined && r['簽約'] !== null && String(r['簽約']).trim() !== '');
       if(!sign) continue;
       var cur = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : '(空白)';
+        ? String(r['類別']).trim() : blankLabel('類別');
       if(cur === '甲配') continue;              // 已是甲配：沒有「轉」這件事
       r['原類別'] = cur;
       r['類別'] = '甲配';
@@ -2048,14 +2059,14 @@ var state = {
     for(var i = 0; i < list.length; i++){
       if(classifyStatus(list[i]) !== '合作成功') continue;
       total++;
-      var c = String(list[i]['類別'] || '').trim() || '(未填)';
+      var c = String(list[i]['類別'] || '').trim() || blankLabel('類別');
       byCat[c] = byCat[c] || [];
       byCat[c].push(list[i]);
     }
     function tally(arr, field){
       var m = {};
       for(var k = 0; k < arr.length; k++){
-        var v = String(arr[k][field] || '').trim() || '(未填)';
+        var v = String(arr[k][field] || '').trim() || blankLabel(field);
         m[v] = (m[v] || 0) + 1;
       }
       return Object.keys(m).map(function(name){
@@ -2110,8 +2121,8 @@ var state = {
     var m = {};
     for(var i = 0; i < list.length; i++){
       var r = list[i];
-      var ke = String(r['課別'] || '').trim() || '(未填)';
-      var cat = String(r['類別'] || '').trim() || '(未填)';
+      var ke = String(r['課別'] || '').trim() || blankLabel('課別');
+      var cat = String(r['類別'] || '').trim() || blankLabel('類別');
       m[ke] = m[ke] || { name: ke, n: 0, cats: {} };
       m[ke].n++;
       m[ke].cats[cat] = (m[ke].cats[cat] || 0) + 1;
@@ -2151,16 +2162,16 @@ var state = {
     function ensure(ke){ return (m[ke] = m[ke] || {}); }
     for(var i = 0; i < all.length; i++){
       var r = all[i];
-      var ke = String(r['課別'] || '').trim() || '(未填)';
-      var cat = String(r['類別'] || '').trim() || '(未填)';
+      var ke = String(r['課別'] || '').trim() || blankLabel('課別');
+      var cat = String(r['類別'] || '').trim() || blankLabel('類別');
       var cell = ensure(ke)[cat] = ensure(ke)[cat] || blank();
       cell.dev++;
       if(classifyStatus(r) === '合作成功') cell.imp++;
     }
     for(var j = 0; j < cur.length; j++){
       var r2 = cur[j];
-      var ke2 = String(r2['課別'] || '').trim() || '(未填)';
-      var cat2 = String(r2['類別'] || '').trim() || '(未填)';
+      var ke2 = String(r2['課別'] || '').trim() || blankLabel('課別');
+      var cat2 = String(r2['類別'] || '').trim() || blankLabel('類別');
       (ensure(ke2)[cat2] = ensure(ke2)[cat2] || blank()).newN++;
     }
     var rows = Object.keys(m).map(function(ke){
@@ -2202,7 +2213,7 @@ var state = {
   function weeklyCountBy(rows, field){
     var counts = {};
     for(var i = 0; i < (rows || []).length; i++){
-      var value = String((rows[i] && rows[i][field]) || '').trim() || '(未填)';
+      var value = String((rows[i] && rows[i][field]) || '').trim() || blankLabel(field);
       counts[value] = (counts[value] || 0) + 1;
     }
     return Object.keys(counts).map(function(name){ return { name: name, count: counts[name] }; })
@@ -2285,7 +2296,7 @@ var state = {
       if(status === '未啟動'){ unstarted++; continue; }
       if(status !== '進行中') continue;
       inProgress++;
-      var team = String(list[i]['課別'] || '').trim() || '(未填)';
+      var team = String(list[i]['課別'] || '').trim() || blankLabel('課別');
       if(!teams[team]) teams[team] = { name:team, total:0, stages:{} };
       var stageIndex = lastMilestone(list[i]);
       var stage = stageIndex >= 0 ? MILESTONES[stageIndex] : '(無里程碑)';
@@ -2398,7 +2409,7 @@ var state = {
   function validateCategoryRule(rows){
     function catOf(r){
       return (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : '(空白)';
+        ? String(r['類別']).trim() : blankLabel('類別');
     }
     function has(r, key){
       var v = r[key];
@@ -3000,7 +3011,7 @@ var state = {
       var k = KEYS[i];
       var v = f[k];
       if(v === undefined || v === null || String(v).trim() === '') continue;
-      parts.push(k + '：' + (v === BLANK_BUCKET ? '(空白)' : String(v)));
+      parts.push(k + '：' + (v === BLANK_BUCKET ? blankLabel(k) : String(v)));
     }
     var kw = String(f.關鍵字 || '').trim();
     if(kw) parts.push('關鍵字：' + kw);
@@ -3086,7 +3097,7 @@ var state = {
       if(fill === '') continue;                       // 沒有基準日無法計算
       var d = overdueDays(fill, todayStr);
       if(d === null) continue;
-      var cat = fieldStr(r, '類別').trim() || '(未填)';
+      var cat = fieldStr(r, '類別').trim() || blankLabel('類別');
       var cj = fieldStr(r, '初步接洽');
       var xq = fieldStr(r, '需求確認');
       for(var k = 0; k < rules.length; k++){
@@ -3107,10 +3118,10 @@ var state = {
         items.push({
           row: r, code: ru.code, days: d,
           label: ru.label.replace('{N}', String(ru.days)),
-          ke: fieldStr(r, '課別').trim() || '(未填)',
+          ke: fieldStr(r, '課別').trim() || blankLabel('課別'),
           cat: cat,
-          co: fieldStr(r, '公司名稱').trim() || '(未填公司)',
-          dev: fieldStr(r, '開發者').trim() || '(未填)',
+          co: fieldStr(r, '公司名稱').trim() || blankLabel('公司名稱'),
+          dev: fieldStr(r, '開發者').trim() || blankLabel('開發者'),
           isNotStarted: classifyStatus(r) === '未啟動'
         });
         break;                                        // 一筆只認第一條命中的規則
@@ -3153,8 +3164,8 @@ var state = {
     var byKe = {};
     for(var i = 0; i < list.length; i++){
       var r = list[i];
-      var ke = fieldStr(r, '課別') || '(未填課別)';
-      var cat = fieldStr(r, '類別') || '(未填類別)';
+      var ke = fieldStr(r, '課別') || blankLabel('課別');
+      var cat = fieldStr(r, '類別') || blankLabel('類別');
       if(!byKe[ke]) byKe[ke] = { total: 0, cats: {} };
       byKe[ke].total++;
       if(!byKe[ke].cats[cat]) byKe[ke].cats[cat] = [];
@@ -3575,7 +3586,7 @@ var state = {
 
     var nm = document.createElement('span');
     nm.className = 'ns-name';
-    nm.textContent = fieldStr(row, '公司名稱') || '(未填公司名稱)';
+    nm.textContent = fieldStr(row, '公司名稱') || blankLabel('公司名稱');
     btn.appendChild(nm);
 
     var dt = document.createElement('span');
@@ -4027,7 +4038,7 @@ var state = {
 
   function catOf(r){
     var cv = r && r['類別'];
-    var c = (cv !== undefined && cv !== null && String(cv).trim() !== '') ? String(cv).trim() : '(空白)';
+    var c = (cv !== undefined && cv !== null && String(cv).trim() !== '') ? String(cv).trim() : blankLabel('類別');
     return (CATS_ORDER.indexOf(c) !== -1 && c !== '其他') ? c : '其他';
   }
 
@@ -4048,7 +4059,7 @@ var state = {
     var out = {};
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
-      var ke = (r && r['課別']) || '(空白)';
+      var ke = (r && r['課別']) || blankLabel('課別');
       out[ke] = out[ke] || {};
       var k = catOf(r);
       out[ke][k] = (out[ke][k] || 0) + 1;
@@ -4194,7 +4205,7 @@ var state = {
     function topOf(arr){
       if(!arr) return null;
       for(var i2 = 0; i2 < arr.length; i2++){
-        if(arr[i2].name === '(空白)') continue;
+        if(isBlankLabel(arr[i2].name)) continue;
         return arr[i2];
       }
       return null;
@@ -4550,7 +4561,7 @@ var state = {
       if(r && r['公司名稱'] !== undefined && r['公司名稱'] !== null && String(r['公司名稱']).trim() !== ''){
         return String(r['公司名稱']).trim();
       }
-      return '(未填公司名稱)';
+      return blankLabel('公司名稱');
     }
 
     var vr = validateCategoryRule(rows);
@@ -4735,7 +4746,7 @@ var state = {
     var flagged = alertFlaggedRows(stamps);
     for(var i = 0; i < flagged.length; i++){
       var v = fieldStr(flagged[i], key);
-      if(v === '') v = '(未填)';
+      if(v === '') v = blankLabel(key);
       m[v] = (m[v] || 0) + 1;
     }
     return m;
@@ -5368,7 +5379,7 @@ var state = {
   function briefFirstReal(list){
     for(var i = 0; i < (list || []).length; i++){
       var n = list[i].name;
-      if(n !== '(空白)' && n !== '(未填公司名稱)') return list[i];
+      if(!isBlankLabel(n)) return list[i];
     }
     return null;
   }
@@ -5376,7 +5387,7 @@ var state = {
     var m = {};
     for(var i = 0; i < rows.length; i++){
       var v = String(fieldStr(rows[i], field) || '').trim();
-      if(!v) v = '(未填)';
+      if(!v) v = blankLabel(field);
       m[v] = (m[v] || 0) + 1;
     }
     var arr = [];
@@ -5477,7 +5488,7 @@ var state = {
     var impMap = {};
     for(var q1 = 0; q1 < curRows.length; q1++){
       if(classifyStatus(curRows[q1]) !== '合作成功') continue;
-      var cq1 = String(fieldStr(curRows[q1], '類別') || '').trim() || '(未填)';
+      var cq1 = String(fieldStr(curRows[q1], '類別') || '').trim() || blankLabel('類別');
       impMap[cq1] = (impMap[cq1] || 0) + 1;
     }
     // 停滯件數（依類別）—— 停滯是相對「全資料最新進度」，不是相對本期，
@@ -5485,7 +5496,7 @@ var state = {
     var staleMap = {};
     var sRows = staleRows || [];
     for(var q2 = 0; q2 < sRows.length; q2++){
-      var cq2 = String(fieldStr(sRows[q2], '類別') || '').trim() || '(未填)';
+      var cq2 = String(fieldStr(sRows[q2], '類別') || '').trim() || blankLabel('類別');
       staleMap[cq2] = (staleMap[cq2] || 0) + 1;
     }
     var out = [];
@@ -5693,10 +5704,10 @@ var state = {
     var imp = {}, nBy = {}, impBy = {};
     for(var i = 0; i < curRows.length; i++){
       var k = String(fieldStr(curRows[i], '課別') || '').trim();
-      if(!k) k = '(未填)';
+      if(!k) k = blankLabel('課別');
       // 新增與導入都要標明「客戶類別」—— GM 要看的不是課別總數，
       // 而是「這個課的量集中在哪個類別、導入的又是哪個類別」。
-      var cx = String(fieldStr(curRows[i], '類別') || '').trim() || '(未填)';
+      var cx = String(fieldStr(curRows[i], '類別') || '').trim() || blankLabel('類別');
       if(!nBy[k]) nBy[k] = {};
       nBy[k][cx] = (nBy[k][cx] || 0) + 1;
       if(classifyStatus(curRows[i]) !== '合作成功') continue;
@@ -6672,7 +6683,7 @@ var state = {
     var gmCat = computeBriefCategory(all, [], briefStaleRows(rows));
     var curByCat = {};
     for(var cc = 0; cc < cur.length; cc++){
-      var cn2 = String(fieldStr(cur[cc], '類別') || '').trim() || '(未填)';
+      var cn2 = String(fieldStr(cur[cc], '類別') || '').trim() || blankLabel('類別');
       curByCat[cn2] = (curByCat[cn2] || 0) + 1;
     }
     if(gmCat.list.length){
@@ -6693,7 +6704,7 @@ var state = {
     var gmKes = computeBriefKeProgress(all);
     var curByKe = {};
     for(var kk4 = 0; kk4 < cur.length; kk4++){
-      var kn2 = String(fieldStr(cur[kk4], '課別') || '').trim() || '(未填)';
+      var kn2 = String(fieldStr(cur[kk4], '課別') || '').trim() || blankLabel('課別');
       curByKe[kn2] = (curByKe[kn2] || 0) + 1;
     }
     if(gmKes.length){
@@ -7365,7 +7376,7 @@ var state = {
     // --- 總時程分布（可展開客戶明細）---
     function fieldVal(r, key){
       return (r && r[key] !== undefined && r[key] !== null && String(r[key]).trim() !== '')
-        ? String(r[key]).trim() : '(空白)';
+        ? String(r[key]).trim() : blankLabel(key);
     }
     // 單一客戶卡：公司名＋chips＋各階段落差 mini 表
     function buildTimingCustomer(c){
@@ -7611,11 +7622,11 @@ var state = {
     var name = document.createElement('span');
     name.className = 'do-cust-name';
     var cName = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']).trim() : '';
-    name.textContent = cName || '(未填公司名稱)';
+    name.textContent = cName || blankLabel('公司名稱');
     var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-      ? String(r['類別']).trim() : '(空白)';
+      ? String(r['類別']).trim() : blankLabel('類別');
     var ke = (r['課別'] !== undefined && r['課別'] !== null && String(r['課別']).trim() !== '')
-      ? String(r['課別']).trim() : '(空白)';
+      ? String(r['課別']).trim() : blankLabel('課別');
     var chipCat = document.createElement('span');
     chipCat.className = 'do-chip';
     chipCat.textContent = '類別 ' + cat;
@@ -7843,13 +7854,13 @@ var state = {
     });
   }
 
-  // 依「表頭名稱清單」依序取第一個非空白值；全空 → '(空白)'
+  // 依「表頭名稱清單」依序取第一個非空白值；全空 → (該維度未填)
   function fieldValue(row, keys){
     for(var i = 0; i < keys.length; i++){
       var v = row[keys[i]];
       if(v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
     }
-    return '(空白)';
+    return blankLabel(keys[0]);
   }
 
   // 純函式：站所代碼展開——一客戶可能跨多站所（以 換行／斜線 分隔）。
@@ -7896,7 +7907,7 @@ var state = {
       var names;
       if(field === '站所'){
         names = stationNamesOf(r);
-        if(!names.length) names = ['(空白)'];
+        if(!names.length) names = [blankLabel('收貨站所')];
       } else {
         names = [fieldValue(r, keys)];
       }
@@ -8466,7 +8477,8 @@ var state = {
     return out;
   }
 
-  // 空值桶（下拉選項用）：資料該欄為空白時以 '__blank__' 代表，顯示 (空白)
+  // 空值桶（下拉選項用）：資料該欄為空白時以 '__blank__' 代表，
+  // 顯示成 (該欄未填) —— 一定要寫出維度，否則使用者會把空值歸到錯的維度。
   var BLANK_BUCKET = '__blank__';
 
   // 狀態下拉偏好順序（不影響排序，僅用於選單顯示次序）
@@ -8942,8 +8954,9 @@ var state = {
     return head.concat(rest);
   }
 
-  function optionValueLabel(v){
-    return v === BLANK_BUCKET ? '(空白)' : v;
+  function optionValueLabel(v, dim){
+    if(v !== BLANK_BUCKET) return v;
+    return dim ? blankLabel(dim) : '(未填)';
   }
 
   // 純函式：分頁按鈕清單（頁數少全列；多則 第一個＋當前±2＋最後一個，超過顯示 …）
@@ -9001,7 +9014,7 @@ var state = {
       for(var i = 0; i < values.length; i++){
         var opt = document.createElement('option');
         opt.value = values[i];
-        opt.textContent = optionValueLabel(values[i]);
+        opt.textContent = optionValueLabel(values[i], fieldKey);
         if(values[i] === selected) opt.selected = true;
         sel.appendChild(opt);
       }
@@ -9190,7 +9203,7 @@ var state = {
   function appendOriginChip(container, r){
     if(!container || !r || !r._catOverridden) return false;
     var from = (r['原類別'] !== undefined && r['原類別'] !== null && String(r['原類別']).trim() !== '')
-      ? String(r['原類別']).trim() : '(空白)';
+      ? String(r['原類別']).trim() : blankLabel('原類別');
     var chip = document.createElement('span');
     chip.className = 'do-chip do-chip-origin';
     chip.title = '此筆因「甲指成功轉甲配」且已簽約，由 ' + from + ' 調整為 甲配';
@@ -10398,7 +10411,7 @@ var state = {
     }
     // 未填類別要主動講，否則講者會以為分類是完整的
     var blank = null;
-    for(var b = 0; b < data.items.length; b++) if(data.items[b].cat === '(未填)'){ blank = data.items[b]; break; }
+    for(var b = 0; b < data.items.length; b++) if(isBlankLabel(data.items[b].cat)){ blank = data.items[b]; break; }
     if(blank){
       var warn = document.createElement('p');
       warn.className = 'pc-warn';
@@ -11893,6 +11906,8 @@ var state = {
       paginate: paginate,
       distinctFieldValues: distinctFieldValues,
       optionValueLabel: optionValueLabel,
+      blankLabel: blankLabel,
+      isBlankLabel: isBlankLabel,
       pagerItems: pagerItems,
       renderList: renderList,
       buildListRow: buildListRow,
