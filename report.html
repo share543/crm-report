@@ -276,6 +276,9 @@
   .dr-case-head{ display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
   .dr-note{ font-size:12px; color:var(--muted); padding:1px 0 1px 18px; white-space:pre-wrap; }
   .dr-note-label{ color:var(--text); font-weight:600; }
+  .dr-legend{ display:flex; flex-wrap:wrap; gap:5px 16px; margin:2px 0 8px;
+              font-size:12.5px; color:var(--muted); }
+  .dr-legend-item{ display:inline-flex; align-items:center; gap:6px; }
   /* 手機：原因欄改為可縮＋省略號，長條與數字縮窄，避免橫向溢出 */
   /* 限 screen：A4 直式可列印寬約 794px，未限會讓列印版也吃到手機規則 */
   @media screen and (max-width:820px){
@@ -1521,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.10.0';   // 1.10.0：新增「未合作結案原因分析」區塊（已結案且未導入，依結案欄原因彙總，置於案件清單前）
+  var APP_VERSION = '1.11.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -7798,6 +7801,35 @@ var state = {
   //       說明與洽談內容仍逐筆附在案件卡，開會要看細節時可展開。
   // ---------------------------------------------------------------------------
 
+  // 純函式：類別 → 既有類別色序索引（未列者歸最後一色，與 ns 長條一致）
+  function catColorIndex(cat){
+    var i = NS_CAT_ORDER.indexOf(cat);
+    return i === -1 ? 3 : i;
+  }
+
+  // 純函式：把案件列依「類別」分組
+  // 順序依 NS_CAT_ORDER（未列者最後），同序依件數多→少先（與未啟動追蹤表同一套順序邏輯）
+  function groupByCategory(rows){
+    var list = rows || [];
+    var m = {}, order = [];
+    for(var i = 0; i < list.length; i++){
+      var cat = fieldStr(list[i], '類別') || blankLabel('類別');
+      if(!m[cat]){ m[cat] = { cat: cat, count: 0, rows: [] }; order.push(cat); }
+      m[cat].count++;
+      m[cat].rows.push(list[i]);
+    }
+    var out = [];
+    for(var j = 0; j < order.length; j++) out.push(m[order[j]]);
+    out.sort(function(a, b){
+      var ia = NS_CAT_ORDER.indexOf(a.cat); if(ia === -1) ia = NS_CAT_ORDER.length;
+      var ib = NS_CAT_ORDER.indexOf(b.cat); if(ib === -1) ib = NS_CAT_ORDER.length;
+      if(ia !== ib) return ia - ib;
+      if(b.count !== a.count) return b.count - a.count;
+      return a.cat < b.cat ? -1 : (a.cat > b.cat ? 1 : 0);
+    });
+    return out;
+  }
+
   // 純函式：結案原文 → 正規化原因標籤
   // 原值常帶換行與尾巴（例：「客戶婉拒\n故先結案」），故只取第一行，再去尾巴與括號補充。
   function dropReasonLabel(text){
@@ -7821,7 +7853,7 @@ var state = {
   function computeDropReasonAnalysis(rows){
     var list = rows || [];
     var total = 0, closedAll = 0, imported = 0, anomaly = 0;
-    var byReason = {}, order = [];
+    var byReason = {}, order = [], scopeRows = [];
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var jiean = fieldStr(r, '結案');
@@ -7838,6 +7870,7 @@ var state = {
       }
       byReason[label].count++;
       byReason[label].rows.push(r);
+      scopeRows.push(r);
       total++;
     }
     var items = [];
@@ -7848,9 +7881,11 @@ var state = {
     });
     for(var k = 0; k < items.length; k++){
       items[k].share = total ? (items[k].count / total) : 0;
+      items[k].cats = groupByCategory(items[k].rows);
     }
     return { total: total, closedAll: closedAll, imported: imported, anomaly: anomaly,
-             items: items, max: items.length ? items[0].count : 0 };
+             items: items, cats: groupByCategory(scopeRows),
+             max: items.length ? items[0].count : 0 };
   }
 
   // 日期顯示：沿用全站 displayDate（標準 YYYY-MM-DD）
@@ -7889,9 +7924,9 @@ var state = {
 
     var meta = document.createElement('span');
     meta.className = 'ns-date';
+    // 類別不放這裡：展開清單已依類別分組，重複顯示反而干擾
     var metaParts = [
       fieldStr(r, '課別') || blankLabel('課別'),
-      fieldStr(r, '類別') || blankLabel('類別'),
       drDate(fieldStr(r, '填單日期')) || blankLabel('填單日期')
     ];
     meta.textContent = metaParts.join('・');
@@ -7930,12 +7965,15 @@ var state = {
     var barCell = nsCell('ns-c-bar');
     var bar = document.createElement('span');
     bar.className = 'ns-bar';
-    var seg = document.createElement('span');
-    seg.className = 'ns-seg c0';
-    seg.style.width = (max > 0 ? (item.count / max * 100) : 0) + '%';
-    seg.title = item.reason + ' ' + item.count + ' 筆';
-    seg.textContent = String(item.count);
-    bar.appendChild(seg);
+    for(var ci = 0; ci < item.cats.length; ci++){
+      var cg = item.cats[ci];
+      var seg = document.createElement('span');
+      seg.className = 'ns-seg c' + catColorIndex(cg.cat);
+      seg.style.width = (max > 0 ? (cg.count / max * 100) : 0) + '%';
+      seg.title = cg.cat + ' ' + cg.count + ' 筆';
+      if(cg.count >= 2) seg.textContent = String(cg.count);
+      bar.appendChild(seg);
+    }
     barCell.appendChild(bar);
     row.appendChild(barCell);
 
@@ -7944,12 +7982,22 @@ var state = {
     var cases = document.createElement('div');
     cases.className = 'ns-cases';
     cases.hidden = true;
-    var caseList = document.createElement('div');
-    caseList.className = 'ns-list';
-    for(var c = 0; c < item.rows.length; c++){
-      caseList.appendChild(buildDropReasonCase(item.rows[c]));
+    for(var c = 0; c < item.cats.length; c++){
+      var cg2 = item.cats[c];
+      var catHead = document.createElement('div');
+      catHead.className = 'ns-cat-head';
+      var dot = document.createElement('span');
+      dot.className = 'ns-dot c' + catColorIndex(cg2.cat);
+      catHead.appendChild(dot);
+      catHead.appendChild(document.createTextNode(cg2.cat + '（' + cg2.count + '）'));
+      cases.appendChild(catHead);
+      var caseList = document.createElement('div');
+      caseList.className = 'ns-list';
+      for(var c2 = 0; c2 < cg2.rows.length; c2++){
+        caseList.appendChild(buildDropReasonCase(cg2.rows[c2]));
+      }
+      cases.appendChild(caseList);
     }
-    cases.appendChild(caseList);
 
     row.addEventListener('click', function(){
       var open = cases.hidden;
@@ -7977,7 +8025,8 @@ var state = {
     note.textContent = '母體：已結案且未導入的案件。原因取自「結案」欄——來源資料的「說明」欄填充率只有 20%，'
       + '若只取說明會有八成空白，故以結案欄為主，說明與洽談內容逐筆附在案件卡。'
       + '結案寫「導入完成」但導入欄空白者屬資料異常，不列入未合作。'
-      + '本區塊隨「分析期間」與篩選縮放。點任一列可展開該原因的案件清單。';
+      + '本區塊隨「分析期間」與篩選縮放。長條依「類別」分段，'
+      + '點任一列可展開該原因的案件清單（依類別分組）。';
     box.appendChild(note);
 
     var cap = document.createElement('p');
@@ -7990,6 +8039,25 @@ var state = {
       + '（長條以最大值 ' + data.max + ' 為 100%）';
     box.appendChild(cap);
 
+    // 類別小計圖例（讓「類別」也是第一級維度，不必展開就看得到）
+    if(data.total && data.cats.length){
+      var legend = document.createElement('div');
+      legend.className = 'dr-legend';
+      for(var ci2 = 0; ci2 < data.cats.length; ci2++){
+        var cg3 = data.cats[ci2];
+        var li = document.createElement('span');
+        li.className = 'dr-legend-item';
+        var ldot = document.createElement('span');
+        ldot.className = 'ns-dot c' + catColorIndex(cg3.cat);
+        li.appendChild(ldot);
+        var lt = document.createElement('span');
+        lt.textContent = cg3.cat + ' ' + cg3.count + ' 件（'
+          + (100 * cg3.count / data.total).toFixed(0) + '%）';
+        li.appendChild(lt);
+        legend.appendChild(li);
+      }
+      box.appendChild(legend);
+    }
     if(!data.total){
       var e = document.createElement('p');
       e.className = 'ns-empty';
@@ -8006,7 +8074,7 @@ var state = {
     head.className = 'ns-trow ns-thead';
     head.appendChild(nsCell('ns-c-caret', ''));
     head.appendChild(nsCell('dr-c-reason', '結案原因'));
-    head.appendChild(nsCell('ns-c-bar', '件數分布'));
+    head.appendChild(nsCell('ns-c-bar', '類別組成'));
     head.appendChild(nsCell('dr-c-num', '件數／占比'));
     table.appendChild(head);
 
@@ -12199,6 +12267,8 @@ var state = {
       dropReasonLabel: dropReasonLabel,
       isDropReasonCase: isDropReasonCase,
       computeDropReasonAnalysis: computeDropReasonAnalysis,
+      groupByCategory: groupByCategory,
+      catColorIndex: catColorIndex,
       state: state
     };
   }
