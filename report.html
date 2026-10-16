@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3881,10 +3881,11 @@ var state = {
       var col = data.cols[c2];
       var prev = data.cols[c2 - 1];
       if(!c2 || col.l1 !== prev.l1 || col.l2 !== prev.l2){
-        l2Runs.push({ l1: col.l1, l2: col.l2, count: 1, hasSub: !!(col.l3 || col.l4) });
+        l2Runs.push({ l1: col.l1, l2: col.l2, count: 1, hasL3: !!col.l3, hasL4: !!col.l4 });
       } else {
         l2Runs[l2Runs.length - 1].count++;
-        if(col.l3 || col.l4) l2Runs[l2Runs.length - 1].hasSub = true;
+        if(col.l3) l2Runs[l2Runs.length - 1].hasL3 = true;
+        if(col.l4) l2Runs[l2Runs.length - 1].hasL4 = true;
       }
     }
     for(var b = 0; b < l2Runs.length; b++){
@@ -3893,9 +3894,11 @@ var state = {
       if(l2Runs[b].count > 1) th2.setAttribute('colspan', String(l2Runs[b].count));
       if(b > 0 && l2Runs[b].l1 !== l2Runs[b - 1].l1) th2.classList.add('qk-gstart');
       th2.classList.add(l2Runs[b].l2 === '新增' ? 'qk-l2-new' : 'qk-l2-cum');
-      // 只有「第三、第四層都沒有」的欄（甲配、零擔）才跨 r2/r3/r4；
-      // 甲指的開發累計有第四層（舊/新）但沒有第三層，不該跨列
-      if(!l2Runs[b].hasSub) th2.setAttribute('rowspan', '3');
+      // 依該群「實際有幾層子標題」決定跨列數，否則缺的那一列會留白：
+      //   有 l3+l4 → 1 列；只有 l4（甲指的開發累計）→ 2 列（貼著舊客戶/新註冊）；
+      //   都沒有（甲配、零擔）→ 3 列（跨到表頭底）
+      var rs2 = 3 - (l2Runs[b].hasL3 ? 1 : 0) - (l2Runs[b].hasL4 ? 1 : 0);
+      if(rs2 > 1) th2.setAttribute('rowspan', String(rs2));
       th2.textContent = l2Runs[b].l2;
       r2.appendChild(th2);
     }
