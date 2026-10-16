@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.13.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1731,20 +1731,46 @@ var state = {
   //   cells[ke] = [7 數值]；totals = [7 數值各課加總]；
   //   importCum = { 甲指:n, 甲配:n, 零擔:n }（導入日期欄非空的累計）。
   var KE_QUICK_ORDER = ['北一課','北二課','北三課','南一課','南二課','中課'];
+  // 欄位 key：l1/l2/l3/l4 以 \u0000 串接（查表用，不吃陣列順序）
+  function KE_QUICK_KEY(c){
+    return c.l1 + '\u0000' + (c.l2 || '') + '\u0000' + (c.l3 || '') + '\u0000' + (c.l4 || '');
+  }
+
+  // 2026-10-16 使用者定案：甲指的 1P/3P 再分「舊客戶／新註冊」（第四層 l4）。
+  // 甲配 **不分新舊**（使用者指示）；零擔依規則只有新客，故不設來源層。
   var KE_QUICK_COLUMNS = [
-    { l1: '甲指', l2: '新增', l3: '1P(SCM)' },
-    { l1: '甲指', l2: '新增', l3: '3P(MO+)' },
-    { l1: '甲指', l2: '開發累計' },
+    { l1: '甲指', l2: '新增',    l3: '1P(SCM)', l4: '舊客戶' },
+    { l1: '甲指', l2: '新增',    l3: '1P(SCM)', l4: '新註冊' },
+    { l1: '甲指', l2: '新增',    l3: '3P(MO+)', l4: '舊客戶' },
+    { l1: '甲指', l2: '新增',    l3: '3P(MO+)', l4: '新註冊' },
+    { l1: '甲指', l2: '開發累計',               l4: '舊客戶' },
+    { l1: '甲指', l2: '開發累計',               l4: '新註冊' },
     { l1: '甲配', l2: '新增' },
     { l1: '甲配', l2: '開發累計' },
     { l1: '零擔', l2: '新增' },
     { l1: '零擔', l2: '開發累計' }
   ];
+  // ⚠ 欄位以「名稱」查表，不用陣列索引。
+  //   舊版 tally() 用 KE_QUICK_COLUMNS[0]／[1]／[2] 這種索引取值，
+  //   欄位一增減就會指到錯的格（不報錯、數字靜默跑掉）——加第四層時特別危險。
+  var KE_QUICK_INDEX = (function(){
+    var o = {};
+    for(var i = 0; i < KE_QUICK_COLUMNS.length; i++){
+      o[KE_QUICK_KEY(KE_QUICK_COLUMNS[i])] = i;
+    }
+    return o;
+  })();
+  var KQ_SRC_OLD = '舊客戶', KQ_SRC_NEW = '新註冊';
+  // 來源判定：`客戶來源` 非空且不是「新註冊」→ 舊客戶（與 oldCustomerStats 同一條規則）
+  function keQuickSource(r){
+    var s = String((r && r['客戶來源'] !== undefined && r['客戶來源'] !== null) ? r['客戶來源'] : '').trim();
+    return (s !== '' && s !== KQ_SRC_NEW) ? KQ_SRC_OLD : KQ_SRC_NEW;
+  }
 
   function computeKeQuick(scopeRows, periodRows){
     scopeRows = scopeRows || [];
     periodRows = periodRows || [];
-    function keyOf(c){ return c.l1 + '\u0000' + (c.l2 || '') + '\u0000' + (c.l3 || ''); }
+    function keyOf(c){ return KE_QUICK_KEY(c); }
     function is13(cat){ return cat === '1P(SCM)' || cat === '3P(MO+)'; }
     function hasDate(r, k){
       var v = r && r[k];
@@ -1763,11 +1789,18 @@ var state = {
         var ke = (r && r['課別']) || '';
         ke = String(ke).trim();
         var key = null;
-        if(cat === '1P(SCM)') key = keyOf(isNew ? KE_QUICK_COLUMNS[0] : KE_QUICK_COLUMNS[2]);
-        else if(cat === '3P(MO+)') key = keyOf(isNew ? KE_QUICK_COLUMNS[1] : KE_QUICK_COLUMNS[2]);
-        else if(cat === '甲配') key = keyOf(isNew ? KE_QUICK_COLUMNS[3] : KE_QUICK_COLUMNS[4]);
-        else if(cat === '零擔') key = keyOf(isNew ? KE_QUICK_COLUMNS[5] : KE_QUICK_COLUMNS[6]);
-        if(!key) continue;
+        // 依「名稱」組 key 查表：甲指的 1P/3P 在新增時分 1P/3P 且分來源；
+        // 開發累計只分來源（不分 1P/3P）；甲配／零擔不分來源。
+        var met = isNew ? '新增' : '開發累計';
+        var srce = keQuickSource(r);
+        if(cat === '1P(SCM)' || cat === '3P(MO+)'){
+          key = isNew ? ('甲指\u0000新增\u0000' + cat + '\u0000' + srce)
+                      : ('甲指\u0000開發累計\u0000\u0000' + srce);
+        } else if(cat === '甲配' || cat === '零擔'){
+          key = cat + '\u0000' + met + '\u0000\u0000';
+        } else {
+          continue;
+        }
         m[key] = m[key] || {};
         m[key][ke] = (m[key][ke] || 0) + 1;
       }
@@ -1786,20 +1819,44 @@ var state = {
       }
       cells[ke] = row;
     }
-    var totals = [0, 0, 0, 0, 0, 0, 0];
+    // ⚠ 不可寫死長度：欄位增減時，多出來的欄會是 undefined，累加後變 NaN
+    //   （v1.14.0 加第四層時實際踩到：totals 寫死 7 個零、欄位變 10 欄 → 尾三格 NaN）
+    var totals = [];
+    for(var t0 = 0; t0 < KE_QUICK_COLUMNS.length; t0++) totals.push(0);
     for(var c2 = 0; c2 < KE_QUICK_COLUMNS.length; c2++){
       for(var k2 = 0; k2 < KE_QUICK_ORDER.length; k2++){
         totals[c2] += cells[KE_QUICK_ORDER[k2]][c2];
+      }
+    }
+    // ⚠ 不可用 catOf() 的單值合成類別來分組：
+    //   「同時勾零擔＋1P/3P」的列會被算成零擔（實測 6 筆跑錯組），
+    //   而「甲配」不佔用 類別，會永遠是 0（實測應為 1）。
+    //   新格式一律看勾選欄，舊格式（沒有勾選欄）才退回 類別。
+    var srcNewFmt = false;
+    for(var z0 = 0; z0 < scopeRows.length; z0++){
+      var rz0 = scopeRows[z0];
+      if(rz0 && (('1P(SCM)' in rz0) || ('3P(MO+)' in rz0) || ('甲配' in rz0) || ('零擔' in rz0))){
+        srcNewFmt = true; break;
       }
     }
     var importCum = { '甲指': 0, '甲配': 0, '零擔': 0 };
     for(var i2 = 0; i2 < scopeRows.length; i2++){
       var r2 = scopeRows[i2];
       if(!hasDate(r2, '導入')) continue;
-      var c3 = catOf(r2);
-      if(is13(c3)) importCum['甲指']++;
-      else if(c3 === '甲配') importCum['甲配']++;
-      else if(c3 === '零擔') importCum['零擔']++;
+      var g13, gJP, gZD;
+      if(srcNewFmt){
+        g13 = isTickMark(r2['1P(SCM)']) || isTickMark(r2['3P(MO+)']);
+        gJP = isTickMark(r2['甲配']);
+        gZD = isTickMark(r2['零擔']);
+      } else {
+        var c3 = catOf(r2);
+        g13 = is13(c3);
+        gJP = (c3 === '甲配');
+        gZD = (c3 === '零擔');
+      }
+      if(g13) importCum['甲指']++;
+      if(gJP) importCum['甲配']++;
+      if(gZD) importCum['零擔']++;
     }
     return { kes: KE_QUICK_ORDER.slice(), cols: KE_QUICK_COLUMNS,
              cells: cells, totals: totals, importCum: importCum };
@@ -3796,7 +3853,7 @@ var state = {
     var r1 = document.createElement('tr');
     var corner = document.createElement('th');
     corner.className = 'qk-corner';
-    corner.setAttribute('rowspan', '3');
+    corner.setAttribute('rowspan', '4');
     corner.textContent = '課別';
     r1.appendChild(corner);
     var l1Runs = [];
@@ -3824,9 +3881,10 @@ var state = {
       var col = data.cols[c2];
       var prev = data.cols[c2 - 1];
       if(!c2 || col.l1 !== prev.l1 || col.l2 !== prev.l2){
-        l2Runs.push({ l1: col.l1, l2: col.l2, count: 1 });
+        l2Runs.push({ l1: col.l1, l2: col.l2, count: 1, hasSub: !!(col.l3 || col.l4) });
       } else {
         l2Runs[l2Runs.length - 1].count++;
+        if(col.l3 || col.l4) l2Runs[l2Runs.length - 1].hasSub = true;
       }
     }
     for(var b = 0; b < l2Runs.length; b++){
@@ -3835,26 +3893,49 @@ var state = {
       if(l2Runs[b].count > 1) th2.setAttribute('colspan', String(l2Runs[b].count));
       if(b > 0 && l2Runs[b].l1 !== l2Runs[b - 1].l1) th2.classList.add('qk-gstart');
       th2.classList.add(l2Runs[b].l2 === '新增' ? 'qk-l2-new' : 'qk-l2-cum');
+      // 只有「第三、第四層都沒有」的欄（甲配、零擔）才跨 r2/r3/r4；
+      // 甲指的開發累計有第四層（舊/新）但沒有第三層，不該跨列
+      if(!l2Runs[b].hasSub) th2.setAttribute('rowspan', '3');
       th2.textContent = l2Runs[b].l2;
       r2.appendChild(th2);
     }
     thead.appendChild(r2);
 
+    // r3：第三層（1P(SCM)／3P(MO+)）——只在有 l3 的欄出現，跨其 l4 變體數
     var r3 = document.createElement('tr');
+    var l3Runs = [];
     for(var c3 = 0; c3 < data.cols.length; c3++){
-      var th3 = document.createElement('th');
-      if(data.cols[c3].l3){
-        th3.className = 'qk-l3';
-        th3.classList.add(data.cols[c3].l3 === '1P(SCM)' ? 'qk-l3-1p' : 'qk-l3-3p');
-        th3.textContent = data.cols[c3].l3;
+      var colA = data.cols[c3], pvA = data.cols[c3 - 1];
+      if(!colA.l3) continue;
+      if(!c3 || !pvA.l3 || colA.l1 !== pvA.l1 || colA.l2 !== pvA.l2 || colA.l3 !== pvA.l3){
+        l3Runs.push({ l1: colA.l1, l2: colA.l2, l3: colA.l3, count: 1, at: c3 });
       } else {
-        th3.className = 'qk-empty';
-        th3.textContent = '－';
+        l3Runs[l3Runs.length - 1].count++;
       }
-      if(c3 > 0 && data.cols[c3].l1 !== data.cols[c3 - 1].l1) th3.classList.add('qk-gstart');
+    }
+    for(var b3 = 0; b3 < l3Runs.length; b3++){
+      var th3 = document.createElement('th');
+      th3.className = 'qk-l3';
+      th3.classList.add(l3Runs[b3].l3 === '1P(SCM)' ? 'qk-l3-1p' : 'qk-l3-3p');
+      if(l3Runs[b3].count > 1) th3.setAttribute('colspan', String(l3Runs[b3].count));
+      if(l3Runs[b3].at > 0 && data.cols[l3Runs[b3].at].l1 !== data.cols[l3Runs[b3].at - 1].l1) th3.classList.add('qk-gstart');
+      th3.textContent = l3Runs[b3].l3;
       r3.appendChild(th3);
     }
     thead.appendChild(r3);
+
+    // r4：第四層（舊客戶／新註冊）——沿用既有 qk-l3 樣式，不新創配色
+    var r4 = document.createElement('tr');
+    for(var c4h = 0; c4h < data.cols.length; c4h++){
+      var colB = data.cols[c4h];
+      if(!colB.l4) continue;
+      var th4 = document.createElement('th');
+      th4.className = 'qk-l3 qk-l4';
+      th4.textContent = colB.l4;
+      if(c4h > 0 && colB.l1 !== data.cols[c4h - 1].l1) th4.classList.add('qk-gstart');
+      r4.appendChild(th4);
+    }
+    thead.appendChild(r4);
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
