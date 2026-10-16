@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.12.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.13.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2011,6 +2011,23 @@ var state = {
   //   結果會跟著「類別合成優先序」變動。老客戶是使用者的定義，不該受顯示用優先序影響。
   //   新格式讀勾選欄、舊格式讀 類別 欄 —— 兩者都回傳同一組數字。
   // 使用者 2026-10-16 定案：只要「幾筆」與「1P／3P 各幾筆」，不做其他拆分。
+  // 純函式：把 `客戶來源` 的空白填成「新註冊」。
+  // 理由（使用者 2026-10-16 定案）：沒標示的就是新註冊客戶。若留空白，
+  // 案件清單那一欄會是一片空白，讀的人得靠記憶才知道「空白＝新註冊」。
+  // ⚠ 沒有 `客戶來源` 欄的舊檔**不填**（不憑推測生資料），維持空白。
+  function normalizeCustomerSource(rows, headers){
+    var hs = headers || [];
+    if(hs.indexOf('客戶來源') === -1) return { applied: false };
+    var list = rows || [], n = 0;
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(!r) continue;
+      var s = String(r['客戶來源'] === undefined || r['客戶來源'] === null ? '' : r['客戶來源']).trim();
+      if(!s){ r['客戶來源'] = '新註冊'; n++; }
+    }
+    return { applied: true, filled: n };
+  }
+
   // ⚠ 舊客戶的判定來源有兩層（使用者 2026-10-16 定案）：
   //   「客戶來源」＝這家是不是 **MOMO 原有的舊客戶名單**（名單來源，與類別無關）；
   //   「客戶類型」才是看 1P(SCM)／3P(MO+)／甲配／零擔 打了哪些勾。
@@ -2030,7 +2047,9 @@ var state = {
       var c = String(r['類別'] === undefined || r['類別'] === null ? '' : r['類別']).trim();
       var isOld;
       if(hasSrc){
-        isOld = String(r['客戶來源'] === undefined || r['客戶來源'] === null ? '' : r['客戶來源']).trim() !== '';
+        // ⚠ 空白已被 normalizeCustomerSource 填成「新註冊」，所以不能只看「非空」
+        var sv = String(r['客戶來源'] === undefined || r['客戶來源'] === null ? '' : r['客戶來源']).trim();
+        isOld = (sv !== '' && sv !== '新註冊');
       } else if(newFmt){
         isOld = isTickMark(r['1P(SCM)']) || isTickMark(r['3P(MO+)']);
       } else {
@@ -8860,6 +8879,7 @@ var state = {
     { key: '課別', label: '課別' },
     { key: '開發者', label: '開發者' },
     { key: '類別', label: '類別' },
+    { key: '客戶來源', label: '客戶來源' },
     { key: '收貨站所', label: '收貨站所' },
     { key: '商品類別', label: '商品類別' },
     { key: '填單日期', label: '填單日期' },
@@ -10704,6 +10724,10 @@ var state = {
     // 「甲指成功轉甲配」推導（新格式已直接標 甲配，舊規則會把甲指資訊蓋掉）。
     state.catDerive = (model && model.rows)
       ? deriveCategoryFromTicks(model.rows, model.headers)
+      : { applied: false };
+    // 客戶來源：把空白填成「新註冊」（沒有該欄的舊檔不填）
+    state.srcDerive = (model && model.rows)
+      ? normalizeCustomerSource(model.rows, model.headers)
       : { applied: false };
     state.catOverride = (model && model.rows && !state.catDerive.applied)
       ? applyCategoryOverride(model.rows)
