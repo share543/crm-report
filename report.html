@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.11.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.12.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1594,10 +1594,18 @@ var state = {
     return typeof v === 'string' && v.indexOf('未填)') === v.length - 3;
   }
 
+  // 樣板列＝沒有任何「辨識欄」或「進度欄」的列 —— 這種列不是案件。
+  // ⚠ 2026-10-16 加嚴（v1.12.0）：原本是「除了 序號 以外全空才算樣板列」，
+  //   結果只填了 `序號` ＋ `預估營收/月 = 0` 的殘留列會被當成案件
+  //   （實測新檔 75 列），把總案件數從 234 灌成 309，連帶讓「未啟動」多 75 件。
+  //   加嚴後：舊檔結果**完全不變**（實測 226 列），新檔 309 → 234 列。
+  //   一個 0 或一個空字串不該讓殘留列變成一個「案件」。
+  var TEMPLATE_KEEP_COLS = ['公司名稱', '統編', '課別', '開發者', '填單日期', '初步接洽', '結案'];
   function isTemplateRow(row){
-    for(var k in row){
-      if(k === '_raw' || k === '序號') continue;
-      if(row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return false;
+    if(!row) return true;
+    for(var i = 0; i < TEMPLATE_KEEP_COLS.length; i++){
+      var v = row[TEMPLATE_KEEP_COLS[i]];
+      if(v !== undefined && v !== null && String(v).trim() !== '') return false;
     }
     return true;
   }
@@ -1954,6 +1962,71 @@ var state = {
       return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
     }).toUpperCase();
     return s === 'V' || s === '✓' || s === '✔' || s === '☑' || s === '√';
+  }
+
+  // ---------------------------------------------------------------------------
+  // 類別編碼：新格式＝4 個獨立打勾欄（零擔／1P(SCM)／3P(MO+)／甲配）
+  // ---------------------------------------------------------------------------
+  // 使用者 2026-10-16 定案：欄位拆開是因為**一個客戶可以同時有兩個類別**；
+  // 且「甲指」不是第 5 個標籤，而是 1P ∪ 3P 的上層彙總（＝老客戶）。
+  //
+  // 設計：把 4 欄**合成回既有的單一 `類別` 欄位**，讓下游（catOf／CATS_ORDER／
+  // NS_CAT_ORDER／OVERDUE_RULES／類別分段／課別快速表…共 294 處引用）完全不用改。
+  //   - 優先序 **零擔 → 1P(SCM) → 3P(MO+)**（使用者 2026-10-16 定案）：
+  //     同時勾零擔與甲指的列在業務上是「零擔客戶、同時也在做甲指」，類別歸零擔
+  //     才與既有的「類別規則檢核」（簽約＋導入皆有日期者應為零擔/甲配）一致。
+  //     ⚠ 老客戶的數字**不受這個優先序影響** —— oldCustomerStats 直接讀原始勾選欄。
+  //   - 甲配 **不佔用 類別**（它是轉換狀態、不是產品線），另存 r['_甲配']。
+  //   - 一個勾都沒有 → 類別留空，沿用既有「(類別未填)」標籤。
+  //   - 舊格式（檔案有 `類別` 欄）→ 完全不動 ⇒ 新舊檔都能載，不必二選一。
+  var CAT_TICK_COLS = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
+
+  // 純函式：合成類別。原地修改 rows，回傳統計供匯入摘要顯示。
+  function deriveCategoryFromTicks(rows, headers){
+    var hs = headers || [];
+    if(hs.indexOf('類別') !== -1) return { applied: false, reason: '舊格式（有 類別 欄）' };
+    var tick = CAT_TICK_COLS.filter(function(c){ return hs.indexOf(c) !== -1; });
+    if(!tick.length) return { applied: false, reason: '沒有類別編碼欄' };
+    var list = rows || [];
+    var p1 = 0, p3 = 0, z = 0, jp = 0, none = 0, multi = 0;
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(!r) continue;
+      var h1 = isTickMark(r['1P(SCM)']), h3 = isTickMark(r['3P(MO+)']),
+          hz = isTickMark(r['零擔']),    hj = isTickMark(r['甲配']);
+      if((h1?1:0) + (h3?1:0) + (hz?1:0) + (hj?1:0) > 1) multi++;
+      if(hj){ r['_甲配'] = true; jp++; }
+      if(hz){ r['類別'] = '零擔'; z++; }
+      else if(h1){ r['類別'] = '1P(SCM)'; p1++; }
+      else if(h3){ r['類別'] = '3P(MO+)'; p3++; }
+      else { r['類別'] = ''; none++; }
+    }
+    return { applied: true, p1: p1, p3: p3, zhit: z, jiapei: jp, none: none,
+             multi: multi, old: p1 + p3, tickCols: tick };
+  }
+
+  // 純函式：老客戶＝1P(SCM) 或 3P(MO+)（即甲指）。
+  // ⚠ 必須看**原始欄位**，不能從合成後的 `類別` 反推：
+  //   `類別` 是單值，拿它算會讓「同時勾零擔與甲指」的列被算成零擔而漏掉，
+  //   結果會跟著「類別合成優先序」變動。老客戶是使用者的定義，不該受顯示用優先序影響。
+  //   新格式讀勾選欄、舊格式讀 類別 欄 —— 兩者都回傳同一組數字。
+  // 使用者 2026-10-16 定案：只要「幾筆」與「1P／3P 各幾筆」，不做其他拆分。
+  function oldCustomerStats(rows, headers){
+    var list = rows || [];
+    var hs = headers || [];
+    var newFmt = hs.indexOf('1P(SCM)') !== -1 || hs.indexOf('3P(MO+)') !== -1;
+    var p1 = 0, p3 = 0, total = 0;
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(!r) continue;
+      var c = String(r['類別'] === undefined || r['類別'] === null ? '' : r['類別']).trim();
+      var has1 = newFmt ? isTickMark(r['1P(SCM)']) : (c === '1P(SCM)');
+      var has3 = newFmt ? isTickMark(r['3P(MO+)']) : (c === '3P(MO+)');
+      if(has1) p1++;
+      if(has3) p3++;
+      if(has1 || has3) total++;   // 同一列兩個都勾只算一筆（甲指是聯集）
+    }
+    return { total: total, p1: p1, p3: p3 };
   }
 
   // 純函式：套用推導。原地修改 rows（與 buildModel 其餘部分同一風格），
@@ -6047,6 +6120,8 @@ var state = {
     var unstart = 0;
     for(var u = 0; u < allRows.length; u++) if(classifyStatus(allRows[u]) === '未啟動') unstart++;
     var avgCycle = briefAvgCycle(allRows);
+    // 老客戶（＝甲指 1P∪3P）：使用者定案只給總數與 1P／3P 拆分
+    var oc = oldCustomerStats(allRows, state.model && state.model.headers);
 
     var tiles = [
       // 「全期累計」的基準要與下面的開發轉換率一致（都是 allRows ＝ 篩選後全部資料），
@@ -6072,7 +6147,10 @@ var state = {
         //    「最集中：中課 50%」是 1/2 的無意義佔比
         d: (stale.length >= 5 && topKeK) ? ('最集中：' + topKeK.name + ' ' + briefNum(topShareK) + '%')
                                          : (stale.length ? '件數少，無明顯集中' : '無'),
-        cl: 'bf-warn', s: '未啟動另有 ' + unstart + ' 件' }
+        cl: 'bf-warn', s: '未啟動另有 ' + unstart + ' 件' },
+      // 老客戶：只給「幾筆 ＋ 1P/3P 各幾筆」（使用者 2026-10-16 要求，不加其他拆分）
+      { l: '老客戶（甲指）', v: String(oc.total), d: '全期', cl: 'bf-flat',
+        s: '1P(SCM) ' + oc.p1 + ' ｜ 3P(MO+) ' + oc.p3 }
     ];
     return tiles;
   }
@@ -10587,7 +10665,12 @@ var state = {
     // 甲指成功轉甲配 → 甲配 推導。掛在這裡（而非 handleFile）是故意的：
     // tryRestoreData 的兩條路徑（內嵌副本／localStorage 記憶）都經過 applyModel，
     // 所以舊存檔還原時也會補上；函式冪等，已推導過的不會重複計數。
-    state.catOverride = (model && model.rows)
+    // 新格式（4 個打勾欄）→ 先合成 類別；合成成功就**不再**套用舊的
+    // 「甲指成功轉甲配」推導（新格式已直接標 甲配，舊規則會把甲指資訊蓋掉）。
+    state.catDerive = (model && model.rows)
+      ? deriveCategoryFromTicks(model.rows, model.headers)
+      : { applied: false };
+    state.catOverride = (model && model.rows && !state.catDerive.applied)
       ? applyCategoryOverride(model.rows)
       : { changed: 0, byFrom: {} };
     state.filters = defaultFilters();
@@ -12108,6 +12191,8 @@ var state = {
       computeKeCategoryBars: computeKeCategoryBars,
       computePeriodCategory: computePeriodCategory,
       applyCategoryOverride: applyCategoryOverride,
+      deriveCategoryFromTicks: deriveCategoryFromTicks,
+      oldCustomerStats: oldCustomerStats,
       isTickMark: isTickMark,
       speakerPeriodLine: speakerPeriodLine,
       chartPeriodPrefix: chartPeriodPrefix,
