@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.12.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.12.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2011,22 +2011,48 @@ var state = {
   //   結果會跟著「類別合成優先序」變動。老客戶是使用者的定義，不該受顯示用優先序影響。
   //   新格式讀勾選欄、舊格式讀 類別 欄 —— 兩者都回傳同一組數字。
   // 使用者 2026-10-16 定案：只要「幾筆」與「1P／3P 各幾筆」，不做其他拆分。
+  // ⚠ 舊客戶的判定來源有兩層（使用者 2026-10-16 定案）：
+  //   「客戶來源」＝這家是不是 **MOMO 原有的舊客戶名單**（名單來源，與類別無關）；
+  //   「客戶類型」才是看 1P(SCM)／3P(MO+)／甲配／零擔 打了哪些勾。
+  //   兩者不能混為一談：實測 52 筆舊客戶全部是 1P，而勾了 1P/3P 的有 99 筆 ——
+  //   拿「有勾 1P/3P」當舊客戶會多算 47 筆。所以：
+  //     有 `客戶來源` 欄 → **以欄位為準**（欄位有值＝舊客戶）
+  //     沒有該欄（舊檔） → 才退回 1P/3P 推導，並在卡片標明是推導值
   function oldCustomerStats(rows, headers){
     var list = rows || [];
     var hs = headers || [];
+    var hasSrc = hs.indexOf('客戶來源') !== -1;
     var newFmt = hs.indexOf('1P(SCM)') !== -1 || hs.indexOf('3P(MO+)') !== -1;
-    var p1 = 0, p3 = 0, total = 0;
+    var total = 0, p1 = 0, p3 = 0, z = 0, jp = 0;
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       if(!r) continue;
       var c = String(r['類別'] === undefined || r['類別'] === null ? '' : r['類別']).trim();
-      var has1 = newFmt ? isTickMark(r['1P(SCM)']) : (c === '1P(SCM)');
-      var has3 = newFmt ? isTickMark(r['3P(MO+)']) : (c === '3P(MO+)');
-      if(has1) p1++;
-      if(has3) p3++;
-      if(has1 || has3) total++;   // 同一列兩個都勾只算一筆（甲指是聯集）
+      var isOld;
+      if(hasSrc){
+        isOld = String(r['客戶來源'] === undefined || r['客戶來源'] === null ? '' : r['客戶來源']).trim() !== '';
+      } else if(newFmt){
+        isOld = isTickMark(r['1P(SCM)']) || isTickMark(r['3P(MO+)']);
+      } else {
+        isOld = (c === '1P(SCM)') || (c === '3P(MO+)');
+      }
+      if(!isOld) continue;
+      total++;
+      // 客戶類型：一律看勾選欄；沒有勾選欄的舊格式才退回 類別
+      if(newFmt){
+        if(isTickMark(r['1P(SCM)'])) p1++;
+        if(isTickMark(r['3P(MO+)'])) p3++;
+        if(isTickMark(r['零擔'])) z++;
+        if(isTickMark(r['甲配'])) jp++;
+      } else {
+        if(c === '1P(SCM)') p1++;
+        else if(c === '3P(MO+)') p3++;
+        else if(c === '零擔') z++;
+        else if(c === '甲配') jp++;
+      }
     }
-    return { total: total, p1: p1, p3: p3 };
+    return { total: total, p1: p1, p3: p3, zhit: z, jiapei: jp,
+             source: hasSrc ? '客戶來源欄' : '推導（1P/3P）' };
   }
 
   // 純函式：套用推導。原地修改 rows（與 buildModel 其餘部分同一風格），
@@ -6148,9 +6174,18 @@ var state = {
         d: (stale.length >= 5 && topKeK) ? ('最集中：' + topKeK.name + ' ' + briefNum(topShareK) + '%')
                                          : (stale.length ? '件數少，無明顯集中' : '無'),
         cl: 'bf-warn', s: '未啟動另有 ' + unstart + ' 件' },
-      // 老客戶：只給「幾筆 ＋ 1P/3P 各幾筆」（使用者 2026-10-16 要求，不加其他拆分）
-      { l: '老客戶（甲指）', v: String(oc.total), d: '全期', cl: 'bf-flat',
-        s: '1P(SCM) ' + oc.p1 + ' ｜ 3P(MO+) ' + oc.p3 }
+      // 舊客戶：只給「幾筆 ＋ 客戶類型組成」（使用者 2026-10-16 定案，不加其他拆分）
+      // 判定來源寫進標籤，避免看不出這 52 是「欄位填的」還是「1P/3P 推導的」
+      { l: '舊客戶（' + (oc.source === '客戶來源欄' ? 'MOMO 原有名單' : '推導 1P/3P') + '）',
+        v: String(oc.total), d: '全期', cl: 'bf-flat',
+        s: (function(){
+             var parts = [];
+             if(oc.p1) parts.push('1P(SCM) ' + oc.p1);
+             if(oc.p3) parts.push('3P(MO+) ' + oc.p3);
+             if(oc.zhit) parts.push('零擔 ' + oc.zhit);
+             if(oc.jiapei) parts.push('甲配 ' + oc.jiapei);
+             return '類型：' + (parts.length ? parts.join(' ｜ ') : '（無勾選）');
+           })() }
     ];
     return tiles;
   }
