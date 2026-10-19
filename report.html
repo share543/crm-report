@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.2';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2610,6 +2610,29 @@ var state = {
       return (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
         ? String(r['類別']).trim() : blankLabel('類別');
     }
+    // 2026-10-16：新格式的「類別」是由四個勾選欄合成的單值（帶優先序 零擔→1P→3P）。
+    // ⚠ 本規則的判定必須看「勾選集合」，不可看合成後的單值 ——
+    //   否則同一筆會因為顯示優先序而通過或不合格（實測 2 筆假警報：
+    //   「零擔+1P」被算成零擔而被判不符合 1P/3P、「3P+甲配」被算成 3P 而被判不符合零擔/甲配）。
+    //   優先序是顯示慣例，不得改變規則判定（與「老客戶數字不從合成類別反推」同一原則）。
+    var tickFmt = false;
+    for(var z0 = 0; z0 < rows.length; z0++){
+      var rz0 = rows[z0];
+      if(rz0 && (('1P(SCM)' in rz0) || ('3P(MO+)' in rz0) || ('甲配' in rz0) || ('零擔' in rz0))){
+        tickFmt = true; break;
+      }
+    }
+    // 該筆的類別標籤集合：新格式讀勾選欄，舊格式退回 類別 單值
+    function catItems(r){
+      if(!tickFmt) return [catOf(r)];
+      var out = [];
+      if(has(r, '零擔')) out.push('零擔');
+      if(has(r, '1P(SCM)')) out.push('1P(SCM)');
+      if(has(r, '3P(MO+)')) out.push('3P(MO+)');
+      if(has(r, '甲配')) out.push('甲配');
+      if(!out.length) out.push(blankLabel('類別'));
+      return out;
+    }
     function has(r, key){
       var v = r[key];
       return v !== undefined && v !== null && String(v).trim() !== '';
@@ -2623,20 +2646,22 @@ var state = {
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       var cat = catOf(r);
+      var cats = catItems(r);
+      var catLabel = cats.join('+');
       var hasSign = has(r, '簽約');
       var hasImp = has(r, '導入');
-      var is13 = (cat === '1P(SCM)' || cat === '3P(MO+)');
-      var isZD = (cat === '零擔' || cat === '甲配');
+      var is13 = (cats.indexOf('1P(SCM)') >= 0 || cats.indexOf('3P(MO+)') >= 0);
+      var isZD = (cats.indexOf('零擔') >= 0 || cats.indexOf('甲配') >= 0);
       var name = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']) : '';
       if(hasImp && !hasSign){
         importOnly.push(r);
-        if(!is13) mismatches.push({ name: name, cat: cat, note: '導入有日期但簽約空白，類別應為 1P/3P', row: r });
+        if(!is13) mismatches.push({ name: name, cat: catLabel, note: '導入有日期但簽約空白，類別應為 1P/3P', row: r });
       } else if(hasImp && hasSign){
         both.push(r);
-        if(!isZD) mismatches.push({ name: name, cat: cat, note: '簽約＋導入皆有日期，類別應為 零擔/甲配', row: r });
+        if(!isZD) mismatches.push({ name: name, cat: catLabel, note: '簽約＋導入皆有日期，類別應為 零擔/甲配', row: r });
       } else if(!hasImp && hasSign){
         signOnly.push(r);
-        if(is13) mismatches.push({ name: name, cat: cat, note: '1P/3P 卻有簽約日期', row: r });
+        if(is13) mismatches.push({ name: name, cat: catLabel, note: '1P/3P 卻有簽約日期', row: r });
       }
     }
     return {
