@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.5';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.6';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3296,9 +3296,10 @@ var state = {
   //   而填單日期是唯一每筆都有的基準。
   var OVERDUE_RULES = {
     // code            : { label, cats, needContact, needReq, noCloseDays }
-    LT_NO_CONTACT : { label: '零擔：超過 {N} 天未完成初步接洽', cats:['零擔'],
+    // 2026-10-19 使用者定義：零擔與甲配同一組（都要簽約＋導入，要在填單日 30 天內完成洽談）
+    LT_NO_CONTACT : { label: '零擔／甲配：超過 {N} 天未完成初步接洽', cats:['零擔','甲配'],
                       needContact:true,  needReq:false, days:5 },
-    LT_NO_CLOSE   : { label: '零擔：超過 {N} 天未結案',           cats:['零擔'],
+    LT_NO_CLOSE   : { label: '零擔／甲配：超過 {N} 天未結案',           cats:['零擔','甲配'],
                       needContact:false, needReq:false, days:30, noClose:true },
     P13_STUCK     : { label: '1P／3P：超過 {N} 天卡在初步接洽（未進需求確認）',
                       cats:['1P(SCM)','3P(MO+)'],
@@ -3340,11 +3341,30 @@ var state = {
       var d = overdueDays(fill, todayStr);
       if(d === null) continue;
       var cat = fieldStr(r, '類別').trim() || blankLabel('類別');
+      // 2026-10-19：規則的類別比對改看「勾選身分」，不可用合成後的單一值
+      //（否則「零擔+1P」被合成成零擔 → 永遠走不到 1P/3P 規則；「3P+甲配」走不到甲配規則）。
+      // 舊格式（沒有勾選欄）退回 類別 單值，行為與原版完全相同。
+      var tickFmtOD = (r['零擔'] !== undefined) || (r['甲配'] !== undefined) ||
+                      (r['1P(SCM)'] !== undefined) || (r['3P(MO+)'] !== undefined);
+      var catsZD, cats13;
+      if(tickFmtOD){
+        catsZD = isTickMark(r['零擔']) || isTickMark(r['甲配']);
+        cats13 = isTickMark(r['1P(SCM)']) || isTickMark(r['3P(MO+)']);
+      } else {
+        catsZD = (cat === '零擔' || cat === '甲配');
+        cats13 = (cat === '1P(SCM)' || cat === '3P(MO+)');
+      }
       var cj = fieldStr(r, '初步接洽');
       var xq = fieldStr(r, '需求確認');
       for(var k = 0; k < rules.length; k++){
         var ru = rules[k];
-        if(ru.cats.indexOf(cat) === -1) continue;
+        var inRule = false;
+        for(var q0 = 0; q0 < ru.cats.length; q0++){
+          var rc0 = ru.cats[q0];
+          if(rc0 === '零擔' || rc0 === '甲配'){ if(catsZD) inRule = true; }
+          else if(cats13) inRule = true;
+        }
+        if(!inRule) continue;
         var hit = false;
         if(ru.needContact){
           // 未完成初步接洽 且 逾期
