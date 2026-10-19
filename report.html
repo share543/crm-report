@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.4';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.5';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2606,15 +2606,15 @@ var state = {
   // 規則：導入 有值且 簽約 空白 → 類別應為 1P/3P；零擔/甲配 → 簽約＋導入皆有日期。
   // 僅簽約無導入（如已簽約未導入客戶）列為備註，不算不一致。
   // 純函式：類別組合 → 業務名稱（使用者 2026-10-16 定義）
-  //   1P(SCM) + 甲配 = 1P轉甲配      3P(MO+) + 甲配 = 3P轉甲配
-  //   1P(SCM) + 零擔 = 零擔1P(SCM)   3P(MO+) + 零擔 = 零擔3P(MO+)
+  //   1P + 甲配 = 1P轉甲配      3P + 甲配 = 3P轉甲配
+  //   1P + 零擔 = 零擔1P        3P + 零擔 = 零擔3P
   //     （零擔先簽約，之後客戶再加入 momo 甲指 1P/3P）
-  //   單一標籤或未定義的組合 → 原樣以「+」串接
+  //   單一標籤或未定義的組合 → 原樣以「+」串接（單一標籤維持 1P(SCM)／3P(MO+) 全名）
   function catSetLabel(cats){
     cats = cats || [];
     var has = function(k){ return cats.indexOf(k) >= 0; };
     var P1 = '1P(SCM)', P3 = '3P(MO+)', JP = '甲配', ZD = '零擔';
-    var first13 = has(P1) ? P1 : (has(P3) ? P3 : null);
+    var first13 = has(P1) ? '1P' : (has(P3) ? '3P' : null);
     if(has(JP) && first13) return first13 + '轉甲配';
     if(has(ZD) && first13) return ZD + first13;
     return cats.join('+');
