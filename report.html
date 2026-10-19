@@ -1529,7 +1529,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.8';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.9';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3867,6 +3867,15 @@ var state = {
     nm.className = 'ns-name';
     nm.textContent = fieldStr(row, '公司名稱') || blankLabel('公司名稱');
     btn.appendChild(nm);
+
+    // 2026-10-19 使用者要求：客戶來源有標示（舊客戶）的案件加上標記
+    // （與逾期列的 .ns-od-old 同一個 class、同一條 keQuickSource() 判定）
+    if(keQuickSource(row) === '舊客戶'){
+      var oldTag3 = document.createElement('span');
+      oldTag3.className = 'ns-od-old';
+      oldTag3.textContent = '舊客戶';
+      btn.appendChild(oldTag3);
+    }
 
     var dt = document.createElement('span');
     dt.className = 'ns-date';
