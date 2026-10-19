@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.3';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.4';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2605,6 +2605,21 @@ var state = {
   // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
   // 規則：導入 有值且 簽約 空白 → 類別應為 1P/3P；零擔/甲配 → 簽約＋導入皆有日期。
   // 僅簽約無導入（如已簽約未導入客戶）列為備註，不算不一致。
+  // 純函式：類別組合 → 業務名稱（使用者 2026-10-16 定義）
+  //   1P(SCM) + 甲配 = 1P轉甲配      3P(MO+) + 甲配 = 3P轉甲配
+  //   1P(SCM) + 零擔 = 零擔1P(SCM)   3P(MO+) + 零擔 = 零擔3P(MO+)
+  //     （零擔先簽約，之後客戶再加入 momo 甲指 1P/3P）
+  //   單一標籤或未定義的組合 → 原樣以「+」串接
+  function catSetLabel(cats){
+    cats = cats || [];
+    var has = function(k){ return cats.indexOf(k) >= 0; };
+    var P1 = '1P(SCM)', P3 = '3P(MO+)', JP = '甲配', ZD = '零擔';
+    var first13 = has(P1) ? P1 : (has(P3) ? P3 : null);
+    if(has(JP) && first13) return first13 + '轉甲配';
+    if(has(ZD) && first13) return ZD + first13;
+    return cats.join('+');
+  }
+
   function validateCategoryRule(rows){
     function catOf(r){
       return (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
@@ -2642,7 +2657,7 @@ var state = {
       // 用「勾選集合」標籤分組（新格式）——否則會出現「…（零擔 1 筆），應為 1P/3P」這種
       // 括號裡的分類與「應為」互相矛盾的敘述（同一筆同時勾零擔與 1P）。
       // 舊格式 catItems 回 [catOf(r)]，標籤與原行為相同。
-      for(var i = 0; i < arr.length; i++){ var c = catItems(arr[i]).join('+'); m[c] = (m[c] || 0) + 1; }
+      for(var i = 0; i < arr.length; i++){ var c = catSetLabel(catItems(arr[i])); m[c] = (m[c] || 0) + 1; }
       return m;
     }
     var importOnly = [], both = [], signOnly = [], mismatches = [];
@@ -2650,7 +2665,7 @@ var state = {
       var r = rows[i];
       var cat = catOf(r);
       var cats = catItems(r);
-      var catLabel = cats.join('+');
+      var catLabel = catSetLabel(cats);
       var hasSign = has(r, '簽約');
       var hasImp = has(r, '導入');
       var is13 = (cats.indexOf('1P(SCM)') >= 0 || cats.indexOf('3P(MO+)') >= 0);
@@ -4916,6 +4931,9 @@ var state = {
       for(var d2 = 0; d2 < rows.length; d2++){
         var rm = rows[d2];
         if(classifyStatus(rm) === '未啟動') continue;
+        // 2026-10-16 使用者指示：已結案的案件不算資料缺漏
+        //（已結案＝結案欄有值，與逾期監控「未結案＝結案欄空白」同一條定義）
+        if(fieldStr(rm, '結案') !== '') continue;
         var bad = (def.key === '收貨站所') ? (stationNamesOf(rm).length === 0) : (fieldStr(rm, def.key) === '');
         if(bad) hit.push(rm);
       }
@@ -4930,7 +4948,7 @@ var state = {
     }
     if(missSecs.length){
       items.push({ sev: 'low', kind: 'missing',
-        title: '資料缺漏 ' + missTotal + ' 筆（非未啟動案件）', sections: missSecs });
+        title: '資料缺漏 ' + missTotal + ' 筆（進行中案件）', sections: missSecs });
     }
 
     return { items: items, stamps: stamps };
