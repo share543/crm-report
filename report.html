@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.2';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.3';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2639,7 +2639,10 @@ var state = {
     }
     function group(arr){
       var m = {};
-      for(var i = 0; i < arr.length; i++){ var c = catOf(arr[i]); m[c] = (m[c] || 0) + 1; }
+      // 用「勾選集合」標籤分組（新格式）——否則會出現「…（零擔 1 筆），應為 1P/3P」這種
+      // 括號裡的分類與「應為」互相矛盾的敘述（同一筆同時勾零擔與 1P）。
+      // 舊格式 catItems 回 [catOf(r)]，標籤與原行為相同。
+      for(var i = 0; i < arr.length; i++){ var c = catItems(arr[i]).join('+'); m[c] = (m[c] || 0) + 1; }
       return m;
     }
     var importOnly = [], both = [], signOnly = [], mismatches = [];
