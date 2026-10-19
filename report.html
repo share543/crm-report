@@ -1524,7 +1524,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.6';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.14.7';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3301,7 +3301,9 @@ var state = {
                       needContact:true,  needReq:false, days:5 },
     LT_NO_CLOSE   : { label: '零擔／甲配：超過 {N} 天未結案',           cats:['零擔','甲配'],
                       needContact:false, needReq:false, days:30, noClose:true },
-    P13_STUCK     : { label: '1P／3P：超過 {N} 天卡在初步接洽（未進需求確認）',
+    // 2026-10-19 使用者定義：甲指（1P/3P）要在填單日 +2 天內與客戶確認合作（momo 已談定價格）。
+    // 判準＝「還沒有需求確認（洽談未完成）」且超過 2 天，**不再要求先有初步接洽**。
+    P13_STUCK     : { label: '1P／3P：超過 {N} 天未完成洽談（尚無需求確認）',
                       cats:['1P(SCM)','3P(MO+)'],
                       needContact:false, needReq:true,  days:2 },
     P13_NO_CLOSE  : { label: '1P／3P：超過 {N} 天未結案',         cats:['1P(SCM)','3P(MO+)'],
@@ -3370,8 +3372,10 @@ var state = {
           // 未完成初步接洽 且 逾期
           hit = (cj === '' && d > ru.days);
         } else if(ru.needReq){
-          // 有初步接洽、但沒有需求確認（卡住）且 逾期
-          hit = (cj !== '' && xq === '' && d > ru.days);
+          // 沒有需求確認（洽談未完成）且 逾期
+          // 2026-10-19：移除「必須已有初步接洽」的條件 —— 連初步接洽都還沒做的甲指案件
+          // 更該被列管，原本要等到第 5 天的 P13_NO_CLOSE 才抓到（晚 3 天）。
+          hit = (xq === '' && d > ru.days);
         } else {
           // 未結案 且 逾期（noClose 由前面的結案空白把關）
           hit = (d > ru.days);
@@ -4924,19 +4928,11 @@ var state = {
       }
     }
     stale.sort(function(a, b){ return b.gap - a.gap; });
-    if(stale.length){
-      var staleEntries = [];
-      for(var s4 = 0; s4 < stale.length; s4++){
-        stamps.stale.push(stale[s4].row);
-        staleEntries.push({ row: stale[s4].row, label: stale[s4].name,
-                            note: '（停於' + stale[s4].at + '，落後 ' + stale[s4].gap + ' 天）' });
-      }
-      items.push({
-        sev: 'low', kind: 'stale',
-        title: '進行中停滯可能 ' + stale.length + ' 筆',
-        sections: [{ lead: '最後里程碑較全資料最新進度落後超過 ' + STALE_DAYS + ' 天，建議追蹤：', entries: staleEntries }]
-      });
-    }
+    // 2026-10-19 使用者定案：不再產生「進行中停滯」項目。
+    // 原因：它的基準是「該筆最後里程碑 vs 全資料最新進度」，與逾期監控的「填單日＋N 天」是兩套口徑，
+    // 並存會讓同一件事在兩個區塊各講一次，而且「相對資料最新日」在會議上講不清楚。
+    // 停滯改由「案件追蹤與逾期監控」依類別時限負責（零擔／甲配 30 天、甲指 2 天）。
+    // stale 仍照算（其他地方可能參考），但 stamps.stale 保持空、不產生項目。
 
     var missSecs = [];
     var missTotal = 0;
@@ -5065,7 +5061,7 @@ var state = {
       var ok = document.createElement('p');
       ok.className = 'note';
       ok.style.color = 'var(--ok)';
-      ok.textContent = '✓ 目前無待留意事項（類別規則一致、無時程過長、無明顯停滯個案）。';
+      ok.textContent = '✓ 目前無待留意事項（類別規則一致、無時程過長個案）。';
       container.appendChild(ok);
       return;
     }
