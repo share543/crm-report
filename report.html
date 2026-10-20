@@ -1529,7 +1529,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.15.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.15.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4885,7 +4885,8 @@ var state = {
   // 每個 entry 都帶 row 參照（＝ state.model.rows 裡同一個物件），供「跳到案件清單」定位。
   function collectAlerts(rows){
     var items = [];
-    var stamps = { mismatch: [], slow: [], stale: [], missingDev: [], missingCont: [], missingSta: [] };
+    var stamps = { mismatch: [], slow: [], stale: [], contradict: [],
+                   missingDev: [], missingCont: [], missingSta: [] };
     if(!rows || !rows.length) return { items: items, stamps: stamps };
 
     function nameOf(r){
@@ -4907,6 +4908,36 @@ var state = {
         sev: 'high', kind: 'mismatch',
         title: '類別規則不一致 ' + vr.mismatches.length + ' 筆',
         sections: [{ lead: '簽約／導入與類別填寫規則不符：', entries: mmEntries }]
+      });
+    }
+
+    // 2026-10-19 使用者要求：資料矛盾檢查 —— 導入欄與結案欄必須一致
+    //   A 導入有日期、但結案不是「導入完成」
+    //   B 結案寫「導入完成」、但導入欄空白
+    // 兩種都代表同一個事實被填了兩個衝突的值，會讓「導入 N 筆」與「合作結案 N 筆」對不上
+    // （實測新檔差的那 1 筆就是 A：尼歐計畫企業社）。
+    var cA = [], cB = [];
+    for(var ci = 0; ci < rows.length; ci++){
+      var rc = rows[ci];
+      var impV = fieldStr(rc, '導入');
+      var endV2 = fieldStr(rc, '結案');
+      var isDone = endV2.indexOf('導入完成') >= 0;
+      if(impV !== '' && endV2 !== '' && !isDone){
+        cA.push({ row: rc, label: nameOf(rc),
+                  note: '（導入 ' + impV + '，但結案為「' + endV2.replace(/\s+/g, ' ') + '」）' });
+      } else if(impV === '' && isDone){
+        cB.push({ row: rc, label: nameOf(rc),
+                  note: '（結案為「' + endV2.replace(/\s+/g, ' ') + '」，但導入日期空白）' });
+      }
+    }
+    if(cA.length || cB.length){
+      var cEntries = [];
+      for(var ca = 0; ca < cA.length; ca++){ stamps.contradict.push(cA[ca].row); cEntries.push(cA[ca]); }
+      for(var cb = 0; cb < cB.length; cb++){ stamps.contradict.push(cB[cb].row); cEntries.push(cB[cb]); }
+      items.push({
+        sev: 'high', kind: 'contradict',
+        title: '資料矛盾 ' + cEntries.length + ' 筆（導入與結案不一致）',
+        sections: [{ lead: '導入日期與結案欄互相衝突，請確認哪一個才對：', entries: cEntries }]
       });
     }
 
@@ -5099,7 +5130,7 @@ var state = {
       var ok = document.createElement('p');
       ok.className = 'note';
       ok.style.color = 'var(--ok)';
-      ok.textContent = '✓ 目前無待留意事項（類別規則一致、無時程過長個案）。';
+      ok.textContent = '✓ 目前無待留意事項（類別規則一致、導入與結案無矛盾、無時程過長個案）。';
       container.appendChild(ok);
       return;
     }
