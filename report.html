@@ -1529,7 +1529,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.15.2';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.15.3';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4156,7 +4156,8 @@ var state = {
       head.appendChild(gn);
       var meta = document.createElement('span');
       meta.className = 'pgm-meta';
-      meta.textContent = '填單 ' + g.total + ' · 結案 ' + g.coop;
+      meta.textContent = '填單 ' + g.total + ' · 結案 ' + g.coop +
+        ' · 導入率 ' + rateText(g.stages['填單日期'] ? (g.stages['導入'] || 0) : 0, g.stages['填單日期'] || 0);
       head.appendChild(meta);
       card.appendChild(head);
       for(var r = 0; r < rows.length; r++){
@@ -4272,6 +4273,10 @@ var state = {
     var thRej = document.createElement('th');
     thRej.textContent = '婉拒合作';
     hr.appendChild(thRej);
+    // 2026-10-20 使用者要求：右邊加「導入率」＝導入 ÷ 填單日期
+    var thRate = document.createElement('th');
+    thRate.textContent = '導入率';
+    hr.appendChild(thRate);
     thead.appendChild(hr);
     table.appendChild(thead);
 
@@ -4314,6 +4319,9 @@ var state = {
       var tdRej = document.createElement('td');
       tdRej.textContent = String(g.rejected || 0);
       tr.appendChild(tdRej);
+      var tdRate = document.createElement('td');
+      tdRate.textContent = rateText(g.stages['導入'] || 0, g.stages['填單日期'] || 0);
+      tr.appendChild(tdRate);
       tbody.appendChild(tr);
     }
 
@@ -4331,11 +4339,20 @@ var state = {
     var tdTotalT = document.createElement('td');
     tdTotalT.textContent = String(totals.rejected);
     trT.appendChild(tdTotalT);
+    var tdRateT = document.createElement('td');
+    tdRateT.textContent = rateText(totals.stages['導入'] || 0, totals.stages['填單日期'] || 0);
+    trT.appendChild(tdRateT);
     tbody.appendChild(trT);
 
     table.appendChild(tbody);
     wrap.appendChild(table);
     return wrap;
+  }
+
+  // 輔助：比例文字（一位小數；分母 0 顯示「－」）
+  function rateText(num, den){
+    if(!den) return '－';
+    return String(Math.round(num / den * 1000) / 10) + '%';
   }
 
   // 輔助：計數 + 迷你進度條儲存格（denominator 為 0 時不繪條）
