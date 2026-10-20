@@ -1508,3 +1508,20 @@ await sleep(1600);   // 等 hideImportProgress 的 900ms
 **尚未涵蓋**（待補規則文字）：`notStartedSection`（已有舊註記需遷移）／`progressSection`（同上）／
 `statSection`／`typeSection`／`funnelSection`／`rankSection`／`timingSection`／`dropoffSection`
 —— 這幾個要先讀各自的計算邏輯才寫得出正確說明，不可憑區塊名稱臆測。
+
+### v1.17.0（2026-10-20）規則說明補齊 13 個區塊
+
+`BLOCK_RULES` 由 5 個擴充到 **13 個**：alertSection／highlightSection／statSection／keQuickSection／
+notStartedSection／progressSection／typeSection／funnelSection／rankSection／timingSection／
+dropoffSection／dropReasonSection／listSection（講者版 briefSection 刻意不列）。
+實測 13/13 預設收合、brief 無規則。
+
+**舊註記處理**：
+- `notStartedSection`、`progressSection` 的舊 `note.textContent` **已刪除**（原文逐字核對後置換成註解）。
+- `typeSection`／`funnelSection`／`rankSection`／`timingSection`／`dropoffSection` 也有舊註記，
+  內容與新規則重複 → 暫時用 `LEGACY_NOTE_SECTIONS` 把它們 `.note` 設 `hidden`（**程式還在，日後再清**）。
+
+**產生方式**：這 8 個區塊的規則文字由子代理讀 `renderStats`／`renderTypeAnalysisSection`／
+`renderFunnelSection`／`renderRankSection`／`renderTimingSection`／`renderDropoffSection`／
+`collectOverdue`＋`OVERDUE_RULES`／`computeProgress` 後逐條對照程式碼產出（每條都要能證明為真）。
+⇒ **不可憑區塊名稱臆測規則**；名稱與實作不符的情況在這個檔案裡很常見（例：漏斗百分比的分母是全部案件，不是上一階）。
