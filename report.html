@@ -1529,7 +1529,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.15.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.15.2';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2561,13 +2561,31 @@ var state = {
     }
     var category=validateCategoryRule(progressed);
     var dateOrder=weeklyDateOrderIssues(progressed);
+    // 2026-10-20 使用者指示：把「導入與結案矛盾」列入輔導清單。
+    // 必須掃全部 list（不是只掃進行中）——這類矛盾多半發生在已結案的案件上
+    //（例：尼歐計畫企業社 導入 2026-09-30／結案「需求無法滿足故暫緩開發」）。
+    var contradictRows=[];
+    for(var cq=0;cq<list.length;cq++){
+      var rq=list[cq];
+      var impQ=fieldStr(rq,'導入'), endQ=fieldStr(rq,'結案');
+      if(impQ!=='' && endQ!=='' && endQ.indexOf('導入完成')<0){
+        contradictRows.push({ row:rq, name:String(rq['公司名稱']||'').trim()||blankLabel('公司名稱'),
+          note:'導入 '+impQ+' 但結案為「'+endQ.replace(/\s+/g,' ')+'」' });
+      } else if(impQ==='' && endQ.indexOf('導入完成')>=0){
+        contradictRows.push({ row:rq, name:String(rq['公司名稱']||'').trim()||blankLabel('公司名稱'),
+          note:'結案為「'+endQ.replace(/\s+/g,' ')+'」但導入日期空白' });
+      }
+    }
+    var contradictNames=contradictRows.slice(0,3).map(function(x){ return x.name; }).join('、');
     var counts={}; for(var k in missing) if(missing[k]) counts[k]=missing[k];
     var missingSummary=Object.keys(counts).map(function(k){ return k+' '+counts[k]+' 筆'; }).join('、') || '無基本欄位缺漏';
     var incompleteRows=Object.keys(issueRows).length;
     return { activeCount:active.length, progressedCount:progressed.length,
       incompleteRows:incompleteRows, missing:counts,
       dateOrderReviewRows:dateOrder, categoryReviewRows:category.mismatches,
-      text:'進行中 '+progressed.length+' 件、未啟動 '+(active.length-progressed.length)+' 件；資料待補 '+incompleteRows+' 件（'+missingSummary+'；案件可能重疊）。日期先後待人工確認 '+dateOrder.length+' 件；類別與里程碑組合待人工確認 '+category.mismatches.length+' 件。' };
+      contradictReviewRows:contradictRows,
+      text:'進行中 '+progressed.length+' 件、未啟動 '+(active.length-progressed.length)+' 件；資料待補 '+incompleteRows+' 件（'+missingSummary+'；案件可能重疊）。日期先後待人工確認 '+dateOrder.length+' 件；類別與里程碑組合待人工確認 '+category.mismatches.length+' 件。' +
+        (contradictRows.length ? '導入與結案矛盾 '+contradictRows.length+' 件（'+contradictNames+(contradictRows.length>3?' 等':'')+'，需輔導確認哪一欄才對）。' : '導入與結案無矛盾。') };
   }
   function weeklyReviewBundle(rows, now){
     var list=rows||[], cohorts=weeklyCohortReviews(list,now), progress=weeklyCurrentProgress(list), quality=weeklyQualityReview(list);
