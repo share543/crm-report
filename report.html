@@ -1552,7 +1552,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.17.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.18.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1822,21 +1822,35 @@ var state = {
         var cat = catOf(r);
         var ke = (r && r['課別']) || '';
         ke = String(ke).trim();
-        var key = null;
-        // 依「名稱」組 key 查表：甲指的 1P/3P 在新增時分 1P/3P 且分來源；
-        // 開發累計只分來源（不分 1P/3P）；甲配／零擔不分來源。
         var met = isNew ? '新增' : '開發累計';
         var srce = keQuickSource(r);
-        if(cat === '1P(SCM)' || cat === '3P(MO+)'){
-          key = isNew ? ('甲指\u0000新增\u0000' + cat + '\u0000' + srce)
-                      : ('甲指\u0000開發累計\u0000\u0000' + srce);
-        } else if(cat === '甲配' || cat === '零擔'){
-          key = cat + '\u0000' + met + '\u0000\u0000';
-        } else {
-          continue;
+        // 2026-10-20 使用者指示：同時勾多個類別時，**每個類別各算一次**。
+        // 原本只看合成後的單一類別（優先序 零擔→1P→3P），「零擔+1P」會只進零擔。
+        // 新格式逐一看四個勾選欄；舊格式（沒有勾選欄）退回 類別 單值。
+        var cats = [];
+        if(('零擔' in r) || ('1P(SCM)' in r) || ('3P(MO+)' in r) || ('甲配' in r)){
+          if(hasDate(r, '零擔')) cats.push('零擔');
+          if(hasDate(r, '1P(SCM)')) cats.push('1P(SCM)');
+          if(hasDate(r, '3P(MO+)')) cats.push('3P(MO+)');
+          if(hasDate(r, '甲配')) cats.push('甲配');
+        } else if(cat){
+          cats.push(cat);
         }
-        m[key] = m[key] || {};
-        m[key][ke] = (m[key][ke] || 0) + 1;
+        for(var ci = 0; ci < cats.length; ci++){
+          var c1 = cats[ci];
+          var key = null;
+          // 依「名稱」組 key：甲指的 1P/3P 在新增時分 1P/3P 且分來源；
+          // 開發累計只分來源（不分 1P/3P）；甲配／零擔不分來源。
+          if(c1 === '1P(SCM)' || c1 === '3P(MO+)'){
+            key = isNew ? ('甲指\u0000新增\u0000' + c1 + '\u0000' + srce)
+                        : ('甲指\u0000開發累計\u0000\u0000' + srce);
+          } else if(c1 === '甲配' || c1 === '零擔'){
+            key = c1 + '\u0000' + met + '\u0000\u0000';
+          }
+          if(!key) continue;
+          m[key] = m[key] || {};
+          m[key][ke] = (m[key][ke] || 0) + 1;
+        }
       }
       return m;
     }
@@ -10325,7 +10339,7 @@ var state = {
       '新增＝分析期間內填單的案件；開發累計／已導入累計＝全部資料，不隨期間縮放。',
       '甲指＝1P(SCM)＋3P(MO+) 的合計；甲配不分新舊客戶。',
       '舊客戶＝「客戶來源」欄標示為舊客戶者；沒有這一欄的舊檔不會推測，全部歸在新註冊。',
-      '同一筆案件可能同時有多個類別，所以橫向相加會大於案件筆數。'
+      '同時勾選多個類別的案件（例如零擔＋1P），會在各個類別各算一次，所以橫向相加會大於案件筆數。'
     ],
     notStartedSection: [
       '上半只列已填填單日期、狀態為未啟動的案件，不隨分析期間與篩選縮放，課別依件數多→少排。',

@@ -1525,3 +1525,18 @@ dropoffSection／dropReasonSection／listSection（講者版 briefSection 刻意
 `renderFunnelSection`／`renderRankSection`／`renderTimingSection`／`renderDropoffSection`／
 `collectOverdue`＋`OVERDUE_RULES`／`computeProgress` 後逐條對照程式碼產出（每條都要能證明為真）。
 ⇒ **不可憑區塊名稱臆測規則**；名稱與實作不符的情況在這個檔案裡很常見（例：漏斗百分比的分母是全部案件，不是上一階）。
+
+### v1.18.0（2026-10-20）各課追蹤簡表：同時勾多個類別 → 每個類別各算一次
+
+使用者指示：「同時有勾選 1P、3P、甲配、零擔 則同時在各類別都要計算進去」。
+
+原本 `tally()` 用 `catOf(r)` 的**合成單一類別**（優先序 零擔→1P→3P），所以「零擔+1P」只進零擔。
+這是「用合成單值做判斷」這個坑的**第四處**（前三處：`validateCategoryRule` v1.14.2、
+檢核文字分組 v1.14.3、`collectOverdue` v1.14.6）。
+
+改法：新格式逐一看四個勾選欄（勾了就各算一次）；舊格式（無勾選欄）退回 `類別` 單值。
+**預期副作用**：橫向相加會大於案件筆數（標籤數 vs 案件數）——這正是「類別是標籤集合、不是互斥分類」的體現。
+`BLOCK_RULES.keQuickSection` 的說明同步改成「會在各個類別各算一次」。
+
+驗證（new4，251 筆）：畫面 1P 65／3P 35／甲配 1，與 openpyxl 獨立逐勾選計數**完全一致**；
+甲指累計 100 = 1P 65 ＋ 3P 35（代表沒有任何一筆同時勾 1P 與 3P，與先前的 1P∩3P=0 相符）。
