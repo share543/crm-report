@@ -1488,3 +1488,23 @@ await sleep(1600);   // 等 hideImportProgress 的 900ms
 `rateText(num, den)`：一位小數、分母 0 顯示「－」。手機版卡片標頭同步帶「導入率 X%」。
 
 實測：零擔 36/140＝25.7%、全體 59/250＝**23.6%**。
+
+### v1.16.0／v1.16.1（2026-10-20）規則說明統一：每區塊底部一列可收合
+
+使用者定案（A 形式）：**每個區塊底部一列「規則說明」，預設收合、點開就地展開**。
+
+- **單一來源** `BLOCK_RULES`（在 `rebuild()` 之前）：文字只寫在字典裡，不寫回各 render 函式。
+  理由：說明散落在 render 函式裡會與程式脫節 —— 實例：進度追蹤表曾寫「填單數」當分母，
+  但該欄已改成「婉拒合作／導入率」，畫面正常而說明已經是假的。
+- **形式用原生 `<details>/<summary>`，不用 JS 事件**。v1.16.0 用 button＋addEventListener，
+  實測**五個區塊都點不開**（aria-expanded 沒變、收合高度不變）；改原生 disclosure 後
+  實測 closed 25px／open 142px、反覆收合正常、鍵盤可用、且不受 rebuild 影響。
+- **列印**：另渲染一份 `.rule-print` 靜態副本（`@media print` 隱藏 `details`、顯示副本）。
+  不要靠「列印時把 details 打開」—— CSS 無法把 closed 的 details 內容印出來。
+- **講者版不帶規則**（`briefSection` 不在字典裡）✓ 已驗證。
+- 掛載點：`rebuild()` 尾端呼叫 `syncBlockRules()`，每次重建先移除舊的再加，不會重複。
+
+目前涵蓋 5 個區塊：`alertSection`／`highlightSection`／`keQuickSection`／`dropReasonSection`／`listSection`。
+**尚未涵蓋**（待補規則文字）：`notStartedSection`（已有舊註記需遷移）／`progressSection`（同上）／
+`statSection`／`typeSection`／`funnelSection`／`rankSection`／`timingSection`／`dropoffSection`
+—— 這幾個要先讀各自的計算邏輯才寫得出正確說明，不可憑區塊名稱臆測。

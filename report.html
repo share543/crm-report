@@ -406,6 +406,29 @@
     color:var(--muted); background:var(--card); border:1px solid var(--border);
     border-radius:999px; padding:2px 10px; white-space:nowrap; }
   .note{ color:var(--muted); font-size:12px; margin-top:10px; line-height:1.6; }
+  /* 2026-10-20 規則說明：每個區塊底部一列，預設收合（不佔版面），點開就地展開 */
+  .rule-wrap{ margin-top:14px; border-top:1px solid var(--cell-border); padding-top:8px; }
+  .rule-toggle{ display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12.5px;
+    color:var(--muted); background:none; border:0; padding:2px 0; cursor:pointer; text-align:left; }
+  .rule-toggle:hover{ color:var(--text); }
+  .rule-toggle .rule-caret{ display:inline-block; width:10px; }
+  .rule-body{ margin:4px 0 0; padding:0 0 0 18px; color:var(--muted); font-size:12px; line-height:1.75; }
+  .rule-body[hidden]{ display:none; }
+  .rule-body li{ margin:2px 0; }
+  .rule-det{ margin:0; }
+  .rule-det > summary{ list-style:none; }
+  .rule-det > summary::-webkit-details-marker{ display:none; }
+  .rule-det > summary::before{ content:'\25B8'; display:inline-block; width:10px; }
+  .rule-det[open] > summary::before{ content:'\25BE'; }
+  .rule-print{ display:none; }
+  @media print{
+    /* 使用者決定：列印要印規則。紙上不能點，改用靜態副本（details 收合狀態不影響紙本） */
+    .rule-det{ display:none !important; }
+    .rule-print{ display:block !important; }
+    .rule-wrap{ border-top:1px solid #bbb; }
+    .rule-print-head{ font-weight:700; font-size:12px; color:#333; margin:0 0 2px; }
+    .rule-print li{ color:#444 !important; }
+  }
   .muted{ color:var(--muted); }
   .pending{ color:var(--muted); font-size:13px; }
   .type-analysis{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
@@ -1529,7 +1552,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.15.3';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.16.1';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3951,7 +3974,7 @@ var state = {
     var data = computeKeQuick(scope, pr.rows);
 
     if(isMobileMode()){
-      box.appendChild(keQuickNote());
+      // 2026-10-20：註記內容已移到「規則說明」（BLOCK_RULES.keQuickSection）
       box.appendChild(buildKeQuickMobile(data));
       sec.hidden = false;
       return;
@@ -4106,7 +4129,7 @@ var state = {
 
     table.appendChild(tbody);
     wrap.appendChild(table);
-    box.appendChild(keQuickNote());
+    // 2026-10-20：註記內容已移到「規則說明」（BLOCK_RULES.keQuickSection）
     box.appendChild(withUnitLabel(wrap, '單位：客戶數'));
     sec.hidden = false;
   }
@@ -4226,7 +4249,7 @@ var state = {
 
     var note = document.createElement('p');
     note.className = 'pg-note';
-    note.textContent = '每格下方長條＝該群組「填單數」的轉化比例。各里程碑數 = 該日期欄非空筆數；' +
+    note.textContent = '每格下方長條＝該群組「填單日期」的轉化比例。各里程碑數 = 該日期欄非空筆數；' +
       '1P/3P 客戶「簽約」空白故簽約數偏低，「導入」多於「簽約」屬正常。與分析期間＋篩選同步縮放。';
     keBox.appendChild(note);
     sec.hidden = false;
@@ -10277,6 +10300,88 @@ var state = {
   }
 
   // rebuild：依 state.filters 重算所有面板（統計→漏斗→類別→時程→流失→圖表→排行→明細）
+  // ---------------------------------------------------------------------------
+  // 規則說明（2026-10-20 使用者定案）
+  // ⚠ 文字**只寫在這裡**，不要寫回各 render 函式 —— 欄位一改名說明就會過期
+  //   （實例：進度追蹤表曾寫「填單數」當分母，但該欄已改成 婉拒合作／導入率）。
+  //   一律用使用者語言寫，不寫實作備註。
+  // ---------------------------------------------------------------------------
+  var BLOCK_RULES = {
+    alertSection: [
+      '只挑出需要人看一眼的案件，不自動判定對錯；有疑慮的一律標成「需人工確認」。',
+      '類別規則：導入有日期但簽約空白 → 類別應為 1P／3P；簽約與導入都有日期 → 類別應為 零擔／甲配。',
+      '導入與結案矛盾：導入有日期但結案不是「導入完成」，或結案寫導入完成但導入日期空白。',
+      '時程過長：從填單日期到最後一個里程碑超過 60 天。',
+      '資料缺漏：進行中案件缺 開發者／聯絡窗口／收貨站所（未啟動與已結案不列入）。'
+    ],
+    highlightSection: [
+      '五張統計卡跟著「篩選 ＋ 分析期間」變動；期間不是「全部數據」時，前兩張改為「本期新增案件」與「本期導入完成」。',
+      '下方排行榜（最佳開發／最佳導入的課、站所、人）固定用全部資料，不隨期間縮放。'
+    ],
+    keQuickSection: [
+      '新增＝分析期間內填單的案件；開發累計／已導入累計＝全部資料，不隨期間縮放。',
+      '甲指＝1P(SCM)＋3P(MO+) 的合計；甲配不分新舊客戶。',
+      '舊客戶＝「客戶來源」欄標示為舊客戶者；沒有這一欄的舊檔不會推測，全部歸在新註冊。',
+      '同一筆案件可能同時有多個類別，所以橫向相加會大於案件筆數。'
+    ],
+    dropReasonSection: [
+      '母體＝已結案但沒有導入的案件（客戶婉拒、聯繫無果、考慮中、暫緩等都算）。',
+      '原因以「結案」欄的原文歸類，不另外改寫。',
+      '長條依類別分段，同一個原因可能同時有多個類別。'
+    ],
+    listSection: [
+      '每頁 50 筆；可用關鍵字、課別、開發者、類別、狀態篩選。',
+      '點任一列可展開明細；從其他區塊點案件名稱跳過來時，會自動定位並展開那一筆。'
+    ]
+  };
+
+  // 每個區塊底部掛一列「規則說明」（預設收合）。重建時先移除舊的再加，避免重複。
+  function syncBlockRules(){
+    for(var id in BLOCK_RULES){
+      var sec = document.getElementById(id);
+      if(!sec) continue;
+      var olds = sec.querySelectorAll(':scope > .rule-wrap');
+      for(var d = 0; d < olds.length; d++){ if(olds[d].parentNode) olds[d].parentNode.removeChild(olds[d]); }
+      var rules = BLOCK_RULES[id] || [];
+      if(!rules.length) continue;
+      var wrap = document.createElement('div');
+      wrap.className = 'rule-wrap';
+
+      function listEl(cls){
+        var ul = document.createElement('ul');
+        ul.className = cls;
+        for(var i = 0; i < rules.length; i++){
+          var li = document.createElement('li');
+          li.textContent = rules[i];
+          ul.appendChild(li);
+        }
+        return ul;
+      }
+
+      // 螢幕：原生 disclosure，預設收合（不需要任何 JS 事件）
+      var det = document.createElement('details');
+      det.className = 'rule-det';
+      var sum = document.createElement('summary');
+      sum.className = 'rule-toggle';
+      sum.textContent = '規則說明';
+      det.appendChild(sum);
+      det.appendChild(listEl('rule-body'));
+      wrap.appendChild(det);
+
+      // 列印：靜態副本（紙上不能點，一律展開）
+      var pr = document.createElement('div');
+      pr.className = 'rule-print';
+      var ph = document.createElement('div');
+      ph.className = 'rule-print-head';
+      ph.textContent = '規則說明';
+      pr.appendChild(ph);
+      pr.appendChild(listEl('rule-body'));
+      wrap.appendChild(pr);
+
+      sec.appendChild(wrap);
+    }
+  }
+
   function rebuild(){
     if(!state.model || !state.model.rows) return;
     var filtered = applyFilters(state.model.rows, state.filters);
@@ -10302,6 +10407,7 @@ var state = {
     renderDropReasonSection(m);
     renderListSection();
     renderRawTable(m);
+    syncBlockRules();
   }
 
   // ---------------------------------------------------------------------------
