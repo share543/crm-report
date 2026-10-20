@@ -1529,7 +1529,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.14.9';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.15.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1705,7 +1705,8 @@ var state = {
       var r = rows[i];
       var g = (r && r[field] !== undefined && r[field] !== null && String(r[field]).trim() !== '')
         ? String(r[field]).trim() : blankLabel(field);
-      if(!by[g]) by[g] = { group: g, total: 0, stages: {}, coop: 0, _o: (order.indexOf(g) === -1) ? 999 : order.indexOf(g) };
+      if(!by[g]) by[g] = { group: g, total: 0, stages: {}, coop: 0, doing: 0, rejected: 0,
+                           _o: (order.indexOf(g) === -1) ? 999 : order.indexOf(g) };
       var o = by[g];
       o.total++;
       for(var m = 0; m < MILESTONES.length; m++){
@@ -1713,6 +1714,11 @@ var state = {
         if(v !== undefined && v !== null && String(v).trim() !== '') o.stages[MILESTONES[m]] = (o.stages[MILESTONES[m]] || 0) + 1;
       }
       if(classifyStatus(r) === '合作成功') o.coop++;
+      // 2026-10-19 使用者定案：表上要看「進行中」與「婉拒合作」——
+      // 原本的「合作結案」與「導入」幾乎重複（57 vs 56），「填單數」與「填單日期」完全相同（234 vs 234）。
+      if(classifyStatus(r) === '進行中') o.doing++;
+      var endV = (r['結案'] === undefined || r['結案'] === null) ? '' : String(r['結案']).trim();
+      if(endV !== '' && classifyStatus(r) !== '合作成功') o.rejected++;
     }
     var list = [];
     for(var k in by) list.push(by[k]);
@@ -4117,7 +4123,9 @@ var state = {
     for(var s = 0; s < data.stageOrder.length; s++){
       rows.push({ label: data.stageOrder[s], key: data.stageOrder[s], coop: false });
     }
-    rows.push({ label: '合作結案', key: '__coop', coop: true });
+    // 2026-10-19：與桌機版一致（合作結案→進行中、填單數→婉拒合作）
+    rows.push({ label: '進行中', key: '__doing' });
+    rows.push({ label: '婉拒合作', key: '__rejected' });
     for(var i = 0; i < data.groups.length; i++){
       var g = data.groups[i];
       var card = document.createElement('div');
@@ -4135,7 +4143,9 @@ var state = {
       card.appendChild(head);
       for(var r = 0; r < rows.length; r++){
         var rr = rows[r];
-        var count = rr.coop ? g.coop : (g.stages[rr.key] || 0);
+        var count = (rr.key === '__doing') ? (g.doing || 0)
+                  : (rr.key === '__rejected') ? (g.rejected || 0)
+                  : (rr.coop ? g.coop : (g.stages[rr.key] || 0));
         card.appendChild(pgmRow(rr.label, count, g.total, rr.coop));
       }
       wrap.appendChild(card);
@@ -4156,7 +4166,9 @@ var state = {
     tcard.appendChild(thead);
     for(var r2 = 0; r2 < rows.length; r2++){
       var rr2 = rows[r2];
-      var count2 = rr2.coop ? t.coop : (t.stages[rr2.key] || 0);
+      var count2 = (rr2.key === '__doing') ? (t.doing || 0)
+                 : (rr2.key === '__rejected') ? (t.rejected || 0)
+                 : (rr2.coop ? t.coop : (t.stages[rr2.key] || 0));
       tcard.appendChild(pgmRow(rr2.label, count2, t.total, rr2.coop));
     }
     wrap.appendChild(tcard);
@@ -4233,22 +4245,26 @@ var state = {
       th.textContent = data.stageOrder[s];
       hr.appendChild(th);
     }
-    var thCoop = document.createElement('th');
-    thCoop.className = 'pg-coop-head';
-    thCoop.textContent = '合作結案';
-    hr.appendChild(thCoop);
-    var thTotal = document.createElement('th');
-    thTotal.textContent = '填單數';
-    hr.appendChild(thTotal);
+    // 2026-10-19：原「合作結案」（與導入重複）改為「進行中」；
+    //            原「填單數」（與填單日期重複）改為「婉拒合作」。
+    // 不再掛 pg-coop-head（那是綠色＝合作成功的語意，一個顏色只代表一件事）。
+    var thDoing = document.createElement('th');
+    thDoing.textContent = '進行中';
+    hr.appendChild(thDoing);
+    var thRej = document.createElement('th');
+    thRej.textContent = '婉拒合作';
+    hr.appendChild(thRej);
     thead.appendChild(hr);
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
-    var totals = { stages: {}, coop: 0, total: 0 };
+    var totals = { stages: {}, coop: 0, doing: 0, rejected: 0, total: 0 };
     for(var r = 0; r < data.groups.length; r++){
       var g = data.groups[r];
       totals.total += g.total;
       totals.coop += g.coop;
+      totals.doing += (g.doing || 0);
+      totals.rejected += (g.rejected || 0);
       for(var ts = 0; ts < data.stageOrder.length; ts++){
         totals.stages[data.stageOrder[ts]] = (totals.stages[data.stageOrder[ts]] || 0) + (g.stages[data.stageOrder[ts]] || 0);
       }
@@ -4276,10 +4292,10 @@ var state = {
         var count = g.stages[key] || 0;
         tr.appendChild(progressCell(count, g.total));
       }
-      tr.appendChild(progressCell(g.coop, g.total, true));
-      var tdTotal = document.createElement('td');
-      tdTotal.textContent = String(g.total);
-      tr.appendChild(tdTotal);
+      tr.appendChild(progressCell(g.doing || 0, g.total));
+      var tdRej = document.createElement('td');
+      tdRej.textContent = String(g.rejected || 0);
+      tr.appendChild(tdRej);
       tbody.appendChild(tr);
     }
 
@@ -4293,9 +4309,9 @@ var state = {
       var key3 = data.stageOrder[s3];
       trT.appendChild(progressCell(totals.stages[key3] || 0, totals.total));
     }
-    trT.appendChild(progressCell(totals.coop, totals.total, true));
+    trT.appendChild(progressCell(totals.doing, totals.total));
     var tdTotalT = document.createElement('td');
-    tdTotalT.textContent = String(totals.total);
+    tdTotalT.textContent = String(totals.rejected);
     trT.appendChild(tdTotalT);
     tbody.appendChild(trT);
 
