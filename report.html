@@ -168,9 +168,16 @@
   .subtitle{ font-size:14px; margin:4px 0 10px; color:var(--text); }
   .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px; }
   .stat-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
-  .stat-value{ font-size:26px; font-weight:700; }
+  /* 2026-10-20：成案率併入合作結案卡 → 左右並排；桌機四欄（手機仍走原本堆疊） */
+  .stat-pair{ display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; }
+  .stat-pair-item{ display:flex; flex-direction:column; min-width:0; }
+  .stat-pair-item + .stat-pair-item{ padding-left:16px; border-left:1px solid var(--border); }
+  @media screen and (min-width:821px){
+    .stat-grid{ grid-template-columns:repeat(4,minmax(0,1fr)) !important; }
+  }
+  .stat-value{ font-size:30px; font-weight:700; }
   .stat-value.ok{ color:var(--ok); }
-  .stat-label{ color:var(--muted); font-size:13px; margin-top:2px; }
+  .stat-label{ color:var(--muted); font-size:17px; margin-top:2px; }
   /* 卡片內的第二行：與上期比較 · 上期件數 · 全期累計（沿用 .bf-up/.bf-dn/.bf-flat 的顏色） */
   /* 卡片內的第二行：刻意做成「兩行」而不是讓它自然換行 ——
      自然換行會在行首留下一個孤零零的分隔符（實測卡片內寬只有 162px，
@@ -186,8 +193,8 @@
   .stat-cat{ display:inline-flex; align-items:center; gap:6px; background:var(--card-2);
     border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
   .stat-cat .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
-  .stat-cat .sc-name{ font-size:12px; color:var(--muted); }
-  .stat-cat .sc-count{ font-size:12px; font-weight:700; color:var(--text); }
+  .stat-cat .sc-name{ font-size:16px; color:var(--muted); }
+  .stat-cat .sc-count{ font-size:17px; font-weight:700; color:var(--text); }
   .ke-bar-legend{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-top:8px; }
   .ke-bar-legend-item{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }
   .ke-bar-legend-item .sc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
@@ -206,12 +213,12 @@
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
     padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
   .ke-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
-  .ke-card .ke-val{ font-size:20px; font-weight:650; color:var(--text); }
-  .ke-card .ke-name{ color:var(--muted); font-size:13px; }
+  .ke-card .ke-val{ font-size:24px; font-weight:650; color:var(--text); }
+  .ke-card .ke-name{ color:var(--muted); font-size:16px; }
   .ke-card .stat-cats{ margin-top:0; padding-top:4px; border-top:1px dashed var(--border); }
   .ke-card .stat-cat{ padding:2px 8px; }
-  .ke-card .stat-cat .sc-name{ font-size:11px; }
-  .ke-card .stat-cat .sc-count{ font-size:11px; }
+  .ke-card .stat-cat .sc-name{ font-size:15px; }
+  .ke-card .stat-cat .sc-count{ font-size:16px; }
   .pg-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
   .pg-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
   .pg-table th{ position:sticky; top:0; background:var(--card-2); color:var(--muted);
@@ -356,7 +363,10 @@
     .ns-bar{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
   .qk-wrap{ overflow:auto; border:1px solid var(--border); border-radius:8px; }
-  .qk-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
+  .qk-table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:16px; }
+  /* 2026-10-20：字放大 13→16（+23%），左右內距縮小以守住表格總寬 */
+  .qk-table th, .qk-table td{ padding-left:4px; padding-right:4px; }
+  .qk-table td.qk-ke{ font-size:17px; font-weight:700; }
   .qk-table th{ position:static; background:var(--card-2); color:var(--muted);
     font-weight:600; text-align:center; padding:8px 10px; border-bottom:1px solid var(--border);
     border-left:1px solid var(--border); white-space:nowrap; }
@@ -1552,7 +1562,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.18.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
+  var APP_VERSION = '1.19.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
   var APP_VERSION_DATE = '2026-10-15';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4542,10 +4552,10 @@ var state = {
       { label: isPeriodView ? '本期新增案件' : '總客戶數', value: String(stats.total), cls: '',
         cats: catsBreakdown(model.rows, null), meta: metaN },
       { label: isPeriodView ? '本期導入完成' : '合作結案', value: String(stats.coop), cls: '',
-        cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }), meta: metaI },
+        cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }), meta: metaI,
+        rate: stats.rate },   // 2026-10-20：成案率併入同一張卡，左右並排
       { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '進行中'; }) },
-      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) },
-      { label: '成案率', value: stats.rate + '%', cls: 'ok' }
+      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) }
     ];
     for(var i = 0; i < big.length; i++){
       var c = document.createElement('div');
@@ -4556,8 +4566,29 @@ var state = {
       var l = document.createElement('div');
       l.className = 'stat-label';
       l.textContent = big[i].label;
-      c.appendChild(v);
-      c.appendChild(l);
+      if(big[i].rate !== undefined){
+        // 左右並排：左＝合作結案（數字＋標題），右＝成案率（百分比＋標題）
+        c.classList.add('stat-card-pair');
+        var pair = document.createElement('div');
+        pair.className = 'stat-pair';
+        var pa = document.createElement('div');
+        pa.className = 'stat-pair-item';
+        pa.appendChild(v); pa.appendChild(l);
+        var pb = document.createElement('div');
+        pb.className = 'stat-pair-item';
+        var v2 = document.createElement('div');
+        v2.className = 'stat-value ok';
+        v2.textContent = big[i].rate + '%';
+        var l2 = document.createElement('div');
+        l2.className = 'stat-label';
+        l2.textContent = '成案率';
+        pb.appendChild(v2); pb.appendChild(l2);
+        pair.appendChild(pa); pair.appendChild(pb);
+        c.appendChild(pair);
+      } else {
+        c.appendChild(v);
+        c.appendChild(l);
+      }
       if(big[i].meta){
         var m = big[i].meta;
         var line = document.createElement('div');
