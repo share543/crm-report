@@ -1578,7 +1578,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.25.0';   // 1.25.0：類別口徑全面改讀四個勾選欄——件數各欄各計一次（甲配不再消失）、佔比／比例圖改互斥組合桶（合計＝案件數）
+  var APP_VERSION = '1.25.1';   // 1.25.0：類別口徑全面改讀四個勾選欄——件數各欄各計一次（甲配不再消失）、佔比／比例圖改互斥組合桶（合計＝案件數）
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -4878,7 +4878,7 @@ var state = {
     thead.className = 'pgm-head';
     var tg = document.createElement('span');
     tg.className = 'pgm-group';
-    tg.textContent = '全體合計';
+    tg.textContent = '各類別合計';
     thead.appendChild(tg);
     var tm = document.createElement('span');
     tm.className = 'pgm-meta';
@@ -4935,7 +4935,7 @@ var state = {
     catNote.className = 'pg-note';
     catNote.textContent = '依類別的件數：' + catSumNote(model.rows) +
       '（四欄各計一次：' + catTickTotalsText(catTickTotals(model.rows)) + '）。' +
-      '本表「全體合計」為各類別列相加，不會等於案件數 ' + model.rows.length + '。';
+      '本表「各類別合計」為各類別列相加（多勾案件重複計），不會等於案件數 ' + model.rows.length + '。';
     catBox.appendChild(catNote);
     sec.hidden = false;
   }
@@ -5037,7 +5037,7 @@ var state = {
     trT.className = 'pg-total';
     var tdGroupT = document.createElement('td');
     tdGroupT.className = 'pg-ke';
-    tdGroupT.textContent = '全體合計';
+    tdGroupT.textContent = '各類別合計';
     trT.appendChild(tdGroupT);
     for(var s3 = 0; s3 < data.stageOrder.length; s3++){
       var key3 = data.stageOrder[s3];
