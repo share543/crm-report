@@ -553,6 +553,14 @@
     border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px; min-width:120px; }
   .list-field input{ min-width:230px; }
   .list-field select:focus, .list-field input:focus{ outline:none; border-color:var(--accent); }
+  /* 案件清單：類別多選 chips（沿用 .period-chip 的配色，不新發明顏色）。
+     類別是四個勾選欄 → 一個客戶可有多個類別，所以不能用互斥下拉。 */
+  .list-field-cats{ flex:0 1 auto; min-width:0; }
+  .cat-filter{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .cat-filter .period-chip{ padding:4px 10px; font-size:12px; }
+  .cat-filter .cat-filter-n{ opacity:.72; margin-left:4px; font-variant-numeric:tabular-nums; }
+  .cat-filter-state{ font-size:12px; color:var(--muted); white-space:nowrap; }
+  .cat-filter-state[data-active="true"]{ color:var(--accent); font-weight:650; }
   #resetFilters{ background:var(--card-2); color:var(--muted); border:1px solid var(--border);
     border-radius:6px; padding:7px 14px; font-size:13px; cursor:pointer; align-self:center; }
   #resetFilters:hover{ border-color:var(--accent); color:var(--text); }
@@ -1567,7 +1575,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.23.0';   // 1.23.0：會後郵件「今年累計案件」改為一課一行（未合作率 高→低）＋新增「複製表格（HTML）」給桌機貼 Outlook
+  var APP_VERSION = '1.24.0';   // 1.24.0：案件清單類別篩選改為四個勾選欄（多類別／多選交集／未分類）＋每列顯示全部類別＋「符合 X 筆／共 Y 筆」
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2103,6 +2111,12 @@ var state = {
   //   - 一個勾都沒有 → 類別留空，沿用既有「(類別未填)」標籤。
   //   - 舊格式（檔案有 `類別` 欄）→ 完全不動 ⇒ 新舊檔都能載，不必二選一。
   var CAT_TICK_COLS = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
+
+  // 案件清單「類別」篩選用的選項（＝四個勾選欄）＋「未分類」桶（四欄都沒勾）。
+  // ⚠ 篩選必須比對勾選集合，不可比對合成後的單值 `類別`：
+  //   `類別` 只有一個值（優先序 零擔→1P→3P），「零擔＋1P」的客戶在篩 1P 時會消失（v1.24.0 修正）。
+  var CAT_FILTER_KEYS = ['零擔', '1P(SCM)', '3P(MO+)', '甲配'];
+  var CAT_FILTER_NONE = '__none__';
 
   // 純函式：合成類別。原地修改 rows，回傳統計供匯入摘要顯示。
   function deriveCategoryFromTicks(rows, headers){
@@ -3884,6 +3898,15 @@ var state = {
     var KEYS = ['課別', '類別', '狀態', '開發者'];
     for(var i = 0; i < KEYS.length; i++){
       var k = KEYS[i];
+      if(k === '類別'){
+        // 類別是多選（取交集）；單選時與舊行為一致
+        var cs = normalizeCatFilter(f.類別);
+        if(!cs.length) continue;
+        parts.push('類別：' + cs.map(function(c){
+          return c === CAT_FILTER_NONE ? '未分類' : c;
+        }).join('＋') + (cs.length > 1 ? '（交集）' : ''));
+        continue;
+      }
       var v = f[k];
       if(v === undefined || v === null || String(v).trim() === '') continue;
       parts.push(k + '：' + (v === BLANK_BUCKET ? blankLabel(k) : String(v)));
@@ -9829,7 +9852,8 @@ var state = {
   var STATUS_ORDER = ['合作成功', '客戶婉拒', '聯繫失敗', '考慮中/暫緩', '需求無法滿足(暫緩)', '其他結案', '進行中', '未啟動'];
 
   function defaultFilters(){
-    return { 課別: '', 狀態: '', 開發者: '', 類別: '', 關鍵字: '' };
+    // 類別＝陣列（可多選；空陣列＝全部）。舊存檔若是字串，normalizeCatFilter 會自動轉陣列。
+    return { 課別: '', 狀態: '', 開發者: '', 類別: [], 關鍵字: '' };
   }
 
   // 純函式：欄位字串（trim），空白或不存在回 ''
@@ -9886,6 +9910,58 @@ var state = {
     return actual === filterVal;
   }
 
+  // 純函式：正規化類別篩選值 → 陣列（接受字串＝舊格式、陣列＝多選；去空白、去重）
+  function normalizeCatFilter(v){
+    if(v === undefined || v === null) return [];
+    var arr = (Object.prototype.toString.call(v) === '[object Array]') ? v : [v];
+    var out = [];
+    for(var i = 0; i < arr.length; i++){
+      var s = String(arr[i] === undefined || arr[i] === null ? '' : arr[i]).trim();
+      if(s && out.indexOf(s) === -1) out.push(s);
+    }
+    return out;
+  }
+
+  // 純函式：該筆的類別勾選集合（新格式讀四個勾選欄；舊格式退回 類別 單值）
+  // 順序固定 零擔 → 1P(SCM) → 3P(MO+) → 甲配，供 catSetLabel 組組合名稱。
+  function rowCatSet(r){
+    var out = [];
+    if(!r) return out;
+    var isTickFmt = false;
+    for(var t = 0; t < CAT_TICK_COLS.length; t++){
+      if(CAT_TICK_COLS[t] in r){ isTickFmt = true; break; }
+    }
+    if(isTickFmt){
+      for(var i = 0; i < CAT_TICK_COLS.length; i++){
+        if(isTickMark(r[CAT_TICK_COLS[i]])) out.push(CAT_TICK_COLS[i]);
+      }
+      return out;
+    }
+    var c = fieldStr(r, '類別');
+    if(c) out.push(c);
+    return out;
+  }
+
+  // 純函式：類別篩選比對。多選語意＝交集（所選每一項都必須在該筆的集合裡）。
+  // 「未分類」＝四欄都沒勾（與任何類別互斥，同時選必然 0 筆；UI 會強制二選一）。
+  function matchCatFilter(sel, r){
+    var want = normalizeCatFilter(sel);
+    if(!want.length) return true;
+    var cats = rowCatSet(r);
+    for(var i = 0; i < want.length; i++){
+      var w = want[i];
+      if(w === CAT_FILTER_NONE){ if(cats.length) return false; continue; }
+      if(cats.indexOf(w) === -1) return false;
+    }
+    return true;
+  }
+
+  // 純函式：案件清單「類別」欄要顯示的文字（多類別優先顯示業務組合名稱，例如 零擔1P）
+  function catCellLabel(r){
+    var cats = rowCatSet(r);
+    return cats.length ? catSetLabel(cats) : blankLabel('類別');
+  }
+
   // 純函式：套用篩選（課別／類別／狀態／開發者 ＋ 關鍵字）；全空回傳全部
   function applyFilters(rows, filters){
     var f = filters || {};
@@ -9895,7 +9971,7 @@ var state = {
       var r = rows[i];
       if(kw && !keywordMatches(r, kw)) continue;
       if(!matchDrop(f.課別, fieldStr(r, '課別'))) continue;
-      if(!matchDrop(f.類別, fieldStr(r, '類別'))) continue;
+      if(!matchCatFilter(f.類別, r)) continue;
       if(!matchDrop(f.開發者, fieldStr(r, '開發者'))) continue;
       if(!matchDrop(f.狀態, classifyStatus(r))) continue;
       out.push(r);
@@ -10217,6 +10293,8 @@ var state = {
   // 純函式：排序值（狀態→分類名；其餘→欄位字串）
   function sortValue(r, col){
     if(col === '狀態') return classifyStatus(r);
+    // 類別欄顯示的是勾選集合的組合名稱 → 排序也照顯示值排，否則畫面上會看起來亂序
+    if(col === '類別') return catCellLabel(r);
     return fieldStr(r, col);
   }
 
@@ -10328,6 +10406,40 @@ var state = {
   // ---------------------------------------------------------------------------
   var listRebuildTimer = null;
 
+  // 類別多選：切換一個類別（「未分類」與其他類別互斥 —— 四欄都沒勾不可能同時勾了某類別）
+  function toggleCatFilter(key){
+    if(!state.filters) state.filters = defaultFilters();
+    var sel = normalizeCatFilter(state.filters.類別);
+    var at = sel.indexOf(key);
+    if(at >= 0){
+      sel.splice(at, 1);
+    } else if(key === CAT_FILTER_NONE){
+      sel = [CAT_FILTER_NONE];
+    } else {
+      sel = sel.filter(function(x){ return x !== CAT_FILTER_NONE; }).concat([key]);
+    }
+    state.filters.類別 = sel;
+    state.page = 1;
+    syncCatFilterChips();
+    scheduleRebuild(0);
+  }
+
+  // 同步 chips 的 aria-pressed 與「已選 N 項」提示（讓 UI 看得出目前選了幾項）
+  function syncCatFilterChips(){
+    var g = document.getElementById('catFilter');
+    if(!g) return;
+    var sel = normalizeCatFilter(state.filters ? state.filters.類別 : []);
+    var bs = g.querySelectorAll('.cat-chip');
+    for(var i = 0; i < bs.length; i++){
+      bs[i].setAttribute('aria-pressed', sel.indexOf(bs[i].dataset.cat) >= 0 ? 'true' : 'false');
+    }
+    var st = document.getElementById('catFilterState');
+    if(st){
+      st.textContent = sel.length ? ('已選 ' + sel.length + ' 項' + (sel.length > 1 ? '・取交集' : '')) : '全部';
+      st.setAttribute('data-active', sel.length ? 'true' : 'false');
+    }
+  }
+
   function scheduleRebuild(delay){
     if(listRebuildTimer) clearTimeout(listRebuildTimer);
     listRebuildTimer = setTimeout(function(){
@@ -10367,9 +10479,57 @@ var state = {
       return lb;
     }
 
+    // 類別：四個勾選欄 → 一個客戶可有多個類別，所以是**多選 chips**（語意＝交集），
+    // 不是互斥下拉。選項後面直接標「全部資料」裡各類別的件數，讓使用者知道勾了會剩幾筆。
+    function catFilterBlock(rows, selected){
+      var lb = document.createElement('div');
+      lb.className = 'list-field list-field-cats';
+      var cap = document.createElement('span');
+      cap.textContent = '類別（可多選・取交集）';
+      lb.appendChild(cap);
+      var group = document.createElement('div');
+      group.className = 'cat-filter';
+      group.id = 'catFilter';
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', '類別篩選：可多選，所選類別都要符合');
+      var sel = normalizeCatFilter(selected);
+      var counts = {};
+      for(var i = 0; i < rows.length; i++){
+        var cats = rowCatSet(rows[i]);
+        if(!cats.length){ counts[CAT_FILTER_NONE] = (counts[CAT_FILTER_NONE] || 0) + 1; continue; }
+        for(var j = 0; j < cats.length; j++) counts[cats[j]] = (counts[cats[j]] || 0) + 1;
+      }
+      var keys = CAT_FILTER_KEYS.concat([CAT_FILTER_NONE]);
+      for(var k = 0; k < keys.length; k++){
+        var key = keys[k];
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'period-chip cat-chip';
+        b.dataset.cat = key;
+        b.setAttribute('aria-pressed', sel.indexOf(key) >= 0 ? 'true' : 'false');
+        b.appendChild(document.createTextNode(key === CAT_FILTER_NONE ? '未分類' : key));
+        var n = document.createElement('span');
+        n.className = 'cat-filter-n';
+        n.textContent = String(counts[key] || 0);
+        b.appendChild(n);
+        b.title = (key === CAT_FILTER_NONE ? '四欄都沒勾的案件' : ('勾選 ' + key + ' 的案件')) +
+                  '：' + (counts[key] || 0) + ' 筆（可再多選其他類別，結果取交集）';
+        (function(kk){
+          b.addEventListener('click', function(){ toggleCatFilter(kk); });
+        })(key);
+        group.appendChild(b);
+      }
+      var st = document.createElement('span');
+      st.className = 'cat-filter-state';
+      st.id = 'catFilterState';
+      group.appendChild(st);
+      lb.appendChild(group);
+      return lb;
+    }
+
     var f = state.filters || defaultFilters();
     toolbar.appendChild(fieldBlock('課別', '課別', distinctFieldValues(model.rows, '課別', KE_BASE_ORDER), f.課別));
-    toolbar.appendChild(fieldBlock('類別', '類別', distinctFieldValues(model.rows, '類別', ['零擔', '1P(SCM)', '3P(MO+)']), f.類別));
+    toolbar.appendChild(catFilterBlock(model.rows, f.類別));
     toolbar.appendChild(fieldBlock('狀態', '狀態', distinctFieldValues(model.rows, '狀態', STATUS_ORDER), f.狀態));
     toolbar.appendChild(fieldBlock('開發者', '開發者', distinctFieldValues(model.rows, '開發者'), f.開發者));
 
@@ -10394,6 +10554,7 @@ var state = {
 
     box.textContent = '';
     box.appendChild(toolbar);
+    syncCatFilterChips();   // 類別 chips 的選取狀態／已選幾項
 
     var results = document.createElement('div');
     results.id = 'listResults';
@@ -10428,6 +10589,7 @@ var state = {
       for(var i = 0; i < sels.length; i++) sels[i].value = '';
       var kwin = document.getElementById('listKeyword');
       if(kwin) kwin.value = '';
+      syncCatFilterChips();     // 類別是 chips，不是 select：重置後要把選取狀態一起清掉
     }
     rebuild();
   }
@@ -10445,7 +10607,7 @@ var state = {
   function syncPeriodControls(){
     var range = periodRange(state.period);
     var isPreset = (state.period.preset || 'all') !== 'all';
-    var chips = document.querySelectorAll('.period-chip');
+    var chips = document.querySelectorAll('#periodChips .period-chip');
     for(var i = 0; i < chips.length; i++){
       chips[i].setAttribute('aria-pressed', String(chips[i].dataset.preset === state.period.preset));
     }
@@ -10529,7 +10691,7 @@ var state = {
 
   // 建立期間控制事件（元素常駐，僅需綁定一次）
   function initPeriodControls(){
-    var chips = document.querySelectorAll('.period-chip');
+    var chips = document.querySelectorAll('#periodChips .period-chip');
     for(var i = 0; i < chips.length; i++){
       chips[i].addEventListener('click', function(){
         setPeriod({ preset: this.dataset.preset, from: '', to: '' });
@@ -10642,9 +10804,14 @@ var state = {
 
     var summary = document.createElement('p');
     summary.className = 'list-summary';
-    summary.textContent = (opts.total === 0)
-      ? '共 0 筆'
-      : '顯示 ' + (opts.start + 1) + '–' + opts.end + ' / 總 ' + opts.total + ' 筆';
+    // 篩選結果即時顯示：符合幾筆／共幾筆（母數＝同一分析期間、未套篩選的列數）
+    var base = (opts.base === undefined || opts.base === null) ? opts.total : opts.base;
+    if(!opts.total){
+      summary.textContent = '符合 0 筆／共 ' + base + ' 筆，無符合條件的資料';
+    } else {
+      summary.textContent = '符合 ' + opts.total + ' 筆／共 ' + base + ' 筆' +
+        '｜顯示 ' + (opts.start + 1) + '–' + opts.end;
+    }
     container.appendChild(summary);
 
     var wrap = document.createElement('div');
@@ -10753,9 +10920,37 @@ var state = {
 
     for(var v = 0; v < cols.length; v++){
       var td = document.createElement('td');
-      var val = (cols[v].key === '狀態') ? classifyStatus(row) : fieldStr(row, cols[v].key);
-      td.textContent = val;
-      if(cols[v].key === '狀態' && val === '合作成功') td.classList.add('ok');
+      if(cols[v].key === '類別'){
+        // 類別是四個勾選欄 → 一筆可能有多個。單一：原標籤；多個：先顯示業務組合名稱（catSetLabel），
+        // 再把每個類別各自一個小標籤列出，滑鼠移上去看完整組合（沿用 .do-chip，不新增顏色）。
+        var cats = rowCatSet(row);
+        if(!cats.length){
+          td.textContent = blankLabel('類別');
+          td.className = 'do-empty';
+        } else {
+          if(cats.length > 1){
+            var combo = document.createElement('span');
+            combo.className = 'do-chip';
+            combo.textContent = catSetLabel(cats);
+            combo.title = '同時勾選：' + cats.join('＋') + '（篩選任一個類別都找得到這筆）';
+            td.appendChild(combo);
+            td.appendChild(document.createTextNode(' '));
+          }
+          for(var ci = 0; ci < cats.length; ci++){
+            var chip = document.createElement('span');
+            chip.className = 'do-chip';
+            chip.textContent = cats[ci];
+            if(cats.length > 1) chip.title = '同時勾選：' + cats.join('＋');
+            td.appendChild(chip);
+            if(ci < cats.length - 1) td.appendChild(document.createTextNode(' '));
+          }
+          td.setAttribute('data-cats', cats.join('|'));
+        }
+      } else {
+        var val = (cols[v].key === '狀態') ? classifyStatus(row) : fieldStr(row, cols[v].key);
+        td.textContent = val;
+        if(cols[v].key === '狀態' && val === '合作成功') td.classList.add('ok');
+      }
       // 欄位級問題標記（例如 類別規則不一致 → 標示 簽約／導入 欄）
       var bf = badFields[cols[v].key];
       if(bf) td.classList.add(bf === 'mismatch' ? 'cell-mismatch' : 'cell-bad');
@@ -10815,6 +11010,8 @@ var state = {
     if(!box || !results || !state.model || !state.model.rows) return;
     var filtered = applyFilters(state.model.rows, state.filters);
     filtered = applyPeriod(filtered, state.period).rows;
+    // 母數：同一分析期間、**未套篩選**的列數（「符合 X 筆／共 Y 筆」的分母）
+    var baseCount = applyPeriod(state.model.rows, state.period).rows.length;
     var sorted = sortRows(filtered, state.sortCol, state.sortDir);
     var page = paginate(sorted, state.page, PAGE_SIZE);
     state.page = page.page;
@@ -10822,14 +11019,15 @@ var state = {
     if(!page.total){
       var p = document.createElement('p');
       p.className = 'pending';
-      p.textContent = '共 0 筆，無符合條件的資料';
+      p.textContent = '符合 0 筆／共 ' + baseCount + ' 筆，無符合條件的資料';
       results.appendChild(p);
       return;
     }
+    syncCatFilterChips();   // 篩選後把「已選 N 項」再對一次（換檔／還原存檔時也會走這裡）
     renderList(results, {
       columns: visibleListColumns(state.listCols),
       rows: page.rows,
-      start: page.start, end: page.end, total: page.total,
+      start: page.start, end: page.end, total: page.total, base: baseCount,
       page: page.page, totalPages: page.totalPages,
       sortCol: state.sortCol, sortDir: state.sortDir,
       onSort: sortBy, onPage: gotoPage
@@ -11005,7 +11203,10 @@ var state = {
       '長條依類別分段，同一個原因可能同時有多個類別。'
     ],
     listSection: [
-      '每頁 50 筆；可用關鍵字、課別、開發者、類別、狀態篩選。',
+      '每頁 50 筆；可用關鍵字、課別、類別、狀態、開發者篩選。',
+      '類別是一個客戶可勾多個（1P／3P／甲配／零擔四個獨立勾選欄），所以類別可以多選；同時選兩項表示兩項都要有。',
+      '勾了多個類別的案件，在它的每一個類別下都找得到；「未分類」是四欄都沒勾的案件。',
+      '類別欄會列出該案的全部類別，多個類別時先顯示組合名稱（例如零擔1P），滑鼠移上去可看完整組合。',
       '點任一列可展開明細；從其他區塊點案件名稱跳過來時，會自動定位並展開那一筆。'
     ]
   };
@@ -12817,7 +13018,7 @@ var state = {
     renderList(results, {
       columns: visibleListColumns(state.listCols),
       rows: sorted,
-      start: 0, end: sorted.length, total: sorted.length,
+      start: 0, end: sorted.length, total: sorted.length, base: sorted.length,
       page: 1, totalPages: 1,
       sortCol: state.sortCol, sortDir: state.sortDir,
       onSort: sortBy, onPage: gotoPage
@@ -13704,6 +13905,14 @@ var state = {
       paginate: paginate,
       distinctFieldValues: distinctFieldValues,
       optionValueLabel: optionValueLabel,
+      normalizeCatFilter: normalizeCatFilter,
+      rowCatSet: rowCatSet,
+      matchCatFilter: matchCatFilter,
+      catCellLabel: catCellLabel,
+      toggleCatFilter: toggleCatFilter,
+      syncCatFilterChips: syncCatFilterChips,
+      CAT_FILTER_KEYS: CAT_FILTER_KEYS,
+      CAT_FILTER_NONE: CAT_FILTER_NONE,
       blankLabel: blankLabel,
       isBlankLabel: isBlankLabel,
       pagerItems: pagerItems,

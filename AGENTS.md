@@ -1607,3 +1607,29 @@ dropoffSection／dropReasonSection／listSection（講者版 briefSection 刻意
 剪貼簿驗法：把 `contentWindow.navigator.clipboard` 用 `Object.defineProperty` 換成會記錄 items 的 stub，
 再 `btn.click()`，之後 `items[0].getType('text/html').text()` 就是真正會貼上的內容（可斷言 5 個 `<th>`、
 無 `class=`）；接著換成 `write(){return Promise.reject()}` 驗降級路徑有沒有留下提示文字。
+
+### v1.24.0（2026-10-22）案件清單「類別」篩選：改成四個勾選欄（多類別／多選交集／未分類）
+
+**Bug**：Excel 的類別已改成**四個獨立勾選欄**（1P／3P／甲配／零擔），一個客戶可同時勾多個；
+但案件清單的類別篩選還在比對 `deriveCategoryFromTicks` **合成後的單值 `類別`**（優先序 零擔→1P→3P）。
+結果「零擔＋1P」的客戶在篩 1P 時找不到（實測 3 筆），「甲配」永遠不出現在選單（甲配不佔用 `類別`），
+而且篩選是單選下拉，無法表達「兩個類別都要」。
+
+**修法**（`applyFilters` 不再碰 `catOf`／合成 `類別`）：
+
+- `rowCatSet(r)`：該筆的勾選集合（新格式讀四個勾選欄；舊格式退回 `類別` 單值），順序固定 零擔→1P→3P→甲配。
+- `matchCatFilter(sel, r)`：**多選＝交集**（所選每一項都要在集合裡）；`CAT_FILTER_NONE`（`__none__`）＝四欄都沒勾。
+- 篩選 UI 由 `<select>` 改為 chips（`#catFilter`，沿用 `.period-chip` 配色，選項後標全部資料件數），
+  右側 `#catFilterState` 顯示「全部」／「已選 N 項」（多於一項時加註「取交集」）。`未分類` 與其他類別互斥（同時選必然 0 筆，故 UI 強制二選一）。
+- 每列的類別格：單一→原標籤；多個→先顯示 `catSetLabel()` 組合名稱（零擔1P／3P轉甲配），再逐個列出全部類別
+  （`.do-chip`），`title` 為完整組合；`td[data-cats]` 存 `|` 分隔的集合。`sortValue('類別')` 也改用 `catCellLabel()`，排序與畫面一致。
+- 摘要列改為「符合 X 筆／共 Y 筆｜顯示 a–b」，Y＝同一分析期間、未套篩選的列數。
+- ⚠ `syncPeriodControls()`／`initPeriodControls()` 的 `.period-chip` 查詢已收斂到 `#periodChips`，
+  否則新的類別 chips 會被期間同步覆寫 `aria-pressed`。
+- 舊存檔的 `state.filters.類別` 若是字串，`normalizeCatFilter()` 會轉成陣列（相容）。
+
+**驗證**（new4／clean.xlsx，251 有效列）：openpyxl 獨立計數 零擔 140／1P 65／3P 35／甲配 1／未分類 17；
+Chrome（playwright）逐項點選得到相同數字，多選交集 1P+零擔 3、3P+甲配 1、3P+零擔 3、1P+3P 0（皆與 openpyxl 相符）；
+「利倈企業有限公司（零擔＋1P）」在 1P 與 零擔 兩個篩選下都出現且顯示「零擔1P」；390px 溢出 0；
+19 個 `section.card` 的 `textContent` 雜湊只有 `listSection` 改變（其餘 18 個 0 差異）。
+腳本：`tools/verify-v1240-e2e.py`（playwright 自帶 chromium；本機沒有 /usr/local/bin/chromium）。
