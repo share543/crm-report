@@ -1562,7 +1562,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.20.0';   // 1.20.0：講者版會後郵件草稿改為使用者實際寄出的九段結構（資料段自動、政策段可編輯、需協助事項不指名）
+  var APP_VERSION = '1.21.0';   // 1.21.0：講者版方案 A（開場三句只留一處、GM LINE 改訊息卡且模式 3 個、GM 郵件改用九段草稿、色票收斂 3 語義、sticky 目錄）
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -3011,11 +3011,15 @@ var state = {
   // 不進複製出去的講稿文字 —— 唸的時候不會多出一個圖示名。
   function flowBlockHtml(title, body){
     var t = String(title || '');
+    var b = String(body || '');
+    // 內文常常以「同一個標題＋：」開頭（例如「上個月新增：新增 172 件；…」）——
+    // 標題已經印在 h2 上了，這裡把重複的開頭切掉，讀起來才不會像跳針。
+    if(t && b.indexOf(t + '：') === 0) b = b.slice(t.length + 1);
     var icon = FLOW_ICON[t.charAt(0)] || '';
     // 沒有對應圖示時不掛 span（掛了會留下一個空白 inline-block，把標題推開）
     var head = icon ? ('<span class="fl-ic">' + icon + '</span>' + t) : t;
     return '<section class="spk-flow"><h2>' + head + '</h2>' +
-           '<p class="spk-flow-body">' + String(body || '') + '</p></section>';
+           '<p class="spk-flow-body">' + b + '</p></section>';
   }
 
   // 純函式：類別填寫規則檢核（回傳結構化結果，不拋錯）
@@ -6996,7 +7000,8 @@ var state = {
     box.textContent = '';
     box.className = '';
     // 開場三句話放最前面：主持人一開口就講重點（投影第一頁也看得到）
-    renderOpening3(box, buildOpening3(rows, trendRows || rows, ranges));
+    // 講者版例外：SPK_SUPPRESS_O3 期間不畫（講者版把它放在模式切換區之外，整份只留一份）
+    if(!SPK_SUPPRESS_O3) renderOpening3(box, buildOpening3(rows, trendRows || rows, ranges));
     renderBriefKpis(box, trendRows || rows, ranges, rows);
     if(bad){
       var w = document.createElement('p');
@@ -7636,7 +7641,8 @@ var state = {
   function buildScriptText(rows, trendRows, ranges, items, opts){
     var L = [briefTextHeader('口頭講稿'), ''];
     // 開場三句話（由資料推導；資料不支持就不會出現那一句）
-    var o3 = buildOpening3(rows, trendRows || rows, ranges);
+    // 講者版例外：不重複放進複製文字（講者版已有一段獨立的開場三句話）
+    var o3 = SPK_SUPPRESS_O3 ? [] : buildOpening3(rows, trendRows || rows, ranges);
     if(o3.length){
       L.push('▍開場三句話（GM）');
       for(var oi = 0; oi < o3.length; oi++) L.push((oi + 1) + '. ' + o3[oi]);
@@ -11745,160 +11751,263 @@ var state = {
     return snapshotSectionToSpeaker('spkCatSection');
   }
 
-  // 講者版專屬版面（不動主報表）：手機優先、深色、一眼掃到
+  // 講者版專屬版面（不動主報表）：手機優先、3 色語義
+  // ── 色票：只有 3 個語意，其餘一律中性 ─────────────────────────────────
+  //   accent（藍）＝要行動：目前模式、複製、要決定、追問
+  //   ok（綠）    ＝正向：值得肯定、成長、複製完成
+  //   muted（灰） ＝中性：標籤、說明、次要數字
+  // 類別色（零擔／1P／3P）只准出現在圖表與表格的色段，不得用在文字、標籤、邊框；
+  // 舊版的紅（error）／黃（warning）／粉（laser）在講者版一律改走這 3 個語意。
+  // 全部顏色取自既有 CSS 變數，不新增色值（原本硬寫的 #0b1220 改用 var(--bg)）。
+  var SPK_SUPPRESS_O3 = false;   // 產生講者版時暫開：開場三句話已獨立一份，快照各模式時不再重複渲染
   var SPEAKER_CSS = [
-    'body.spk-body{ padding:max(10px, env(safe-area-inset-top)) 12px calc(30px + env(safe-area-inset-bottom));',
-    '  max-width:900px; margin:0 auto; }',
-    // ⚠ 一定要 flex-wrap：手機（430px）放 4 顆模式鈕＋複製鈕會超出，
-    //    沒有 wrap 時最右邊的「複製」會被擠出畫面（外緣被切）。
-    '#spkBar{ position:sticky; top:0; z-index:50; display:flex; flex-wrap:wrap; gap:8px; align-items:center;',
-    '  padding:9px 0 11px; background:var(--bg); border-bottom:1px solid var(--border); margin:0 0 14px; }',
-    '#spkBar .spk-title{ font-size:12.5px; color:var(--muted); margin-right:auto; }',
-    // 窄螢幕：標題自己一列，按鈕才有整列可排
+    'body.spk-body{ padding:max(10px, env(safe-area-inset-top)) 12px calc(28px + env(safe-area-inset-bottom));',
+    '  max-width:900px; margin:0 auto; font-size:16px; }',
+    // ── sticky 工具列：標題／3 個模式／複製 ──
+    // ⚠ 一定要 flex-wrap：390px 放標題＋3 顆模式鈕＋複製鈕會超出，
+    //    沒有 wrap 時最右邊的「複製」會被擠出畫面。
+    '#spkBar{ position:sticky; top:0; z-index:60; display:flex; flex-wrap:wrap; gap:8px; align-items:center;',
+    '  padding:9px 0 10px; background:var(--bg); border-bottom:1px solid var(--border); }',
+    '#spkBar .spk-title{ font-size:13px; color:var(--muted); margin-right:auto; }',
     '@media (max-width:560px){ #spkBar .spk-title{ width:100%; margin-right:0; } }',
-    '#spkMode{ font-size:13px; padding:6px 13px; }',
-    '.spk-hide{ display:none !important; }',
-    '.spk-sec.card{ border:none; background:transparent; padding:0; margin:0; }',
-    '.spk-sec .card-tools{ display:none !important; }',
-    '/* 數字帶：手機改 2×2（原本 1 欄會佔掉整個首屏） */',
-    '.spk-sec .bf-kpis{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:2px 0 16px; }',
-    '.spk-sec .bf-kpi{ flex:none; padding:11px 13px; }',
-    '.spk-sec .bf-kv{ font-size:24px; }',
-    '/* 主持人要一眼掃到：條目與講稿加大 */',
-    '.spk-sec .bf-list > li{ font-size:16.5px; line-height:1.85; }',
-    '.spk-sec .bf-script p{ font-size:16.5px; line-height:1.95; }',
-    '.spk-sec .bf-dsum{ font-size:15px; line-height:1.8; }',
-    '.spk-sec .bf-kl{ font-size:12.5px; }',
-    '@media (min-width:700px){ .spk-sec .bf-kpis{ grid-template-columns:repeat(4,1fr); } }',
-    '@media print{ #spkBar{ display:none !important; } }',
-    '/* GM 書面：純文字區塊（複製用） */',
-    '.spk-sec .bf-gm{ white-space:pre-wrap; word-break:break-word; background:var(--card-2);',
-    '  border:1px solid var(--border); border-radius:10px; padding:14px 15px; margin:2px 0 4px;',
-    '  font-size:13.5px; line-height:1.85; }',
-    '/* 模式列 */',
-    // 分段控制：整組一顆膠囊，選中的填色 —— 與報表的模式列同一套視覺
     '#spkModes{ display:flex; gap:4px; align-items:center; flex-wrap:wrap;',
     '  background:var(--card-2); border:1px solid var(--border); border-radius:999px; padding:4px; }',
     '#spkBar .spk-m{ display:inline-flex; align-items:center; background:transparent; border:0;',
-    '  border-radius:999px; padding:7px 14px; font-family:inherit; font-size:13px; font-weight:600;',
-    '  color:var(--muted); cursor:pointer; line-height:1.3; white-space:nowrap; min-height:34px;',
-    '  transition:background .16s ease, color .16s ease, box-shadow .16s ease; }',
-    '#spkBar .spk-m:hover{ color:var(--text); box-shadow:inset 0 0 0 1px var(--border); }',
-    '#spkBar .spk-m:active{ transform:translateY(1px); }',
+    '  border-radius:999px; padding:8px 14px; font-family:inherit; font-size:14px; font-weight:600;',
+    '  color:var(--muted); cursor:pointer; line-height:1.3; white-space:nowrap; min-height:36px; }',
+    '#spkBar .spk-m:hover{ color:var(--text); }',
     '#spkBar .spk-m:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }',
-    '#spkBar .spk-m.on{ background:var(--accent); color:#0b1220; font-weight:700;',
-    '  box-shadow:0 2px 8px rgba(0,0,0,.30); }',
-    '#spkBar .spk-m.on:hover{ color:#0b1220; box-shadow:0 2px 8px rgba(0,0,0,.30); }',
-    '#spkCopy{ border:0; border-radius:999px; padding:7px 16px; min-height:34px; font-family:inherit;',
-    '  font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; background:transparent;',
-    '  color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent);',
-    '  transition:background .16s ease, color .16s ease; }',
-    '#spkCopy:hover{ background:var(--accent); color:#0b1220; }',
-    '#spkCopy.done{ background:var(--ok); color:#0b1220; box-shadow:inset 0 0 0 1px var(--ok); }',
-    '@media (max-width:560px){ #spkCopy{ margin-left:0; } }',
+    '#spkBar .spk-m.on{ background:var(--accent); color:var(--bg); font-weight:700; }',
+    '#spkCopy{ border:0; border-radius:999px; padding:8px 16px; min-height:36px; font-family:inherit;',
+    '  font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; background:transparent;',
+    '  color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }',
+    '#spkCopy.done{ background:var(--ok); color:var(--bg); box-shadow:inset 0 0 0 1px var(--ok); }',
     '#spkBar .spk-gap{ flex:1 1 auto; }',
-    // 分析期間宣告列（見 speakerPeriodLine）。深色底＋中性邊框，與 sticky 工具列視覺相連但不搶焦點；
-    // 字級 13px 夠讀、白色（繼承 body.spk-body 的 --text），不在深色容器裡靠繼承冒險。
-    '#spkPeriod{ margin:0 0 16px; padding:9px 13px; background:var(--card-2);',
-    '  border:1px solid var(--border); border-radius:9px; font-size:13px;',
-    '  line-height:1.6; color:var(--text); font-weight:600; }',
-    // ── 六段會議流程 ──
-    // 段落標題用與模式區塊相同的 h2 尺寸（講者版是給主持人掃讀的，不是給大家投影的）；
-    // 內文 16.5px 與講稿同級 —— 這些是要照著唸的句子，寧可大一點。
-    '.spk-flow{ margin:0 0 18px; }',
-    '.spk-flow h2{ font-size:16px; margin:0 0 7px; color:var(--text);',
-    '  letter-spacing:.2px; }',
-    // 段落圖示：固定寬度置中，避免 emoji 與後面的中文基線對不齊
-    '.spk-flow h2 .fl-ic{ display:inline-block; width:1.45em; text-align:center;',
-    '  margin-right:2px; font-size:15px; vertical-align:-1px; }',
-    '.spk-flow-body{ font-size:16.5px; line-height:1.95; margin:0; color:var(--text);',
+    // ── sticky 目錄：5 段（開場／注意／決定／肯定／郵件），單手可點 ──
+    // 貼在工具列下緣（top 用 JS 量到的 --spkbar-h，標題在窄螢幕會自己佔一列）。
+    '#spkToc{ position:sticky; top:var(--spkbar-h, 54px); z-index:55; display:flex; gap:6px;',
+    '  overflow-x:auto; -webkit-overflow-scrolling:touch; padding:8px 0; margin:0 0 6px;',
+    '  background:var(--bg); border-bottom:1px solid var(--border); scrollbar-width:none; }',
+    '#spkToc::-webkit-scrollbar{ display:none; }',
+    '#spkToc a{ flex:0 0 auto; display:inline-flex; align-items:center; min-height:34px; padding:6px 13px;',
+    '  border-radius:999px; box-shadow:inset 0 0 0 1px var(--border); font-size:14px; font-weight:600;',
+    '  color:var(--muted); text-decoration:none; white-space:nowrap; }',
+    '#spkToc a:hover{ color:var(--text); }',
+    '#spkToc a[aria-disabled="true"]{ opacity:.55; }',
+    '#spkToc a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }',
+    '@media print{ #spkBar, #spkToc{ display:none !important; } }',
+    // 跳轉落點：扣掉工具列＋目錄的高度，標題才不會被 sticky 區塊蓋住
+    '#spkOpening, #spkMail, #spkLine, #spkWatch, #spkDecide, #spkGood, #spkDetail, #spkCharts{',
+    '  scroll-margin-top:calc(var(--spkbar-h, 54px) + 52px); }',
+    // ── 版面：大標與區塊 ──
+    // 大標是中性灰（不是第四種顏色），用一條細線分節，讓整頁的「段」一眼看得出來。
+    '.spk-h{ font-size:13px; font-weight:700; letter-spacing:.8px; color:var(--muted);',
+    '  margin:26px 0 10px; padding-top:14px; border-top:1px solid var(--border); }',
+    '.spk-hide{ display:none !important; }',
+    '.spk-sec.card{ border:none; background:transparent; padding:0; margin:0; }',
+    '.spk-sec .card-tools{ display:none !important; }',
+    // 分析期間宣告列：與工具列同一套深色底＋中性邊框
+    '#spkPeriod{ margin:0 0 14px; padding:10px 13px; background:var(--card-2);',
+    '  border:1px solid var(--border); border-radius:9px; font-size:16px;',
+    '  line-height:1.65; color:var(--text); }',
+    '#spkPeriod .spk-sub{ display:block; margin-top:4px; font-size:14px; line-height:1.7; color:var(--muted); }',
+    // 口徑長句（比較基準／風險統計／轉換率三條說明）預設收合：它是「要查的時候查」，
+    // 不是每次開會都要重讀的一段，放在首屏會把真正的內容往下推。
+    '#spkPeriod details{ margin-top:6px; }',
+    '#spkPeriod summary{ font-size:13.5px; color:var(--muted); cursor:pointer; }',
+    // ── 開頭那段（全檔唯一一份，在模式切換區之外）──
+    '#spkOpening{ margin:0 0 18px; padding:14px 15px; }',
+    '#spkOpening .bf-o3t{ font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; }',
+    '#spkOpening .bf-o3l{ font-size:17px; line-height:1.8; margin:0 0 10px; }',
+    '#spkOpening .bf-o3l:last-child{ margin-bottom:0; }',
+    '#spkOpening .bf-o3n{ background:var(--accent); color:var(--bg); font-size:12px; }',
+    // ── 會議流程段落 ──
+    // 段落圖示（📊🏆⚠️🏅📋🗣️）是 6 個不受色票控制的彩色 emoji，是整頁「色系不協調」
+    // 的主要來源之一 → 講者版移除，只留文字標題。
+    '.spk-flow{ margin:0 0 20px; }',
+    '.spk-flow h2{ font-size:16.5px; margin:0 0 7px; color:var(--text); letter-spacing:.2px; }',
+    '.spk-flow h2 .fl-ic{ display:none; }',
+    '.spk-flow-body{ font-size:16.5px; line-height:1.9; margin:0; color:var(--text);',
     '  white-space:pre-wrap; word-break:break-word; }',
-    '.spk-email-panel label{ display:block; margin:10px 0 4px; color:var(--muted); font-size:13px; }',
-    '.spk-email-panel textarea{ display:block; width:100%; box-sizing:border-box; margin:0 0 8px; padding:10px;',
-    '  border:1px solid var(--border); border-radius:8px; background:var(--card-2); color:var(--text);',
-    '  font-family:inherit; font-size:14px; line-height:1.6; resize:vertical; }',
-    '.spk-email-panel button{ margin:6px 8px 8px 0; padding:7px 13px; border:1px solid var(--accent);',
-    '  border-radius:8px; background:transparent; color:var(--accent); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; }',
-    '.spk-email-panel #spkEmailOutput{ font:13px/1.65 ui-monospace,monospace; }',
-    '@media print{ .spk-email-panel textarea,.spk-email-panel button{ display:none !important; } }',
-    '#spkFlow{ margin:0 0 20px; }',
-    '#spkFlow2{ margin:22px 0 0; padding-top:18px; border-top:1px solid var(--border); }',
-    '@media print{ #spkPeriod{ -webkit-print-color-adjust:exact; print-color-adjust:exact; } }',
-    // ── 兩張圖（講者版新增）──
-    /* 本期新增案件的類別分布：CSS 橫條，窄螢幕自然收縮，不需要滑動 */
-    '.spk-sec .pc-head{ font-size:13.5px; }',
-    '.spk-sec .pc-row{ margin:0 0 9px; }',
-    '.spk-sec .pc-name{ flex:0 0 96px; font-size:14px; }',
+    '.spk-note{ font-size:14.5px; line-height:1.75; color:var(--muted); margin:0 0 12px; }',
+  ].join('\n') + '\n' + [
+    // ── 數字帶：手機 2×2（原本 1 欄會佔掉整個首屏）──
+    '.spk-sec .bf-kpis{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:2px 0 16px; }',
+    '.spk-sec .bf-kpi{ flex:none; padding:12px 13px; background:var(--card-2); border:1px solid var(--border); }',
+    '.spk-sec .bf-kv{ font-size:26px; }',
+    '.spk-sec .bf-kl{ font-size:13px; color:var(--muted); }',
+    '.spk-sec .bf-kd{ font-size:14px; }',
+    '.spk-sec .bf-ks{ font-size:13px; color:var(--muted); }',
+    // 下滑與提醒不再借用紅／黃：3 色語義裡「不是行動也不是好消息」就是中性
+    '.spk-sec .bf-dn, .spk-sec .bf-warn{ color:var(--muted); }',
+    '.spk-sec .bf-num{ color:var(--text); }',
+    '.spk-sec .bf-who{ color:var(--text); }',
+    '@media (min-width:700px){ .spk-sec .bf-kpis{ grid-template-columns:repeat(4,1fr); } }',
+    // ── 條列／講稿 ──
+    '.spk-sec .bf-band{ margin:0 0 20px; }',
+    '.spk-sec .bf-tag{ font-size:13px; padding:4px 12px; margin:0 0 8px; border-radius:999px; }',
+    '.spk-sec .bf-tag-decide{ background:transparent; color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }',
+    '.spk-sec .bf-tag-watch{ background:var(--card-2); color:var(--muted); box-shadow:inset 0 0 0 1px var(--border); }',
+    '.spk-sec .bf-tag-good{ background:transparent; color:var(--ok); box-shadow:inset 0 0 0 1px var(--ok); }',
+    // 圓點 emoji（🔴🟠🟢）在深色底上是另一組不受控的顏色；種類已由上方標籤說明
+    '.spk-sec .bf-mk{ display:none; }',
+    '.spk-sec .bf-list > li{ font-size:16.5px; line-height:1.85; padding:9px 0; gap:0; }',
+    '.spk-sec .bf-m{ font-size:16px; color:var(--muted); }',
+    '.spk-sec .bf-script p{ font-size:16.5px; line-height:1.9; margin:0 0 14px; }',
+    '.spk-sec .bf-script p:last-child{ margin-bottom:0; }',
+    '.spk-sec .bf-cue{ font-size:15px; color:var(--muted); }',
+    '.spk-sec .bf-ask{ color:var(--accent); }',
+    // ── 本期分析細部（類別／課別）：全檔只一份，放在模式區塊之外 ──
+    '#spkDetail{ margin:0; }',
+    '#spkDetail .bf-dblock:first-child{ margin-top:0; }',
+    '#spkDetail .bf-dtitle{ font-size:15.5px; }',
+    '#spkDetail .bf-dnote{ font-size:14px; }',
+    '#spkDetail .bf-catrow, #spkDetail .bf-kerow{ font-size:16px; }',
+    '#spkDetail .bf-catname, #spkDetail .bf-kename{ flex:0 0 84px; }',
+    '#spkDetail .bf-catbar, #spkDetail .bf-kebar{ background:var(--card-2); }',
+    '#spkDetail .bf-catfill.dn{ background:var(--muted); }',
+    '#spkDetail .bf-dsum{ font-size:16px; }',
+    '#spkDetail .bf-dsum b{ color:var(--text); }',
+    // ── 兩張圖：類別色只在色段上 ──
+    '#spkCharts{ margin-top:6px; }',
+    '#spkCharts .spk-sec + .spk-sec{ margin-top:26px; }',
+    '.spk-sec .pc-head{ font-size:14.5px; }',
+    '.spk-sec .pc-row{ margin:0 0 10px; }',
+    '.spk-sec .pc-name{ flex:0 0 92px; font-size:14.5px; }',
     '.spk-sec .pc-track{ height:18px; }',
-    '.spk-sec .pc-num{ flex:0 0 116px; font-size:13px; }',
-    '.spk-sec .pc-warn{ font-size:12.5px; }',
-    /* 各業務單位 × 類別（SVG）：手機上整張縮放會讓字級一起縮到看不見，
-       所以與主報表手機版同一套做法 —— 容器可橫向滑動、SVG 維持 680px 最小寬。 */
+    '.spk-sec .pc-num{ flex:0 0 118px; font-size:13.5px; }',
+    '.spk-sec .pc-warn{ font-size:13px; color:var(--muted); }',
     '.spk-sec .ke-category-chart{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }',
     '.spk-sec .ke-category-chart svg{ min-width:680px; max-width:none; }',
-    '.spk-sec .ke-bar-legend{ font-size:13px; }',
-    '.spk-sec .ke-bar-note{ font-size:12.5px; }',
-    /* 兩張圖之間留白，並與上方模式區塊拉開 */
-    '#spkCharts{ margin-top:26px; padding-top:18px; border-top:1px solid var(--border); }',
-    '#spkCharts .spk-sec + .spk-sec{ margin-top:26px; }',
-    '#spkFoot{ margin-top:22px; padding-top:12px; border-top:1px solid var(--border);',
-    '  font-size:11.5px; line-height:1.8; color:var(--muted); text-align:center;',
-    '  word-break:keep-all; }',   // ⚠ text-wrap:pretty 對 CJK 無效：要靠 keep-all 才不會把「授權」拆行
+    '.spk-sec .ke-bar-legend{ font-size:13.5px; }',
+    '.spk-sec .ke-bar-note{ font-size:13px; }',
+    // ── GM 郵件：九段草稿（唯一一份）＋可收合的編輯區 ──
+    '.spk-mail{ font-size:16px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere;',
+    '  background:var(--card-2); border:1px solid var(--border); border-radius:10px;',
+    '  padding:14px 15px; margin:0 0 14px; color:var(--text); font-family:inherit; }',
+    '.spk-edit{ margin:0 0 6px; }',
+    '.spk-edit summary{ font-size:15px; font-weight:600; color:var(--accent); cursor:pointer; padding:9px 0; }',
+    '.spk-edit label{ display:block; margin:10px 0 4px; color:var(--muted); font-size:14px; }',
+    '.spk-edit textarea{ display:block; width:100%; box-sizing:border-box; margin:0 0 8px; padding:10px;',
+    '  border:1px solid var(--border); border-radius:8px; background:var(--card-2); color:var(--text);',
+    '  font-family:inherit; font-size:16px; line-height:1.65; resize:vertical; }',
+    '.spk-edit textarea:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }',
+    '.spk-btn{ display:inline-flex; align-items:center; min-height:38px; margin:4px 8px 8px 0; padding:8px 15px;',
+    '  border:1px solid var(--accent); border-radius:9px; background:transparent; color:var(--accent);',
+    '  font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }',
+    '.spk-btn.done{ background:var(--ok); border-color:var(--ok); color:var(--bg); }',
+    '@media print{ .spk-edit, .spk-btn{ display:none !important; } }',
+    // ── 頁腳 ──
+    '#spkFoot{ margin-top:24px; padding-top:12px; border-top:1px solid var(--border); font-size:12px;',
+    '  line-height:1.8; color:var(--muted); text-align:center; word-break:keep-all; }',
   ].join('\n');
-
   // 頁腳純文字（報表與講者版共用同一份版權／版號來源）
   function appFooterText(){
     return APP_COPYRIGHT + ' ｜ CRM 報表工具 v' + APP_VERSION +
            '（' + APP_VERSION_DATE + '）｜授權：' + APP_LICENSE;
   }
 
+  // 從一段 HTML 字串切掉指定 id 的 <div>（含其所有巢狀 div）。
+  // 講者版專用：把「不隨模式變化」的共用區塊（標題／口徑說明／本期分析細部）
+  // 從各模式快照移除，改成整份只放一份 —— 舊版這三塊各印三次，同一件事在
+  // 三個模式裡重複，檔案也跟著變大。
+  function cutDivById(html, id){
+    var at = html.indexOf('id="' + id + '"');
+    if(at < 0) return html;
+    var start = html.lastIndexOf('<div', at);
+    if(start < 0) return html;
+    var i = start, depth = 0;
+    while(i < html.length){
+      var o = html.indexOf('<div', i), c = html.indexOf('</div>', i);
+      if(c < 0) break;
+      if(o >= 0 && o < c){ depth++; i = o + 4; }
+      else {
+        depth--; i = c + 6;
+        if(depth === 0) return html.slice(0, start) + html.slice(i);
+      }
+    }
+    return html;
+  }
+
+  // 講者版單檔：3 個模式（條列／講稿／GM 郵件）＋ 模式外共用區塊。
+  // ⚠ 主報表的 17 個 section 完全不受影響：這裡只讀 DOM、只產生字串。
   function buildSpeakerHtml(){
     var sec = document.getElementById('briefSection');
     if(!sec) return '';
     var allRows = state.model && state.model.rows ? state.model.rows : [];
-    // 只有來源沒有任何資料才整份顯示空狀態；分析期間本身為 0 筆不會抹去其他 cohort。
+    // 只有來源沒有任何資料才整份顯示空狀態。
     var noData = !allRows.length;
     var css = '', st = document.querySelectorAll('style');
     for(var i = 0; i < st.length; i++) css += (st[i].textContent || '') + '\n';
+    // 主報表的 CSS 註解（102 處）是給改程式的人看的，對講者沒有用，卻佔掉手機快照的體積，
+    // 而且會讓「開場三句話」這類字串在檔案裡多出看起來像重複的一次 → 內嵌時剝掉。
+    css = css.replace(/\/\*[\s\S]*?\*\//g, '');
     var prevMode = state.briefMode, prevVar = state.briefGmVariant;
-    // 三種模式都收進同一個檔案 —— 講者可以當場切換，不必回到電腦重產
-    // 每切一次模式，renderBriefSection 就會把該模式的「貼上用純文字」放進
-    // state.briefCopyText —— 順手把它留下來，講者版才有設計過的複製內容可用。
+    var reviewNow = new Date();
+    var flowRows = allRows;
+    var filteredRows = applyFilters(flowRows, state.filters || defaultFilters());
+    var spkRows = applyPeriod(filteredRows, state.period).rows;
+    var spkRanges = briefRanges(state.period, reviewNow);
+    // 開場三句話：整份檔只留一份，放在模式切換區之外的最上方。
+    //   快照各模式時用 SPK_SUPPRESS_O3 關掉，否則三個模式各印一次（舊版就是這樣）。
+    var o3 = noData ? [] : buildOpening3(spkRows, filteredRows, spkRanges);
+    SPK_SUPPRESS_O3 = true;
     setBriefMode('list');
+    // ⚠ 模式沒變時 setBriefMode 不會重繪 → 快照會拿到上一次（含開場三句話）的 DOM，
+    //   於是「只留一份」立刻破功（實測：開場三句話還是出現兩次）。這裡強制重繪一次。
+    refreshBrief();
     var listHtml = snapshotBriefSection(), listText = state.briefCopyText || '';
     setBriefMode('script');
     var scriptHtml = snapshotBriefSection(), scriptText = state.briefCopyText || '';
-    // ⚠ 用 setBriefGmVariant（setBriefMode 在模式沒變時會跳過重繪 → 會拿到舊文字）
-    setBriefMode('gm');
-    setBriefGmVariant('mail');           // 郵件完整版（含主旨與署名，最完整）
-    var gmHtml = snapshotBriefSection(), gmText = state.briefCopyText || '';
-    setBriefGmVariant('line');           // LINE 短版：畫面直接顯示該格式 → 看到什麼就複製什麼
-    var lineText = state.briefCopyText || '';
-    var lineHtml = '<pre class="bf-gm">' + escHtml(lineText) + '</pre>';
+    SPK_SUPPRESS_O3 = false;
     setBriefMode(prevMode);
+    refreshBrief();   // 還原：把開場三句話畫回來，不留成被抑制的狀態
     state.briefGmVariant = prevVar;
-    // 期間內 0 筆：三種模式都給同一句空狀態，不重複、不留舊數字
+    // 期間內 0 筆：各模式都給同一句空狀態，不重複、不留舊數字
+    var emptyHtml = '';
     if(noData){
-      var emptyHtml = '<p class="pending">' + escHtml(
+      emptyHtml = '<p class="pending">' + escHtml(
         periodScopeLabel(state.period) + '沒有案件，無法產生重點分析。') + '</p>';
-      listHtml = emptyHtml; scriptHtml = emptyHtml; gmHtml = emptyHtml; lineHtml = emptyHtml;
-      listText = ''; scriptText = ''; gmText = ''; lineText = '';
+      listHtml = emptyHtml; scriptHtml = emptyHtml;
+      listText = ''; scriptText = '';
     }
-    // 兩張圖不隨模式變化 → 放在模式區塊之外，只快照一次（放進各模式會讓檔案變成三份圖）。
-    // 順序：先「本期新增 × 類別」（開場三句話①量能②類別落差的數字依據），
-    //       再「各業務單位 × 類別」（看結構差異）。與開場的敘述順序一致。
-    var periodCatHtml = snapshotSpkCatSection();
-    var keCatHtml = snapshotKeCategoryChart();
-    // 六段會議流程。分兩個容器是為了保住使用者描述的順序：
-    //   第 1、2 段 → #spkFlow（模式區塊之前）
-    //   第 3 段（要注意／要決定／值得肯定）→ 既有模式區塊
-    //   第 4、5、6 段 → #spkFlow2（模式區塊之後）
-    // 兩者都在模式區塊**之外**：不隨條列／講稿／GM 切換而消失，也只產生一次（不放進各模式
-    // 會讓檔案變成三份一樣的內容）。
-    var flowRows = state.model ? state.model.rows : [];
-    var filteredRows = applyFilters(flowRows, state.filters || defaultFilters());
-    // 週會固定三個填單 cohort；取全年度而不跟來源主報表單一 period 共用。
-    var reviewNow = new Date();
+    // ---- 共用區塊從各模式快照移除（整份只放一次）----
+    function cutShared(html){
+      html = cutDivById(html, 'briefDetail');
+      html = cutDivById(html, 'briefDetailBar');
+      html = html.replace(/<p class="bf-base"[^>]*>[\s\S]*?<\/p>/, '');
+      html = html.replace(/<h2>重點分析[\s\S]*?<\/h2>/, '');
+      // 兩個模式各自快照出一份 <div id="brief"> → 同一個 id 出現兩次（無效 HTML）。
+      // 講者版沒有任何程式碼會抓 #brief，這裡把 id 拿掉即可。
+      html = html.replace(/<div id="brief"([^>]*)>/, '<div$1>');
+      return html;
+    }
+    listHtml = cutShared(listHtml);
+    scriptHtml = cutShared(scriptHtml);
+    // 目錄的落點：三個分組（要決定／要注意／值得肯定）在條列模式裡才有標題列，
+    // 在這裡把 id 掛上去；沒有該分組時目錄該項顯示為不可跳（aria-disabled）。
+    function markBand(html, cls, id){
+      return html.replace('<div class="bf-band"><span class="bf-tag ' + cls + '">',
+        '<div class="bf-band" id="' + id + '"><span class="bf-tag ' + cls + '">');
+    }
+    listHtml = markBand(listHtml, 'bf-tag-decide', 'spkDecide');
+    listHtml = markBand(listHtml, 'bf-tag-watch', 'spkWatch');
+    listHtml = markBand(listHtml, 'bf-tag-good', 'spkGood');
+    // ---- 開場三句話（唯一一份）----
+    var o3Html = '';
+    if(o3.length){
+      var o3l = '';
+      for(var oi = 0; oi < o3.length; oi++){
+        o3l += '<p class="bf-o3l"><span class="bf-o3n">' + (oi + 1) + '</span><span>' +
+               escHtml(o3[oi]) + '</span></p>';
+      }
+      o3Html = '<div class="bf-o3" id="spkOpening"><p class="bf-o3t">開場三句話（GM）</p>' +
+               o3l + '</div>';
+    }
+    function escHtml(t){
+      return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    // 週會固定三個填單 cohort（今年累計／上個月／上週）＋在手進度＋分享＋品質檢核
     var weekly = weeklyReviewBundle(flowRows, reviewNow);
     var weeklyFlowHtml = weekly.cohorts.map(function(c){
       return flowBlockHtml(c.label, c.count ? weeklyCohortText([c]) :
@@ -11907,10 +12016,31 @@ var state = {
     weeklyFlowHtml += flowBlockHtml('各課目前開發進度（在手案件）', weekly.progress.text || '目前沒有可列示的進行中案件。');
     weeklyFlowHtml += flowBlockHtml('各課代表分享目前開發進度', buildClosingLine());
     weeklyFlowHtml += flowBlockHtml('分階段資料品質檢核（待輔導／待確認）', weekly.quality.text);
-    // ---- 會後郵件草稿：九段結構（v1.20.0）----
-    // 數字段（第 1 行會議次數日期、今年累計、上週、各課進度、需協助事項、今年累計案件表）
-    // 全部由載入資料自動算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改。
-    // 郵件本文在講者版裡由 SEG 切片重組：改哪一段只影響那一段，不必回頭重跑主程式。
+    // 分析期間宣告列：放在工具列與目錄之下、所有模式之上 ——
+    // 它是「這份快照的數字是哪一段期間的」唯一宣告，不隨模式切換而消失。
+    // 比較基準口徑（舊版在每個模式各印一次的 bf-base）也收進來，整份只有一份。
+    var pl = speakerPeriodLine(flowRows, state.period, reviewNow);
+    pl.text = '固定週會數字：今年累計／上月／上週新增（依填單日期）。補充洞見分析期間：' + pl.text.replace(/^分析期間：/, '');
+    var baseEl = document.getElementById('briefBase');
+    var baseText = baseEl ? (baseEl.textContent || '') : '';
+    var periodHtml = '<div id="spkPeriod" class="spk-period">' + escHtml(pl.text) +
+      (baseText ? '<details><summary>口徑說明（比較基準／風險統計／轉換率）</summary>' +
+        '<span class="spk-sub">' + escHtml(baseText) + '</span></details>' : '') + '</div>';
+    // 本期分析細部（類別／課別）：模式無關 → 整份只一份
+    var detailHtml = '';
+    var dd = document.getElementById('briefDetail');
+    if(dd){
+      var dclone = dd.cloneNode(true);
+      dclone.removeAttribute('hidden');
+      detailHtml = '<div id="spkDetail">' +
+        dclone.outerHTML.replace('id="briefDetail"', 'id="spkDetailInner"') + '</div>';
+    }
+    // 兩張圖也不隨模式變化 → 模式區塊之外，只快照一次
+    var periodCatHtml = snapshotSpkCatSection();
+    var keCatHtml = snapshotKeCategoryChart();
+    // ---- GM 郵件：v1.20.0 的九段會後郵件草稿（唯一來源 buildExecEmail）----
+    // 舊版在這裡另外維護一份 GM 郵件文字（主旨／結論／關鍵數字…），與九段草稿
+    // 講同一件事卻兩套寫法；現在整份講者版只有這一套。
     var meetSrc = '';
     if(typeof document !== 'undefined' && document.getElementById){
       var miEl = document.getElementById('meetingInfo');
@@ -11924,35 +12054,54 @@ var state = {
     var emailText = buildExecEmail(emailCtx);
     var emailDefaults = { meet: emailMeet, dir: EXEC_DIRECTION_DEFAULT,
                           follow: EXEC_FOLLOWUP_DEFAULT.join('\n') };
-    var emailPanel = '<section class="spk-flow spk-email-panel"><h2>會後郵件草稿（Executive Summary）</h2>' +
-      '<p class="spk-flow-body">九段結構：數字段（第 1 行日期、今年累計、上週新增、各課進度、需協助事項、今年累計案件表）由載入資料自動計算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改，每週只改有變的那幾條。需協助事項只給件數與課別，不指名公司與業務。「今年累計案件」是等寬對齊的純文字表：貼進 Outlook 後把該段字型設為 Consolas（等寬字）就會對齊，或直接貼到 Excel 即成表格。</p>' +
+    // LINE：一則訊息（不再佔一個全頁模式）。數字與郵件同一來源，長度壓到一眼看完。
+    var lineText = '';
+    if(!noData){
+      var yb = execStatusBuckets(execRowsThisYear(flowRows, reviewNow));
+      var lw = execWeekRange(reviewNow, -1);
+      var wb = execStatusBuckets(execRowsInDays(flowRows, lw.from, lw.to));
+      lineText = '處長好，' + emailMeet + '重點：\n' +
+        '・今年累計新增 ' + yb.total + ' 件（合作成功 ' + yb.coop + '、進行中 ' + yb.doing +
+        '、未啟動 ' + yb.notStarted + '）\n' +
+        '・上週新增 ' + wb.total + ' 件；各課在手進行中 ' + (weekly.progress.total || 0) + ' 件\n' +
+        '・會後追蹤 ' + EXEC_FOLLOWUP_DEFAULT.length + ' 條，詳見郵件';
+    }
+    var mailHtml = noData ? emptyHtml : (
+      '<section class="spk-flow" id="spkMail">' +
+      '<h2>會後郵件草稿（九段結構）</h2>' +
+      '<p class="spk-note">數字段（第 1 行日期、今年累計、上週新增、各課進度、需協助事項、今年累計案件表）由載入資料自動計算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改，每週只改有變的那幾條。需協助事項只給件數與課別，不指名公司與業務。貼進 Outlook 後把「今年累計案件」那段字型設為 Consolas（等寬）就會對齊，或直接貼到 Excel 即成表格。</p>' +
+      '<pre class="spk-mail" id="spkMailText">' + escHtml(emailText) + '</pre>' +
+      '<details class="spk-edit">' +
+      '<summary>編輯草稿（會議次數／推展方向／會後追蹤重點）</summary>' +
       '<label for="spkMeetInput">第 1 行：會議次數與日期（自動帶入，可改）</label>' +
       '<textarea id="spkMeetInput" rows="1" aria-label="會議次數與日期"></textarea>' +
       '<label for="spkDirectionInput">第 2 段：推展方向（可改）</label>' +
       '<textarea id="spkDirectionInput" rows="2" aria-label="推展方向"></textarea>' +
       '<label for="spkFollowupInput">第 8 段：會後追蹤重點（一行一條，自動編號；每週只改有變的）</label>' +
       '<textarea id="spkFollowupInput" rows="9" aria-label="會後追蹤重點"></textarea>' +
-      '<button type="button" id="spkBuildEmail">更新郵件本文</button>' +
-      '<textarea id="spkEmailOutput" rows="30" readonly aria-label="Executive Summary 郵件本文"></textarea>' +
-      '<button type="button" id="spkCopyEmail">複製郵件本文</button></section>';
-    // 代表分享緊接三段新增 cohort；品質檢核置於分享後作輔導清單。
-    // 講者版另含既有補充洞見模式；清楚標明它跟隨產生快照時所選期間。
-    var rangesF = briefRanges(state.period, reviewNow);
-    var pl = speakerPeriodLine(flowRows, state.period, reviewNow);
-    pl.text = '固定週會數字：今年累計／上月／上週新增（依填單日期）。補充洞見分析期間：' + pl.text.replace(/^分析期間：/, '');
-    // 原主報表與原洞見模式保留，不改其算法。固定週會三期間則在前面的獨立區塊計算。
-    // 使用既有快照期間摘要只作補充，不再複製進週會流程段落。
-    //
-    // 宣告列放在 #spkBar 下，明示後續條列／講稿／圖表採用的單一補充期間。
-    // 所有固定年度／月份／週 cohort 在此列之前已各自計算完成。
-    //
-    // 這一組原始快照區塊仍需渲染，供講者切換既有補充洞見模式使用。
-    // 分析期間宣告列。放在 #spkBar 正下方、所有模式區塊之上 ——
-    // 它是「這份快照的數字是哪一段期間的」唯一宣告，必須不隨模式切換而消失，
-    // 否則講者切到 GM 模式就看不到期間，而檔內「本期」出現上百次。
-    function escHtml(t){
-      return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      '<button type="button" class="spk-btn" id="spkBuildEmail">更新郵件本文</button>' +
+      '</details>' +
+      '<button type="button" class="spk-btn" id="spkCopyEmail">複製郵件本文</button>' +
+      '</section>' +
+      '<section class="spk-flow" id="spkLine">' +
+      '<h2>LINE 訊息（一則，直接貼給長官）</h2>' +
+      '<pre class="spk-mail spk-line" id="spkLineText">' + escHtml(lineText) + '</pre>' +
+      '<button type="button" class="spk-btn" id="spkCopyLine">複製 LINE 訊息</button>' +
+      '</section>');
+    // ---- sticky 目錄（5 項）----
+    var tocDefs = [
+      { id: 'spkOpening', t: '開場', ok: !!o3Html },
+      { id: 'spkWatch', t: '注意', ok: listHtml.indexOf('id="spkWatch"') >= 0 },
+      { id: 'spkDecide', t: '決定', ok: listHtml.indexOf('id="spkDecide"') >= 0 },
+      { id: 'spkGood', t: '肯定', ok: listHtml.indexOf('id="spkGood"') >= 0 },
+      { id: 'spkMail', t: '郵件', ok: !noData }
+    ];
+    var tocHtml = '<nav id="spkToc" aria-label="段落快速跳轉">';
+    for(var ti = 0; ti < tocDefs.length; ti++){
+      tocHtml += '<a href="#' + tocDefs[ti].id + '" data-t="' + tocDefs[ti].id + '"' +
+        (tocDefs[ti].ok ? '' : ' aria-disabled="true"') + '>' + tocDefs[ti].t + '</a>';
     }
+    tocHtml += '</nav>';
     var S = String.fromCharCode(60) + 'script' + String.fromCharCode(62);
     var E = String.fromCharCode(60) + '/script' + String.fromCharCode(62);
     return '<!DOCTYPE html>\n<html lang="zh-Hant" data-theme="dark">\n<head>\n'
@@ -11964,66 +12113,92 @@ var state = {
       + '</head>\n<body class="spk-body">\n'
       + '<div id="spkBar"><span class="spk-title">講者版　·　會議主持用</span>'
       + '<span id="spkModes">'
-      + '<button type="button" class="spk-m on" data-m="list">條列</button>'
-      + '<button type="button" class="spk-m" data-m="script">講稿</button>'
-      + '<button type="button" class="spk-m" data-m="gm">GM 郵件</button>'
-      + '<button type="button" class="spk-m" data-m="gmline">GM LINE</button>'
+      + '<button type="button" class="spk-m on" data-m="list" aria-pressed="true">條列</button>'
+      + '<button type="button" class="spk-m" data-m="script" aria-pressed="false">講稿</button>'
+      + '<button type="button" class="spk-m" data-m="gm" aria-pressed="false">GM 郵件</button>'
       + '</span><span class="spk-gap"></span>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
-      + '<div id="spkPeriod" class="spk-period">' + escHtml(pl.text) + '</div>\n'
+      + tocHtml + '\n'
+      + periodHtml + '\n'
+      + o3Html
+      + '<h2 class="spk-h">週會數字（今年累計／上個月／上週）</h2>\n'
       + '<div id="spkWeeklyReview">' + weeklyFlowHtml + '</div>\n'
-      + '<div id="spkEmailPanel">' + emailPanel + '</div>\n'
+      + '<h2 class="spk-h" id="spkModeH">重點分析</h2>\n'
       + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
       + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
-      + '<div id="spkGm" class="spk-sec spk-hide">' + gmHtml + '</div>\n'
-      + '<div id="spkGmLine" class="spk-sec spk-hide">' + lineHtml + '</div>\n'
-      // 兩張圖：不隨模式切換（放在模式區塊之外），三種模式都看得到
+      + '<div id="spkGm" class="spk-sec spk-hide">' + mailHtml + '</div>\n'
+      + '<h2 class="spk-h">本期分析細部（類別／課別）</h2>\n'
+      + detailHtml + '\n'
+      + '<h2 class="spk-h">圖表</h2>\n'
       + '<div id="spkCharts" class="spk-sec">' + periodCatHtml + keCatHtml + '</div>\n'
-      // 第 4／5／6 段：模式區塊之後（第 3 段「要注意」在模式區塊內，順序因此正確）
-      // 複製用的設計文字（隱藏）—— 不要抓畫面 DOM 的 textContent（沒有換行）
+      // 複製用的純文字（隱藏）—— 不要抓畫面 textContent（沒有換行）
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
-      + '<textarea id="spkTxtGm" hidden readonly>' + escHtml(gmText) + '</textarea>\n'
-      + '<textarea id="spkTxtGmLine" hidden readonly>' + escHtml(lineText) + '</textarea>\n'
       + '<div id="spkFoot">' + appFooterText() + '</div>\n'
       + S + '(function(){'
+      + 'var SEG=' + JSON.stringify(emailSegs) + ',DEF=' + JSON.stringify(emailDefaults)
+      + ',EMAIL=' + JSON.stringify(emailText) + ',LINE=' + JSON.stringify(lineText) + ';'
+      // 工具列高度 → --spkbar-h（目錄貼在它下緣；標題在窄螢幕會自己佔一列）
+      + 'var bx=document.getElementById("spkBar");'
+      + 'function syncBar(){if(bx)document.documentElement.style.setProperty("--spkbar-h",bx.offsetHeight+"px");}'
+      + 'syncBar();window.addEventListener("resize",syncBar);window.addEventListener("orientationchange",syncBar);'
+      + 'var IDS={list:"spkList",script:"spkScript",gm:"spkGm"};var curs="list";'
       + 'var bs=document.querySelectorAll(".spk-m");'
-      + 'function show(m){var ids={list:"spkList",script:"spkScript",gm:"spkGm",gmline:"spkGmLine"};'
-      + 'for(var k in ids){var el=document.getElementById(ids[k]);'
-      + 'if(el) el.className="spk-sec"+(k===m?"":" spk-hide");}'
-      + 'for(var i=0;i<bs.length;i++) bs[i].className="spk-m"+(bs[i].getAttribute("data-m")===m?" on":"");}'
-      + 'for(var i=0;i<bs.length;i++) bs[i].addEventListener("click",function(){show(this.getAttribute("data-m"));});'
-      + 'document.getElementById("spkCopy").addEventListener("click",function(){'
-      + 'var cur=null,bs2=document.querySelectorAll(".spk-m");'
-      + 'for(var j=0;j<bs2.length;j++) if(/ on$| on /.test(bs2[j].className+" ")) cur=bs2[j].getAttribute("data-m");'
-      + 'var tx=document.getElementById("spkTxt"+(cur==="gm"?"Gm":(cur==="gmline"?"GmLine":(cur==="script"?"Script":"List"))));'
-      + 'var txt=tx?tx.value:"",b=this;'
-      + 'function done(t){b.textContent=t;setTimeout(function(){b.textContent="複製";},1600);}'
-      + 'var tag=(cur==="gmline")?"（LINE 版）":((cur==="gm")?"（郵件版）":"");'
+      + 'function show(m){if(!IDS[m])return;for(var k in IDS){var el=document.getElementById(IDS[k]);'
+      + 'if(el)el.className="spk-sec"+(k===m?"":" spk-hide");}'
+      + 'for(var i=0;i<bs.length;i++){var on=bs[i].getAttribute("data-m")===m;'
+      + 'bs[i].className="spk-m"+(on?" on":"");bs[i].setAttribute("aria-pressed",on?"true":"false");}'
+      + 'curs=m;syncBar();'
+      // GM 模式有自己的標題（會後郵件草稿）→ 共用的「重點分析」大標在 GM 時收起來
+      + 'var mh=document.getElementById("spkModeH");if(mh)mh.style.display=(m==="gm")?"none":"";'
+      // 隱藏時 scrollHeight 是 0 → 切到 GM 模式必須重新量一次輸入框高度
+      + 'if(m==="gm")fit();}'
+      + 'for(var i=0;i<bs.length;i++)bs[i].addEventListener("click",function(){show(this.getAttribute("data-m"));});'
+      + 'function done(b,label,msg){b.textContent=msg;b.className+=" done";'
+      + 'setTimeout(function(){b.textContent=label;b.className=b.className.replace(" done","");},1600);}'
+      + 'function copy(txt,b,label){if(!b)return;if(!txt){done(b,label,"沒有內容");return;}'
       + 'function legacy(){try{var ta=document.createElement("textarea");ta.value=txt;'
       + 'ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);ta.select();'
-      + 'var ok=false;try{ok=document.execCommand("copy");}catch(e){ok=false;}'
-      + 'document.body.removeChild(ta);done(ok?("已複製"+tag):"請長按選取");}catch(e2){done("請長按選取");}}'
+      + 'var ok=false;try{ok=document.execCommand("copy");}catch(e){ok=false;}document.body.removeChild(ta);'
+      + 'done(b,label,ok?"已複製":"請長按選取");}catch(e2){done(b,label,"請長按選取");}}'
       + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
-      + 'navigator.clipboard.writeText(txt).then(function(){done("已複製"+tag);},legacy);}else legacy();}'
-      + 'catch(e){legacy();}});'
-      + 'var SEG=' + JSON.stringify(emailSegs) + ',DEF=' + JSON.stringify(emailDefaults) + ';'
-      + 'var ep=document.getElementById("spkEmailOutput"),mi=document.getElementById("spkMeetInput")'
+      + 'navigator.clipboard.writeText(txt).then(function(){done(b,label,"已複製");},legacy);}else legacy();}'
+      + 'catch(e){legacy();}}'
+      + 'function curText(){if(curs==="gm")return EMAIL;'
+      + 'var t=document.getElementById(curs==="script"?"spkTxtScript":"spkTxtList");return t?t.value:"";}'
+      + 'var cp=document.getElementById("spkCopy");'
+      + 'if(cp)cp.addEventListener("click",function(){copy(curText(),cp,"複製");});'
+      // 目錄：切到有該段落的模式再捲過去（GM 郵件在 GM 模式、注意／決定／肯定在條列模式）
+      + 'var toc=document.getElementById("spkToc");'
+      + 'if(toc){var ln=toc.querySelectorAll("a");for(var j=0;j<ln.length;j++){'
+      + 'ln[j].addEventListener("click",function(ev){ev.preventDefault();'
+      + 'if(this.getAttribute("aria-disabled")==="true")return;'
+      + 'var id=this.getAttribute("data-t");'
+      + 'if(id==="spkMail")show("gm");else if(id!=="spkOpening")show("list");'
+      + 'var el=document.getElementById(id);if(!el)return;'
+      + 'el.scrollIntoView({behavior:"smooth",block:"start"});});}}'
+      // 郵件草稿：畫面上只有這一份（pre），編輯後就地重組
+      + 'var mail=document.getElementById("spkMailText"),mi=document.getElementById("spkMeetInput")'
       + ',dn=document.getElementById("spkDirectionInput"),fu=document.getElementById("spkFollowupInput");'
-      + 'if(ep) ep.value=' + JSON.stringify(emailText) + ';'
       + 'if(mi&&!mi.value)mi.value=DEF.meet;if(dn&&!dn.value)dn.value=DEF.dir;if(fu&&!fu.value)fu.value=DEF.follow;'
+      // 手機上輸入框不要自己出現內捲軸：高度跟著內容長，7 條追蹤重點一眼看完
+      + 'function fit(){var a=[mi,dn,fu];for(var i=0;i<a.length;i++){var t=a[i];if(!t)continue;'
+      + 't.style.height="auto";t.style.height=(t.scrollHeight+2)+"px";}}'
+      + 'window.addEventListener("resize",fit);'
       + 'function numLines(t){var ls=String(t||"").split(/\\r?\\n/),o=[],n=0,i,s;'
-      + 'for(i=0;i<ls.length;i++){s=ls[i].replace(/^\\s*\\d+\\s*[.、．]\\s*(?!\\d)/,"").replace(/^\\s*[-*•]\\s+/,"").trim();if(!s)continue;n++;o.push(n+". "+s);}'
-      + 'return o.join("\\n");}'
-      + 'function rebuildEmail(){if(!ep)return;var o=[],i,s;for(i=0;i<SEG.length;i++){s=SEG[i];'
+      + 'for(i=0;i<ls.length;i++){s=ls[i].replace(/^\\s*\\d+\\s*[.、．]\\s*(?!\\d)/,"").replace(/^\\s*[-*•]\\s+/,"").trim();'
+      + 'if(!s)continue;n++;o.push(n+". "+s);}return o.join("\\n");}'
+      + 'function rebuild(){var o=[],i,s;for(i=0;i<SEG.length;i++){s=SEG[i];'
       + 'if(s.k==="meet")o.push(mi?mi.value:s.t);else if(s.k==="dir")o.push(dn?dn.value:s.t);'
-      + 'else if(s.k==="follow")o.push(numLines(fu?fu.value:s.t));else o.push(s.t);}ep.value=o.join("");}'
-      + 'rebuildEmail();'
-      + 'var eb=document.getElementById("spkBuildEmail");if(eb)eb.addEventListener("click",rebuildEmail);'
-      + 'var flds=[mi,dn,fu];for(var fi=0;fi<flds.length;fi++){if(flds[fi])flds[fi].addEventListener("input",rebuildEmail);}'
-      + 'var cb=document.getElementById("spkCopyEmail");if(cb)cb.addEventListener("click",function(){'
-      + 'var ta=ep,ok=false;if(ta){ta.focus();ta.select();try{ok=document.execCommand("copy");}catch(e){ok=false;}}'
-      + 'cb.textContent=ok?"已複製":"請長按選取";setTimeout(function(){cb.textContent="複製郵件本文";},1600);});'
+      + 'else if(s.k==="follow")o.push(numLines(fu?fu.value:s.t));else o.push(s.t);}'
+      + 'EMAIL=o.join("");if(mail)mail.textContent=EMAIL;fit();}'
+      + 'rebuild();'
+      + 'var eb=document.getElementById("spkBuildEmail");if(eb)eb.addEventListener("click",rebuild);'
+      + 'var flds=[mi,dn,fu];for(var fi=0;fi<flds.length;fi++){if(flds[fi])flds[fi].addEventListener("input",rebuild);}'
+      + 'var ce=document.getElementById("spkCopyEmail");'
+      + 'if(ce)ce.addEventListener("click",function(){copy(EMAIL,ce,"複製郵件本文");});'
+      + 'var cl=document.getElementById("spkCopyLine");'
+      + 'if(cl)cl.addEventListener("click",function(){copy(LINE,cl,"複製 LINE 訊息");});'
       + 'show("list");})();' + E + '\n'
       + '</body>\n</html>\n';
   }
