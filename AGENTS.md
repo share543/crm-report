@@ -1579,3 +1579,31 @@ dropoffSection／dropReasonSection／listSection（講者版 briefSection 刻意
 ⚠️ **「今年累計」≠ 報表的「總客戶數」**：前者只算填單日期在今年，後者是全部資料（實測 250 vs 251）。
 
 實作：`buildExecEmail()`＋17 支純函式（`exec*`），全在 `module.exports`；新增 `tools/test-execemail.js`（43 項，含「不得指名公司／人員」斷言）。
+
+### v1.23.0（2026-10-22）「今年累計案件」：一課一行＋複製表格（HTML）
+
+**舊做法要廢掉的原因**：多欄純文字表靠 `execPad` 的 CJK 寬度補白對齊 —— 只有在**等寬字型**下成立。
+貼進 Outlook（12pt 新細明體／Calibri）欄位必歪，而畫面上完全看不出來（pre 是等寬的）。
+
+- 純文字版：`execEmailTable()` → **一課一行**、`execKeRateRows()` 依未合作率 高→低（同率比件數），
+  合計永遠最後一行；課名用**全角空格**補到 3 字寬、件數補到 3 位（行首固定 10 格）。
+  ⚠ **不可再引入 `───`／`│`／`┼` 這類框線字元**，那是歪掉的主因（測試會擋）。
+- HTML 版：`execEmailTableHtml()` → 同一份 `execKeRateRows` 的 `<table>`，**全部 inline style**
+  （Outlook 會丟掉 `<style>` 與 `class`，所以連 `class=` 都不該出現），表頭 5 欄、合計列加粗。
+- 兩支都**只重排不重算**：分組數字仍出自 `execKeStatusRows()`（與講者版「決定」段同一份）。
+- 這張表**只在 GM 郵件模式**（`#spkGm`）；「重點」模式不得出現（驗收看 `#spkRead` 的文字與 `<table>`）。
+
+驗證踩雷（兩條都是「看起來跑完、其實沒量到」）：
+
+1. **snap chromium 的 `--window-size=390,...` 實際 `innerWidth` 是 500**（有最小寬）。
+   量 390 手機寬要開一個 **390px 的 iframe**，在**父頁**用 `f.contentWindow.innerWidth` /
+   `f.contentDocument.documentElement.scrollWidth` 量。
+2. **等 iframe 不能只看 `readyState`**：剛插入時 `contentDocument` 是 `about:blank`，`readyState`
+   就是 `complete` → 每個 `getElementById` 都回 `null`（實測兩輪）。要**輪詢到目標節點出現**。
+3. `--virtual-time-budget` 用完就關頁，**最後一個 `fetch` POST 可能被砍掉**（結果檔沒落地）。
+   量測結果改寫進 `documentElement` 的 `data-e2e` 屬性（base64）再由 `--dump-dom` 讀回，
+   POST 只當備援。腳本：`tools/verify-v1230-e2e.py`。
+
+剪貼簿驗法：把 `contentWindow.navigator.clipboard` 用 `Object.defineProperty` 換成會記錄 items 的 stub，
+再 `btn.click()`，之後 `items[0].getType('text/html').text()` 就是真正會貼上的內容（可斷言 5 個 `<th>`、
+無 `class=`）；接著換成 `write(){return Promise.reject()}` 驗降級路徑有沒有留下提示文字。

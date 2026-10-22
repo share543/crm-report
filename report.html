@@ -1567,7 +1567,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.22.0';   // 1.22.0：講者版方案 B（條列／講稿合併為同一份資料的兩種密度、模式 3→2、新增「決定」段三條門檻）
+  var APP_VERSION = '1.23.0';   // 1.23.0：會後郵件「今年累計案件」改為一課一行（未合作率 高→低）＋新增「複製表格（HTML）」給桌機貼 Outlook
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2842,15 +2842,6 @@ var state = {
     var sp = new Array(pad + 1).join(' ');
     return right ? (sp + t) : (t + sp);
   }
-  function execRule(widths){
-    var out = [];
-    for(var i = 0; i < widths.length; i++){
-      var n = Math.max(3, Math.round(widths[i] / 2));
-      out.push(new Array(n + 1).join('─'));
-    }
-    return out.join('　');
-  }
-
   // 純函式：各課四狀態列（課別 × 合作成功／進行中／未啟動／未合作 ＋ 合計）
   // ⚠ 抽成獨立函式（v1.22.0）的原因：會後郵件的「今年累計案件」表與講者版「決定」段
   //   要看的是同一份四狀態表。原本分組邏輯寫在 execEmailTable 裡，決定段若另外再寫一份
@@ -2876,38 +2867,123 @@ var state = {
       .sort(function(a, b){ return (b.total - a.total) || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)); });
   }
 
-  // 純函式：今年累計案件表（課別 × 四狀態 ＋ 合計）。合計列一定等於 execStatusBuckets 的四桶。
-  function execEmailTable(rows){
-    var lines = execKeStatusRows(rows);
+  // 純函式：未合作率（整數百分比，四捨五入）—— 表格排序與顯示共用同一個算法
+  function execKeRate(notCoop, total){
+    return total ? Math.round(notCoop * 100 / total) : 0;
+  }
+
+  // 純函式：各課四狀態列，依「未合作率」由高→低（今年累計案件表一課一行的排序）
+  //   只重排、不重算 —— 分組數字仍出自 execKeStatusRows（唯一來源）。
+  //   同率時件數多者在前（母體大的問題比較大），再同則依課名，輸出可重現。
+  function execKeRateRows(rows){
+    var list = execKeStatusRows(rows);
+    return list.sort(function(a, b){
+      var ra = a.total ? a.notCoop / a.total : 0;
+      var rb = b.total ? b.notCoop / b.total : 0;
+      if(rb !== ra) return rb - ra;
+      if(b.total !== a.total) return b.total - a.total;
+      return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+    });
+  }
+
+  // 純函式：逐課加總（合計列一定等於 execStatusBuckets 的四桶）
+  function execKeTotals(lines){
     var tot = { name: '合計', coop: 0, doing: 0, notStarted: 0, notCoop: 0, total: 0 };
-    for(var j = 0; j < lines.length; j++){
-      tot.coop += lines[j].coop; tot.doing += lines[j].doing;
-      tot.notStarted += lines[j].notStarted; tot.notCoop += lines[j].notCoop;
-      tot.total += lines[j].total;
+    var list = lines || [];
+    for(var j = 0; j < list.length; j++){
+      tot.coop += list[j].coop; tot.doing += list[j].doing;
+      tot.notStarted += list[j].notStarted; tot.notCoop += list[j].notCoop;
+      tot.total += list[j].total;
     }
-    function cells(g){ return [g.name, g.coop, g.doing, g.notStarted, g.notCoop, g.total]; }
-    var head = ['課別', '合作成功', '進行中', '未啟動', '未合作', '合計'];
-    var body = lines.map(cells);
-    body.push(cells(tot));
-    var widths = [];
-    for(var c = 0; c < head.length; c++){
-      var w = execDisplayWidth(head[c]);
-      for(var ri = 0; ri < body.length; ri++) w = Math.max(w, execDisplayWidth(String(body[ri][c])));
-      widths.push(w);
+    return tot;
+  }
+
+  // 純文字表格的欄寬：課名補到 3 字寬（CJK 一字寬 2）、件數補到 3 位
+  var EXEC_TABLE_KE_W = 6;
+  var EXEC_TABLE_N_W = 3;
+  // 課名補白用「全角空格」：半角空格在不同字型的寬度不一致，全角才是 CJK 的整格。
+  function execPadKe(name){
+    var t = String(name === undefined || name === null ? '' : name);
+    var pad = EXEC_TABLE_KE_W - execDisplayWidth(t), out = t;
+    if(pad <= 0) return out;
+    out += new Array(Math.floor(pad / 2) + 1).join('　');
+    if(pad % 2) out += ' ';
+    return out;
+  }
+  function execPadNum(n){
+    var s = String(n), pad = EXEC_TABLE_N_W - s.length;
+    return pad > 0 ? (new Array(pad + 1).join(' ') + s) : s;
+  }
+  function execHtmlEsc(t){
+    return String(t === undefined || t === null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // 一課一行的文字（純文字版與 HTML 版共用，兩邊格式不會漂移）
+  function execTableRowText(g){
+    return execPadKe(g.name) + ' ' + execPadNum(g.total) + ' 件：成功 ' + g.coop +
+      '｜進行中 ' + g.doing + '｜未啟動 ' + g.notStarted +
+      '｜未合作 ' + g.notCoop + '（' + execKeRate(g.notCoop, g.total) + '%）';
+  }
+
+  // 純函式：今年累計案件表（純文字版：一課一行、未合作率 高→低、合計永遠最後一行）
+  //   ⚠ v1.23.0 刻意改掉「CJK 寬度補白的多欄表格」—— 那版要靠等寬字型才對得齊，
+  //     貼進 Outlook（12pt 新細明體／Calibri）欄位必歪。現在一課一行，只有行首的
+  //     課名與件數需要補白，貼到任何字型都不會錯位。
+  //   ⚠ 不得再出現 `───` 這類框線字元（舊做法，也是貼上後歪掉的主因）。
+  function execEmailTable(rows){
+    var lines = execKeRateRows(rows);
+    var tot = execKeTotals(lines);
+    var out = ['今年累計案件（' + tot.total + ' 件）'];
+    for(var i = 0; i < lines.length; i++) out.push(execTableRowText(lines[i]));
+    out.push(execTableRowText(tot));
+    return out.join('\n');
+  }
+
+  // 純函式：今年累計案件表（HTML 版，桌機貼進 Outlook 用）
+  //   ⚠ 全部 inline style：Outlook 會丟掉 <style> 與 class，外部 CSS 一律無效。
+  //   ⚠ 樣式與欄位順序刻意與文字版一致（同一份 execKeRateRows、同一個合計）。
+  var EXEC_TH_STYLE = "border:1px solid #d0d5dd;padding:6px 10px;background:#f2f4f7;" +
+    "font-family:'Microsoft JhengHei',sans-serif;font-size:12pt;font-weight:700;";
+  var EXEC_TD_STYLE = "border:1px solid #d0d5dd;padding:6px 10px;" +
+    "font-family:'Microsoft JhengHei',sans-serif;font-size:12pt;";
+  function execEmailTableHtml(rows){
+    var lines = execKeRateRows(rows);
+    var tot = execKeTotals(lines);
+    var body = [];
+    for(var i = 0; i < lines.length; i++) body.push(lines[i]);
+    body.push(tot);
+    var out = [];
+    out.push('<p style="margin:0 0 6px;font-family:\'Microsoft JhengHei\',sans-serif;' +
+      'font-size:12pt;font-weight:700;">今年累計案件（' + tot.total + ' 件）</p>');
+    out.push('<table style="border-collapse:collapse;font-family:\'Microsoft JhengHei\',sans-serif;' +
+      'font-size:12pt;">');
+    out.push('<thead><tr>' +
+      '<th style="' + EXEC_TH_STYLE + 'text-align:left;">課別</th>' +
+      '<th style="' + EXEC_TH_STYLE + 'text-align:right;">成功</th>' +
+      '<th style="' + EXEC_TH_STYLE + 'text-align:right;">進行中</th>' +
+      '<th style="' + EXEC_TH_STYLE + 'text-align:right;">未啟動</th>' +
+      '<th style="' + EXEC_TH_STYLE + 'text-align:right;">未合作</th>' +
+      '</tr></thead>');
+    out.push('<tbody>');
+    for(var r = 0; r < body.length; r++){
+      var g = body[r], isTot = (g === tot);
+      var nameStyle = EXEC_TD_STYLE + (isTot ? 'font-weight:700;' : '');
+      var numStyle = EXEC_TD_STYLE + 'text-align:right;' + (isTot ? 'font-weight:700;' : '');
+      out.push('<tr>' +
+        '<td style="' + nameStyle + '">' + execHtmlEsc(g.name) +
+          '（' + g.total + ' 件）</td>' +
+        '<td style="' + numStyle + '">' + g.coop + '</td>' +
+        '<td style="' + numStyle + '">' + g.doing + '</td>' +
+        '<td style="' + numStyle + '">' + g.notStarted + '</td>' +
+        '<td style="' + numStyle + '">' + g.notCoop +
+          '（' + execKeRate(g.notCoop, g.total) + '%）</td>' +
+        '</tr>');
     }
-    function line(row){
-      var out = [];
-      for(var ci = 0; ci < row.length; ci++){
-        out.push(ci === 0 ? execPad(String(row[ci]), widths[ci], false)
-                          : execPad(String(row[ci]), widths[ci], true));
-      }
-      return out.join('  ').replace(/\s+$/, '');
-    }
-    var out2 = [line(head), execRule(widths)];
-    for(var b2 = 0; b2 < body.length - 1; b2++) out2.push(line(body[b2]));
-    out2.push(execRule(widths));
-    out2.push(line(body[body.length - 1]));
-    return out2.join('\n');
+    out.push('</tbody>');
+    out.push('</table>');
+    return out.join('\n');
   }
 
   // 純函式：會議次數（取自「開會資訊」文字；沒有該欄位就寫「本次會議」）
@@ -3002,7 +3078,7 @@ var state = {
       { k: 'f', t: '\n3. 上週新增：新增 ' + lb.total + ' 件；目前狀態：' + statusLine(lb) + '。' + trendLine },
       { k: 'f', t: '\n4. 各課業代分享｜輔導開發案件進度：\n' + keBlock },
       { k: 'f', t: '\n5. 需協助事項（僅列件數與課別，不指名案件與人員）：\n' + helpBlock },
-      { k: 'f', t: '\n今年累計案件：\n' + execEmailTable(annualRows) },
+      { k: 'f', t: '\n' + execEmailTable(annualRows) },
       { k: 'f', t: '\n會後追蹤重點：\n' },
       { k: 'follow', t: followup },
       { k: 'f', t: '\n\n' + EXEC_SIGNATURE + '\n' + EXEC_CONFIDENTIAL }
@@ -11997,6 +12073,9 @@ var state = {
     '.spk-flow-body{ font-size:16.5px; line-height:1.9; margin:0; color:var(--text);',
     '  white-space:pre-wrap; word-break:break-word; }',
     '.spk-note{ font-size:14.5px; line-height:1.75; color:var(--muted); margin:0 0 12px; }',
+    // 「複製表格（HTML）」的結果提示：貼在按鈕正下方，更新時不撐開版面
+    '.spk-tblnote{ margin:-2px 0 10px; font-size:13.5px; }',
+    '@media print{ .spk-tblnote{ display:none !important; } }',
   ].join('\n') + '\n' + [
     // ── 數字帶：手機 2×2（原本 1 欄會佔掉整個首屏）──
     '.spk-sec .bf-kpis{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:2px 0 16px; }',
@@ -12227,6 +12306,11 @@ var state = {
     var emailText = buildExecEmail(emailCtx);
     var emailDefaults = { meet: emailMeet, dir: EXEC_DIRECTION_DEFAULT,
                           follow: EXEC_FOLLOWUP_DEFAULT.join('\n') };
+    // 「今年累計案件」的兩種形態（桌機真表格／任何裝置都貼得上的純文字）：
+    //   兩者同一份資料（execRowsThisYear → execKeRateRows），排序與數字不會漂移。
+    var tableRows = execRowsThisYear(flowRows, reviewNow);
+    var tableText = execEmailTable(tableRows);
+    var tableHtml = execEmailTableHtml(tableRows);
     // LINE：一則訊息（不再佔一個全頁模式）。數字與郵件同一來源，長度壓到一眼看完。
     var lineText = '';
     if(!noData){
@@ -12242,7 +12326,7 @@ var state = {
     var mailHtml = noData ? emptyHtml : (
       '<section class="spk-flow" id="spkMail">' +
       '<h2>會後郵件草稿（九段結構）</h2>' +
-      '<p class="spk-note">數字段（第 1 行日期、今年累計、上週新增、各課進度、需協助事項、今年累計案件表）由載入資料自動計算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改，每週只改有變的那幾條。需協助事項只給件數與課別，不指名公司與業務。貼進 Outlook 後把「今年累計案件」那段字型設為 Consolas（等寬）就會對齊，或直接貼到 Excel 即成表格。</p>' +
+      '<p class="spk-note">數字段（第 1 行日期、今年累計、上週新增、各課進度、需協助事項、今年累計案件表）由載入資料自動計算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改，每週只改有變的那幾條。需協助事項只給件數與課別，不指名公司與業務。「今年累計案件」一課一行、按未合作率由高到低，貼進 Outlook 不必設等寬字型；要真表格（可調欄寬、可加總）請用下面那顆「複製表格（HTML）」，桌機貼上就是表格。</p>' +
       '<pre class="spk-mail" id="spkMailText">' + escHtml(emailText) + '</pre>' +
       '<details class="spk-edit">' +
       '<summary>編輯草稿（會議次數／推展方向／會後追蹤重點）</summary>' +
@@ -12255,6 +12339,8 @@ var state = {
       '<button type="button" class="spk-btn" id="spkBuildEmail">更新郵件本文</button>' +
       '</details>' +
       '<button type="button" class="spk-btn" id="spkCopyEmail">複製郵件本文</button>' +
+      '<button type="button" class="spk-btn" id="spkCopyTable">複製表格（HTML）</button>' +
+      '<p class="spk-note spk-tblnote" id="spkTableHint" role="status">「複製表格（HTML）」給桌機用：貼進 Outlook 會是真的表格（可調欄寬、可直接加總）。手機多數不支援複製表格，會自動改複製純文字並在這裡提示。</p>' +
       '</section>' +
       '<section class="spk-flow" id="spkLine">' +
       '<h2>LINE 訊息（一則，直接貼給長官）</h2>' +
@@ -12316,7 +12402,8 @@ var state = {
       + '<div id="spkFoot">' + appFooterText() + '</div>\n'
       + S + '(function(){'
       + 'var SEG=' + JSON.stringify(emailSegs) + ',DEF=' + JSON.stringify(emailDefaults)
-      + ',EMAIL=' + JSON.stringify(emailText) + ',LINE=' + JSON.stringify(lineText) + ';'
+      + ',EMAIL=' + JSON.stringify(emailText) + ',LINE=' + JSON.stringify(lineText)
+      + ',TBL=' + JSON.stringify(tableHtml) + ',TBLTXT=' + JSON.stringify(tableText) + ';'
       // 工具列高度 → --spkbar-h（目錄貼在它下緣；標題在窄螢幕會自己佔一列）
       + 'var bx=document.getElementById("spkBar");'
       + 'function syncBar(){if(bx)document.documentElement.style.setProperty("--spkbar-h",bx.offsetHeight+"px");}'
@@ -12391,6 +12478,21 @@ var state = {
       + 'var flds=[mi,dn,fu];for(var fi=0;fi<flds.length;fi++){if(flds[fi])flds[fi].addEventListener("input",rebuild);}'
       + 'var ce=document.getElementById("spkCopyEmail");'
       + 'if(ce)ce.addEventListener("click",function(){copy(EMAIL,ce,"複製郵件本文");});'
+      // ── 複製表格（HTML）：桌機貼進 Outlook 是真表格 ──
+      //   ClipboardItem 需要 text/html 權限，手機 Safari／部分 WebView 沒有 → 一律走
+      //   「複製純文字 + 面板提示」的降級路徑。兩條路徑都要有結果訊息，不得靜默失敗。
+      + 'var tblHintEl=document.getElementById("spkTableHint");'
+      + 'function setTableHint(m){if(tblHintEl)tblHintEl.textContent=m;}'
+      + 'function copyTable(b){if(!b)return;var label="複製表格（HTML）",plain=TBLTXT||"";'
+      + 'function fb(){setTableHint("此裝置不支援複製表格，已改複製純文字。");copy(plain,b,label);}'
+      + 'try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){'
+      + 'var it=new window.ClipboardItem({"text/html":new Blob([TBL],{type:"text/html"}),'
+      + '"text/plain":new Blob([plain],{type:"text/plain"})});'
+      + 'navigator.clipboard.write([it]).then(function(){done(b,label,"已複製表格");'
+      + 'setTableHint("已複製表格（HTML）：貼進 Outlook（桌機）會是真表格。");},fb);'
+      + '}else fb();}catch(e){fb();}}'
+      + 'var ct=document.getElementById("spkCopyTable");'
+      + 'if(ct)ct.addEventListener("click",function(){copyTable(ct);});'
       + 'var cl=document.getElementById("spkCopyLine");'
       + 'if(cl)cl.addEventListener("click",function(){copy(LINE,cl,"複製 LINE 訊息");});'
       + 'show("read");setDens("script");})();' + E + '\n'
@@ -13487,6 +13589,12 @@ var state = {
       execDisplayWidth: execDisplayWidth,
       execPad: execPad,
       execEmailTable: execEmailTable,
+      execEmailTableHtml: execEmailTableHtml,
+      execKeRate: execKeRate,
+      execKeRateRows: execKeRateRows,
+      execKeTotals: execKeTotals,
+      EXEC_TABLE_KE_W: EXEC_TABLE_KE_W,
+      EXEC_TABLE_N_W: EXEC_TABLE_N_W,
       execMeetingLabel: execMeetingLabel,
       execDateMMDD: execDateMMDD,
       execMeetLine: execMeetLine,
