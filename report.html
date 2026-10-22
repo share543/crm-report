@@ -623,20 +623,26 @@
   .bf-tag-watch{ background:rgba(255,201,77,.16); color:var(--warning); }
   .bf-tag-good{ background:rgba(90,217,139,.16); color:var(--ok); }
   .bf-list{ list-style:none; margin:0; padding:0; }
+  /* 條目（v1.22.0）：一個 <li> 內含兩層 —— 條列句 .bf-gist 與 講稿句 .bf-speak。
+     密度切換只換「哪一層可見」，兩層取自同一份條目（不是兩份文字）。
+     ⚠ 這裡不能用 .bf-list 的 flex：兩個 <p> 會變成左右兩欄。 */
+  .bf-list > li.bf-ent{ display:block; }
+  .bf-gist{ margin:0; }
+  .bf-speak{ margin:0; }
+  /* 密度：講稿層＝.bf-speak ＋ .bf-ask（追問是照著唸的提示）；條列層＝.bf-gist（結論＋證據） */
+  .bf-uni[data-dens="script"] .bf-gist{ display:none; }
+  .bf-uni[data-dens="list"] .bf-speak, .bf-uni[data-dens="list"] .bf-ask{ display:none; }
   .bf-list > li{ display:flex; gap:9px; align-items:flex-start; padding:6px 0; font-size:14.5px;
     line-height:1.65; border-bottom:1px solid var(--cell-border); }
   .bf-list > li:last-child{ border-bottom:0; }
-  /* v1.7.2：項目符號改為圓點。文字（？／！／＋）需讀完才知種類，圓點掃一眼就定位。
-     寬度固定 1.15em，讓三種圓點寬度一致（emoji 在不同字型下寬度會飄）。
-     ⚠ 註解必須用 /* *\/（CSS 不支援 //）；本檔 <style> 是 CSS，不是 JS 陣列，
-        寫成 JS 字串語法會讓整條規則與下一條一起被解析器丟棄。 */
-  .bf-mk{ flex:0 0 20px; text-align:center; font-size:14px; line-height:1.7;
-    font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif; }
+  /* v1.22.0：條目不再用圓點 emoji 當種類標記 —— 種類已由上方 .bf-tag（決定／注意／肯定）
+     標明，圓點是第二套顏色語義（🔴🟠🟢 不受 3 色票控制）。 */
   .bf-num{ color:var(--warning); font-weight:700; }
   .bf-who{ color:var(--accent); }
   .bf-m{ color:var(--muted); font-size:13px; }
-  .bf-script p{ margin:0 0 12px; font-size:15.5px; line-height:1.95; }
-  .bf-script p:last-child{ margin-bottom:0; }
+  /* 講稿層（.bf-speak）與條列層（.bf-gist）是同一份條目的兩層，只有講稿層要段落間距 */
+  .bf-speak{ margin:0 0 12px; font-size:15.5px; line-height:1.95; }
+  .bf-list > li.bf-ent:last-child .bf-speak{ margin-bottom:0; }
   .bf-cue{ color:var(--muted); font-size:12.5px; }
   .bf-ask{ color:var(--accent); }
   .bf-base{ font-size:12px; color:var(--muted); margin:0 0 10px; }
@@ -721,11 +727,10 @@
   body.pv-mode #brief .bf-kd{ font-size:16px; }
   body.pv-mode #brief .bf-ks{ font-size:14px; }
   body.pv-mode #brief .bf-list > li{ font-size:22px; gap:12px; padding:9px 0; }
-  body.pv-mode #brief .bf-mk{ flex:0 0 22px; }
   body.pv-mode #brief .bf-m{ font-size:18px; }
   body.pv-mode #brief .bf-tag{ font-size:16px; padding:5px 14px; margin-bottom:10px; }
   body.pv-mode #brief .bf-kpi{ padding:14px 18px; }
-  body.pv-mode #brief .bf-script p{ font-size:22px; }
+  body.pv-mode #brief .bf-speak{ font-size:22px; }
   body.pv-mode #brief .bf-cue{ font-size:16px; }
   body.pv-mode #brief .bf-ask{ font-size:20px; }
   /* 投影時不出現操作介面與比較基準說明 */
@@ -745,7 +750,7 @@
     body.pv-mode #brief .bf-kpi{ padding:11px 15px; }
     body.pv-mode #brief .bf-list > li{ font-size:19px; padding:6px 0; }
     body.pv-mode #brief .bf-tag{ font-size:15px; margin-bottom:8px; }
-    body.pv-mode #brief .bf-script p{ font-size:19px; margin-bottom:9px; }
+    body.pv-mode #brief .bf-speak{ font-size:19px; margin-bottom:9px; }
   }
   @media (max-height: 800px){
     body.pv-mode #brief .bf-kv{ font-size:25px; }
@@ -757,7 +762,7 @@
     body.pv-mode #brief .bf-m{ font-size:13.5px; }
     body.pv-mode #brief .bf-tag{ font-size:13px; padding:3px 10px; margin-bottom:6px; }
     body.pv-mode #brief .bf-band{ margin-bottom:9px; }
-    body.pv-mode #brief .bf-script p{ font-size:16.5px; margin-bottom:7px; line-height:1.75; }
+    body.pv-mode #brief .bf-speak{ font-size:16.5px; margin-bottom:7px; line-height:1.75; }
   }
   /* 1280×720（較舊投影機）再降一級 */
   @media (max-height: 700px){
@@ -1516,9 +1521,9 @@
   <section class="card" id="briefSection" hidden>
     <h2>重點分析 <span class="muted">開場用：本期變化、要注意的事、今天要決定的事</span></h2>
     <p class="bf-base" id="briefBase"></p>
-    <div class="bf-modes" id="briefModeBar">
-      <button type="button" class="bf-mode" id="briefModeList" aria-pressed="true">條列</button>
-      <button type="button" class="bf-mode" id="briefModeScript" aria-pressed="false">講稿</button>
+    <div class="bf-modes" id="briefModeBar" role="group" aria-label="內容密度（同一份資料）與模式">
+      <button type="button" class="bf-mode on" id="briefModeScript" aria-pressed="true">講稿</button>
+      <button type="button" class="bf-mode" id="briefModeList" aria-pressed="false">條列</button>
       <button type="button" class="bf-mode" id="briefModeGm" aria-pressed="false">GM 書面</button>
       <button type="button" class="bf-mode bf-copy" id="briefCopyBtn" hidden>複製</button>
     </div>
@@ -1562,7 +1567,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.21.0';   // 1.21.0：講者版方案 A（開場三句只留一處、GM LINE 改訊息卡且模式 3 個、GM 郵件改用九段草稿、色票收斂 3 語義、sticky 目錄）
+  var APP_VERSION = '1.22.0';   // 1.22.0：講者版方案 B（條列／講稿合併為同一份資料的兩種密度、模式 3→2、新增「決定」段三條門檻）
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1570,7 +1575,10 @@ var state = {
   var APP_LICENSE = 'MIT License';
   var APP_FOOTER_NOTE = '單檔離線工具：所有資料都在您的瀏覽器內處理，不會上傳任何伺服器。';
 
-  state.briefMode = 'list';
+  // 內容密度：'script'＝講稿（完整句，照著唸）、'list'＝條列（同一份資料的壓縮視圖）。
+  // ⚠ 兩者不是兩個模式、也不是兩份文字 —— 是同一份條目的兩層顯示（見 renderBriefEntries）。
+  //   預設講稿：使用者是拿著手機照著唸。
+  state.briefMode = 'script';
   // GM 書面摘要的變體：'line'＝LINE 短版、'mail'＝郵件完整版（預設郵件，因為郵件是主要用途）
   state.briefGmVariant = 'mail';
   // 目前模式的「貼上用純文字」（由 renderBriefSection 產生，複製鈕直接取用）
@@ -2843,8 +2851,12 @@ var state = {
     return out.join('　');
   }
 
-  // 純函式：今年累計案件表（課別 × 四狀態 ＋ 合計）。合計列一定等於 execStatusBuckets 的四桶。
-  function execEmailTable(rows){
+  // 純函式：各課四狀態列（課別 × 合作成功／進行中／未啟動／未合作 ＋ 合計）
+  // ⚠ 抽成獨立函式（v1.22.0）的原因：會後郵件的「今年累計案件」表與講者版「決定」段
+  //   要看的是同一份四狀態表。原本分組邏輯寫在 execEmailTable 裡，決定段若另外再寫一份
+  //   分組，就會出現「同一課兩個數字」的漂移。這裡是唯一來源。
+  //   回傳順序：總件數多→少，同件數依課名 —— 與原本 execEmailTable 的排序完全一致。
+  function execKeStatusRows(rows){
     var groups = {}, order = [], list = rows || [];
     for(var i = 0; i < list.length; i++){
       var r = list[i];
@@ -2860,8 +2872,13 @@ var state = {
       else g.notCoop++;
       g.total++;
     }
-    var lines = order.map(function(k2){ return groups[k2]; })
+    return order.map(function(k2){ return groups[k2]; })
       .sort(function(a, b){ return (b.total - a.total) || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)); });
+  }
+
+  // 純函式：今年累計案件表（課別 × 四狀態 ＋ 合計）。合計列一定等於 execStatusBuckets 的四桶。
+  function execEmailTable(rows){
+    var lines = execKeStatusRows(rows);
     var tot = { name: '合計', coop: 0, doing: 0, notStarted: 0, notCoop: 0, total: 0 };
     for(var j = 0; j < lines.length; j++){
       tot.coop += lines[j].coop; tot.doing += lines[j].doing;
@@ -2997,6 +3014,126 @@ var state = {
     return execEmailSegments(ctx).map(function(seg){
       return seg.k === 'follow' ? execNumberLines(seg.t) : seg.t;
     }).join('');
+  }
+
+  // ---------------------------------------------------------------------------
+  // 講者版「決定」段（v1.22.0）：三條門檻
+  // ---------------------------------------------------------------------------
+  // 使用者定案（2026-10-22）：「決定」段放「注意」之前，上限 3 條，按嚴重度取最嚴重 3 條。
+  //   ① 逾期集中     ：某課逾期 ≥5 件 且 該課佔全公司逾期 ≥30%
+  //   ② 未合作率異常 ：某課未合作率 ≥60% 且 該課案件 ≥20 件
+  //   ③ 未啟動堆積   ：某課未啟動 ≥10 件
+  // 資料來源全部是既有函式：逾期＝collectOverdue（與逾期監控同一份口徑）、
+  //   四狀態＝execKeStatusRows（與會後郵件的今年累計案件表同一份）。
+  //   ⚠ 不新增欄位、不新增規則引擎；門檻只集中在下面這個常數。
+  // 具名規則：可以指名課別，但只具名「最久的那 1 件」當佐證 —— 不列名單、不列業務姓名。
+  var DECIDE_RULES = {
+    overdue:  { minN: 5,  minPct: 30 },   // 件數下限、佔全公司逾期百分比下限
+    notCoop:  { minPct: 60, minTotal: 20 },// 未合作率下限、該課案件數下限
+    notStart: { minN: 10 }                // 未啟動件數下限
+  };
+  var DECIDE_CAP = 3;                     // 段內硬上限（使用者定案）
+  function decidePct(a, b){ return b ? Math.round(a * 1000 / b) / 10 : 0; }
+
+  // 純函式：三個門檻的候選條目（未截斷）。每條＝決策句＋講稿句＋證據。
+  //   score＝「超過門檻的程度」（primary ÷ threshold），跨規則可比，
+  //   用來排序並取最嚴重 3 條；同分時依規則順序（逾期 → 未合作 → 未啟動）。
+  function decideCandidates(rows, now){
+    var list = rows || [];
+    now = now || new Date();
+    var od = collectOverdue(list, isoDate(now));
+    var totalOd = od.total || 0;
+    var out = [];
+
+    // ① 逾期集中：先依課分組（含最久那一件，只取那一件當佐證）
+    var byKe = {};
+    for(var i = 0; i < od.items.length; i++){
+      var x = od.items[i];
+      var g = byKe[x.ke];
+      if(!g){ g = byKe[x.ke] = { n: 0, days: -1, co: '' }; }
+      g.n++;
+      if(x.days > g.days){ g.days = x.days; g.co = x.co; }
+    }
+    for(var k1 in byKe){
+      var o1 = byKe[k1];
+      var share = decidePct(o1.n, totalOd);
+      if(o1.n < DECIDE_RULES.overdue.minN) continue;
+      if(!totalOd || o1.n * 100 / totalOd < DECIDE_RULES.overdue.minPct) continue;
+      out.push({
+        kind: 'decide', key: 'od:' + k1, rule: 'overdue',
+        title: '逾期集中', ke: k1, n: o1.n, pct: share, days: o1.days, co: o1.co,
+        score: (o1.n / DECIDE_RULES.overdue.minN) * (share / DECIDE_RULES.overdue.minPct),
+        proof: '逾期 ' + o1.n + ' 件｜佔 ' + share + '%｜最久 ' + o1.days + ' 天',
+        segs: [['w', k1], ['t', '：逾期未結案 '], ['n', o1.n + ' 件'],
+               ['t', '（佔全公司 '], ['n', share + '%'], ['t', '，最久 '], ['n', o1.days + ' 天'],
+               ['t', '：' + o1.co + '）｜要求：兩週內全數結案或提書面續談理由']],
+        speak: k1 + '逾期未結案 ' + o1.n + ' 件，佔全公司逾期 ' + share + '%，最久的是' +
+               o1.co + '、' + o1.days + ' 天。要求兩週內全數結案，或提出書面的續談理由。',
+        ask: k1 + '這 ' + o1.n + ' 件由誰負責收斂？兩週的期限可以嗎？'
+      });
+    }
+
+    // ②③ 需要各課四狀態（與會後郵件的今年累計案件表同一份來源）
+    var keRows = execKeStatusRows(list);
+    for(var r2 = 0; r2 < keRows.length; r2++){
+      var kk = keRows[r2];
+      // ② 未合作率異常
+      var rate = decidePct(kk.notCoop, kk.total);
+      if(kk.total >= DECIDE_RULES.notCoop.minTotal &&
+         kk.notCoop * 100 / kk.total >= DECIDE_RULES.notCoop.minPct){
+        out.push({
+          kind: 'decide', key: 'nc:' + kk.name, rule: 'notCoop',
+          title: '未合作率異常', ke: kk.name, n: kk.notCoop, total: kk.total, pct: rate,
+          score: rate / DECIDE_RULES.notCoop.minPct,
+          proof: '未合作 ' + kk.notCoop + '／' + kk.total + '｜' + rate + '%',
+          segs: [['w', kk.name], ['t', '：未合作 '], ['n', String(kk.notCoop)],
+                 ['t', '／'], ['n', String(kk.total)], ['t', '（'], ['n', rate + '%'],
+                 ['t', '）｜要求：檢視名單品質，下週提改善說明']],
+          speak: kk.name + '未合作 ' + kk.notCoop + ' 件、共 ' + kk.total + ' 件，未合作率 ' +
+                 rate + '%。要求檢視名單品質，下週提改善說明。',
+          ask: kk.name + '的未合作是名單問題還是話術問題？'
+        });
+      }
+      // ③ 未啟動堆積
+      if(kk.notStarted >= DECIDE_RULES.notStart.minN){
+        out.push({
+          kind: 'decide', key: 'ns:' + kk.name, rule: 'notStart',
+          title: '未啟動堆積', ke: kk.name, n: kk.notStarted,
+          score: kk.notStarted / DECIDE_RULES.notStart.minN,
+          proof: '未啟動 ' + kk.notStarted + ' 件',
+          segs: [['w', kk.name], ['t', '：未啟動 '], ['n', kk.notStarted + ' 件'],
+                 ['t', '｜要求：本週指派接手人，下週回報接洽數']],
+          speak: kk.name + '未啟動 ' + kk.notStarted + ' 件。要求本週指派接手人，下週回報接洽數。',
+          ask: kk.name + '這 ' + kk.notStarted + ' 件由誰接手？'
+        });
+      }
+    }
+
+    var ruleOrder = { overdue: 0, notCoop: 1, notStart: 2 };
+    out.sort(function(a, b){
+      if(b.score !== a.score) return b.score - a.score;
+      if(ruleOrder[a.rule] !== ruleOrder[b.rule]) return ruleOrder[a.rule] - ruleOrder[b.rule];
+      return a.ke < b.ke ? -1 : 1;
+    });
+    return out;
+  }
+
+  // 純函式：決定段最終條目（最多 3 條）。0 條時不留空段 ——
+  //   給「本週無待決事項」＋一行背景數字（全公司逾期件數與比率），讓人知道「沒事的根據是什麼」。
+  function buildDecideEntries(rows, now){
+    var list = rows || [];
+    var cands = decideCandidates(list, now);
+    if(cands.length) return cands.slice(0, DECIDE_CAP);
+    var od = collectOverdue(list, isoDate(now || new Date()));
+    var total = od.total || 0;
+    var pct = decidePct(total, list.length);
+    return [{
+      kind: 'decide', key: 'none', rule: 'none', title: '待決事項', score: 0, fallback: true,
+      proof: '全公司逾期 ' + total + ' 件（' + pct + '%）',
+      segs: [['t', '本週無待決事項'],
+             ['m', '（全公司逾期 ' + total + ' 件（' + pct + '%），未達門檻）']],
+      speak: '今天沒有需要裁示的事項。全公司逾期 ' + total + ' 件、佔 ' + pct + '%，都在門檻內。'
+    }];
   }
 
   // 純函式：會議結尾提示（固定文字，不隨資料變）
@@ -6554,30 +6691,18 @@ var state = {
     var top3 = briefTopN(byKe, 3);
     var share = stale.length ? Math.round(top3.sum * 1000 / stale.length) / 10 : 0;
 
-    // ---------- 要決定 ----------
+    // ---------- 決策類（改列「注意」）----------
+    // ⚠ v1.22.0：「決定」段改由三條門檻產生（buildDecideEntries），格式固定為
+    //   「課別：數字（佐證）｜要求：動作＋期限」。原本這裡兩條「要不要…？」的開放式問題
+    //   （已簽約未導入待定義、停滯集中是否支援）與新格式並存會有兩個「要決定」段，
+    //   且第二條與下面「停滯最集中」講同一件事（同課、同件數）→ 第二條移除；
+    //   第一條是資料定義待確認，歸到「注意」與資料缺漏同一類。
     if(misN > 0){
-      items.push({ kind:'decide', key:'rule', prio:1, impact:misN, urgency:3, act:true, dirV:null,
+      items.push({ kind:'watch', key:'rule', prio:1, impact:misN, urgency:3, act:false, dirV:null,
         segs:[['t','「已簽約未導入」'],['n', String(misN)],['t',' 件待定義'],
               ['m','：是導入延遲、還是規則不一致？需要一個判定標準']],
-        speak:'另外，已簽約未導入的有 ' + misN + ' 件，需要一個判定標準 —— 這一項希望今天可以定下來。',
+        speak:'另外，已簽約未導入的有 ' + misN + ' 件，需要一個判定標準 —— 這一項請大家會後確認。',
         ask:'這 ' + misN + ' 件的共同原因是什麼？判定標準由誰定？' });
-    }
-    if(topKe && topKe.count >= 5){
-      var devSet = {};
-      for(i = 0; i < stale.length; i++){
-        if(String(fieldStr(stale[i], '課別') || '').trim() === topKe.name){
-          var dv = String(fieldStr(stale[i], '開發者') || '').trim();
-          if(dv) devSet[dv] = 1;
-        }
-      }
-      var devN = 0; for(var dk in devSet) devN++;
-      items.push({ kind:'decide', key:'capacity', prio:2, impact:topKe.count, urgency:2, act:true, dirV:null,
-        segs:[['w', topKe.name],['t',' 停滯 '],['n', String(topKe.count)],['t',' 件'],
-              ['m','（開發者 ' + devN + ' 人）：是否需要支援或重新分派？']],
-        speak:'再來是 ' + topKe.name + '，停滯 ' + topKe.count + ' 件' +
-              (devN ? '、開發者只有 ' + devN + ' 人' : '') +
-              '，需要討論是不是要支援或重新分派。',
-        ask: topKe.name + ' 這 ' + topKe.count + ' 件需要誰支援？' });
     }
 
     // ---------- 要注意 ----------
@@ -6776,14 +6901,10 @@ var state = {
   }
 
   // ---- 渲染（一律 createElement／createTextNode，不用 innerHTML） ----
-  var BRIEF_KIND_LABEL = { decide: '要決定', watch: '要注意', good: '值得肯定' };
+  // 段名與目錄同一套詞（開場／決定／注意／肯定／郵件）—— 同一件事只有一個名字。
+  var BRIEF_KIND_LABEL = { decide: '決定', watch: '注意', good: '肯定' };
   var BRIEF_KIND_CLASS = { decide: 'bf-tag-decide', watch: 'bf-tag-watch', good: 'bf-tag-good' };
-  // v1.7.2：項目符號由純文字（？／！／＋）改為圓點。
-  // 使用者指示：「請優化條列式表現方式，例如要有圓點或適合的小圖 emoji」。
-  // ⚠ 選紅黃綠而不是各種圖示：這三種是**語義固定**的（紅＝要處理、黃＝留意、綠＝正向），
-  //   掃一眼就能定位，而且色覺語義與 bf-tag 的邊框色一致，標記與標籤互相印證。
-  //   ⭐ 之類的圖示語義隨種類漂移，項目一多就失去定位功能。
-  var BRIEF_KIND_MARK = { decide: '\u{1F534}', watch: '\u{1F7E0}', good: '\u{1F7E2}' };
+  // v1.22.0：條目不再掛圓點 emoji（種類已由 .bf-tag 標明；🔴🟠🟢 是第二套顏色語義）。
   // 六段流程的段落圖示（純裝飾，輔助手機上滑動時定位，不進講稿文字）
   var FLOW_ICON = {
     '一': '\u{1F4CA}', '二': '\u{1F3C6}', '三': '\u{26A0}',
@@ -6882,31 +7003,98 @@ var state = {
     }
     box.appendChild(grid);
   }
-  function renderBriefList(box, items){
+  // 段內小標（標題欄）。只在「結論句沒有自己講出這件事」時才顯示 ——
+  //   例：「停滯超過 30 天 59 件」已經點名停滯，再加一個「停滯」前綴只是雜訊；
+  //   而「王小明 累計導入完成 12 件」前面標一個「導入標兵」才看得出這條在肯定什麼。
+  var BRIEF_KEY_TITLE = {
+    rule: '資料定義', stale: '停滯', stale0: '停滯', focus: '停滯集中',
+    cat: '類別結構', ke: '課別導入', dropoff: '流失節點', missing: '資料缺漏',
+    mix: '類別位移', growth: '開發量', decline: '開發量', star: '導入標兵', impr: '導入完成',
+    // 決定段三條門檻（決定段自己會帶 title，這裡是備援 —— 例如只傳 key 進來時）
+    od: '逾期集中', nc: '未合作率異常', ns: '未啟動堆積', none: '待決事項'
+  };
+  function briefTitleOf(it){
+    var k = String((it && it.key) || '');
+    if(it && it.title) return it.title;
+    if(BRIEF_KEY_TITLE[k] !== undefined) return BRIEF_KEY_TITLE[k];
+    var base = k.split(':')[0];
+    return BRIEF_KEY_TITLE[base] || '';
+  }
+  // 一條洞見 → 一個「條目」。這是「一份資料、兩種密度」的唯一來源：
+  //   { title 標題, segs 一句結論（數字即證據）, gist 同上的純文字, proof 證據摘要,
+  //     speak 講稿句, ask 追問 }
+  //   ⚠ 條列密度只印 segs、講稿密度只印 speak，兩者取自同一個物件 —— 不另寫第二份文字。
+  function briefEntry(it){
+    return {
+      kind: it.kind, key: it.key, title: briefTitleOf(it),
+      segs: it.segs || [], gist: briefSegsText(it),
+      proof: it.proof || '', speak: it.speak || briefSegsText(it), ask: it.ask || ''
+    };
+  }
+  // 決定段（三條門檻）＋ 注意／肯定，合成同一份條目陣列。
+  //   ⚠ 決定段吃「全量」列（與逾期監控同口徑，不隨分析期間縮放）：未啟動是現況、
+  //     逾期是相對於今天；跟著期間縮放會出現「選去年時逾期 0 件」的假象。
+  function buildBriefEntries(rows, trendRows, ranges, now){
+    var tr = trendRows || rows;
+    var all = buildBriefItems(rows, tr, ranges);
+    var safe = [], bad = 0;
+    for(var i = 0; i < all.length; i++){
+      if(briefItemOk(all[i])) safe.push(all[i]); else bad++;
+    }
+    var items = rankBriefItems(safe);
+    var ents = [], dec = buildDecideEntries(tr, now);
+    for(var d = 0; d < dec.length; d++) ents.push(briefEntry(dec[d]));
+    for(var m = 0; m < items.length; m++) ents.push(briefEntry(items[m]));
+    return { entries: ents, items: items, bad: bad, decide: dec };
+  }
+  // 一份 DOM、兩層顯示：密度切換只是換「哪一層可見」，不重建內容、不換文字來源。
+  function renderBriefEntries(box, entries, density){
     var order = ['decide', 'watch', 'good'];
+    var wrap = document.createElement('div');
+    wrap.className = 'bf-uni';
+    wrap.setAttribute('data-dens', density === 'list' ? 'list' : 'script');
     for(var o = 0; o < order.length; o++){
       var kind = order[o], group = [];
-      for(var i = 0; i < items.length; i++) if(items[i].kind === kind) group.push(items[i]);
+      for(var i = 0; i < entries.length; i++) if(entries[i].kind === kind) group.push(entries[i]);
       if(!group.length) continue;
-      var band = document.createElement('div'); band.className = 'bf-band';
+      var band = document.createElement('div');
+      band.className = 'bf-band d-' + kind;
       var tag = document.createElement('span');
       tag.className = 'bf-tag ' + BRIEF_KIND_CLASS[kind];
       tag.textContent = BRIEF_KIND_LABEL[kind];
       band.appendChild(tag);
       var ul = document.createElement('ul'); ul.className = 'bf-list';
       for(var g = 0; g < group.length; g++){
-        var li = document.createElement('li');
-        var mk = document.createElement('span'); mk.className = 'bf-mk';
-        mk.textContent = BRIEF_KIND_MARK[kind];
-        li.appendChild(mk);
-        var tw = document.createElement('span');
-        briefAppendLine(tw, group[g].segs);
-        li.appendChild(tw);
+        var e = group[g];
+        var li = document.createElement('li'); li.className = 'bf-ent';
+        // ── 條列層：一句結論＋證據（數字就是證據，用 bf-num 加重）──
+        // ⚠ 行首不掛段內標籤：決定段每條的格式是固定的「課別：數字（佐證）｜要求：…」，
+        //   在課別前面加一個「逾期集中」會破壞這個格式（而且與結論句重複）。
+        //   標題欄改由講稿層的裁示提示帶出（見下），兩層仍然取自同一個條目。
+        var gl = document.createElement('p'); gl.className = 'bf-gist';
+        briefAppendLine(gl, e.segs);
+        li.appendChild(gl);
+        // ── 講稿層：同一條的完整句（照著唸）──
+        var sp = document.createElement('p'); sp.className = 'bf-speak';
+        sp.textContent = '「' + e.speak + '」';
+        if(e.kind === 'decide'){
+          var cue = document.createElement('span'); cue.className = 'bf-cue';
+          cue.textContent = '（今天要裁示的事' + (e.title ? '：' + e.title : '') + '）';
+          sp.appendChild(document.createTextNode(' '));
+          sp.appendChild(cue);
+        }
+        li.appendChild(sp);
+        if(e.ask){
+          var q = document.createElement('p'); q.className = 'bf-ask';
+          q.textContent = '→ 追問：' + e.ask;
+          li.appendChild(q);
+        }
         ul.appendChild(li);
       }
       band.appendChild(ul);
-      box.appendChild(band);
+      wrap.appendChild(band);
     }
+    box.appendChild(wrap);
   }
   // 開場句。⚠「幾塊」必須由實際分組推導，不可寫死「三塊」——
   //   分組是「有內容才出現」，只有兩組時說三塊就是假話；
@@ -6933,39 +7121,8 @@ var state = {
     return '各位好，先看' + scope + '幾個數字：' + scope + '新增 ' + cur.length + ' 件，' +
       '停滯待追蹤 ' + (ranges.staleN === undefined ? '' : ranges.staleN) + ' 件。' + tail;
   }
-  function renderBriefScript(box, items, ranges){
-    var wrap = document.createElement('div'); wrap.className = 'bf-script';
-    // 開場句：先給這一輪的三個關鍵數字，再進條目（只放數字、不放方向詞，避免與數字不一致）
-    if(ranges){
-      var p0 = document.createElement('p');
-      var s0 = document.createElement('span');
-      s0.textContent = briefOpeningLine(ranges, briefGrouped(items));
-      p0.appendChild(s0);
-      wrap.appendChild(p0);
-    }
-    for(var i = 0; i < items.length; i++){
-      var it = items[i];
-      var p = document.createElement('p');
-      var txt = document.createElement('span');
-      txt.textContent = '「' + (it.speak || briefSegsText(it.segs)) + '」';
-      p.appendChild(txt);
-      if(it.kind === 'decide'){
-        var cue = document.createElement('span'); cue.className = 'bf-cue';
-        cue.textContent = '（今天要裁示的事）';
-        p.appendChild(document.createTextNode(' '));
-        p.appendChild(cue);
-      }
-      wrap.appendChild(p);
-      if(it.ask){
-        var q = document.createElement('p');
-        var qq = document.createElement('span'); qq.className = 'bf-ask';
-        qq.textContent = '→ 追問：' + it.ask;
-        q.appendChild(qq);
-        wrap.appendChild(q);
-      }
-    }
-    box.appendChild(wrap);
-  }
+  // ⚠ v1.22.0：原本的 renderBriefScript 已移除 —— 講稿不再是獨立渲染路徑，
+  //   它是 renderBriefEntries 裡的第二層（.bf-speak），與條列層共用同一份條目。
   function renderBriefSection(rows, trendRows){
     var sec = document.getElementById('briefSection');
     var box = document.getElementById('brief');
@@ -6991,12 +7148,8 @@ var state = {
       '　·　風險與肯定類統計採目前篩選＋期間（與其他區塊一致）' +
       '　·　轉換率一律為「累計（全期）」口徑：導入比新增落後約一個開發週期，' +
       '本期導入完成多來自更早的新增，故不以「本期導入÷本期新增」計算';
-    var all = buildBriefItems(rows, trendRows || rows, ranges);
-    var safe = [], bad = 0;
-    for(var i = 0; i < all.length; i++){
-      if(briefItemOk(all[i])) safe.push(all[i]); else bad++;
-    }
-    var items = rankBriefItems(safe);
+    var built = buildBriefEntries(rows, trendRows || rows, ranges, new Date());
+    var items = built.entries, bad = built.bad;
     box.textContent = '';
     box.className = '';
     // 開場三句話放最前面：主持人一開口就講重點（投影第一頁也看得到）
@@ -7009,19 +7162,19 @@ var state = {
       w.textContent = '（有 ' + bad + ' 條因「數字與語句方向不一致」而未顯示 —— 寧缺勿假）';
       box.appendChild(w);
     }
-    // 複製內容與畫面同源：由同一份 items／數字產生，切模式就換一份
+    // 複製內容與畫面同源：同一份條目 → 密度決定用哪一層（gist／speak），不另寫文字
     var tr = trendRows || rows;
-    if(state.briefMode === 'script'){
-      var sOpts = { range: ranges.range, trendRows: tr, staleN: briefStaleRows(rows).length };
-      renderBriefScript(box, items, sOpts);
-      state.briefCopyText = buildScriptText(rows, tr, ranges, items, sOpts);
-    } else if(state.briefMode === 'gm'){
+    if(state.briefMode === 'gm'){
       var gmText = buildGmText(rows, tr, ranges, state.briefGmVariant, items);
       renderBriefGm(box, gmText);
       state.briefCopyText = gmText;
     } else {
-      renderBriefList(box, items);
-      state.briefCopyText = buildListText(rows, tr, ranges, items);
+      // 密度切換：同一份 entries 一次畫完兩層，只換「哪一層可見」
+      renderBriefEntries(box, items, state.briefMode);
+      var sOpts = { range: ranges.range, trendRows: tr, staleN: briefStaleRows(rows).length };
+      state.briefCopyText = (state.briefMode === 'script')
+        ? buildScriptText(rows, tr, ranges, items, sOpts)
+        : buildListText(rows, tr, ranges, items);
     }
     // 本期分析（類別／課別）：永遠是重點分析的一部分，但預設收合 ——
     // 它不跟 5 條搶額度，也不讓投影頁超出一頁。
@@ -7613,7 +7766,7 @@ var state = {
     return out;
   }
   function briefGrouped(items){
-    var order = ['decide', 'watch', 'good'], labels = { decide: '要決定', watch: '要注意', good: '值得肯定' };
+    var order = ['decide', 'watch', 'good'], labels = BRIEF_KIND_LABEL;
     var out = [];
     for(var o = 0; o < order.length; o++){
       var g = [];
@@ -7622,23 +7775,27 @@ var state = {
     }
     return out;
   }
-  function buildListText(rows, trendRows, ranges, items){
+  // 純文字：條列密度（一句結論＋證據）。與畫面上的 .bf-gist 同一份欄位。
+  function buildListText(rows, trendRows, ranges, entries){
     var L = [briefTextHeader('重點分析'), ''];
     L = L.concat(briefTilesText(trendRows, ranges, rows));
     L.push('');
-    var groups = briefGrouped(items);
+    var groups = briefGrouped(entries);
     for(var g = 0; g < groups.length; g++){
       L.push('▍' + groups[g].label);
       for(var k = 0; k < groups[g].items.length; k++){
+        var e = groups[g].items[k];
         // 要決定的是待辦 → 用編號；其餘用・（讀起來才知道有幾件事要做）
-        L.push((groups[g].kind === 'decide' ? (k + 1) + '. ' : '・') + briefSegsText(groups[g].items[k]));
+        L.push((groups[g].kind === 'decide' ? (k + 1) + '. ' : '・') +
+               (e.gist || briefSegsText(e)));
       }
       L.push('');
     }
     L.push(briefStampLine());
     return L.join('\n');
   }
-  function buildScriptText(rows, trendRows, ranges, items, opts){
+  // 純文字：講稿密度（完整句）。與畫面上的 .bf-speak 同一份欄位。
+  function buildScriptText(rows, trendRows, ranges, entries, opts){
     var L = [briefTextHeader('口頭講稿'), ''];
     // 開場三句話（由資料推導；資料不支持就不會出現那一句）
     // 講者版例外：不重複放進複製文字（講者版已有一段獨立的開場三句話）
@@ -7650,9 +7807,9 @@ var state = {
     }
     L = L.concat(briefTilesText(trendRows, ranges, rows));
     L.push('');
-    L.push(briefOpeningLine(opts, briefGrouped(items)));
+    L.push(briefOpeningLine(opts, briefGrouped(entries)));
     L.push('');
-    var groups = briefGrouped(items);
+    var groups = briefGrouped(entries);
     for(var g = 0; g < groups.length; g++){
       var gi = groups[g].items;
       L.push('▍' + groups[g].label);      // ⚠ 分區標題一組只印一次（每條都印會重複）
@@ -7765,7 +7922,7 @@ var state = {
     refreshBrief();
   }
   function initBrief(){
-    state.briefMode = 'list';
+    state.briefMode = 'script';   // 密度預設講稿（使用者照著唸）
     state.briefGmVariant = 'mail';
     state.briefDetail = null;   // 自動：螢幕展開、投影收合
     var wire = function(id, fn){
@@ -11763,8 +11920,8 @@ var state = {
   var SPEAKER_CSS = [
     'body.spk-body{ padding:max(10px, env(safe-area-inset-top)) 12px calc(28px + env(safe-area-inset-bottom));',
     '  max-width:900px; margin:0 auto; font-size:16px; }',
-    // ── sticky 工具列：標題／3 個模式／複製 ──
-    // ⚠ 一定要 flex-wrap：390px 放標題＋3 顆模式鈕＋複製鈕會超出，
+    // ── sticky 工具列：標題／2 個模式／2 個密度／複製 ──
+    // ⚠ 一定要 flex-wrap：390px 放標題＋模式鈕＋密度鈕＋複製鈕會超出，
     //    沒有 wrap 時最右邊的「複製」會被擠出畫面。
     '#spkBar{ position:sticky; top:0; z-index:60; display:flex; flex-wrap:wrap; gap:8px; align-items:center;',
     '  padding:9px 0 10px; background:var(--bg); border-bottom:1px solid var(--border); }',
@@ -11783,7 +11940,17 @@ var state = {
     '  color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }',
     '#spkCopy.done{ background:var(--ok); color:var(--bg); box-shadow:inset 0 0 0 1px var(--ok); }',
     '#spkBar .spk-gap{ flex:1 1 auto; }',
-    // ── sticky 目錄：5 段（開場／注意／決定／肯定／郵件），單手可點 ──
+    // ── 密度切換（講稿／條列）：不是模式 —— 它是「同一份資料的兩種密度」 ──
+    // 選中樣式刻意與模式不同：模式用 accent（目前在哪一段）、密度用中性底（顯示多細）。
+    '#spkDens{ display:flex; gap:3px; align-items:center;',
+    '  border:1px solid var(--border); border-radius:999px; padding:3px; }',
+    '#spkDens .spk-d{ display:inline-flex; align-items:center; min-height:32px; padding:6px 12px;',
+    '  border:0; border-radius:999px; background:transparent; color:var(--muted);',
+    '  font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }',
+    '#spkDens .spk-d:hover{ color:var(--text); }',
+    '#spkDens .spk-d.on{ background:var(--card-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--border); }',
+    '#spkDens .spk-d:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }',
+    // ── sticky 目錄：5 段（開場／決定／注意／肯定／郵件），單手可點 ──
     // 貼在工具列下緣（top 用 JS 量到的 --spkbar-h，標題在窄螢幕會自己佔一列）。
     '#spkToc{ position:sticky; top:var(--spkbar-h, 54px); z-index:55; display:flex; gap:6px;',
     '  overflow-x:auto; -webkit-overflow-scrolling:touch; padding:8px 0; margin:0 0 6px;',
@@ -11843,20 +12010,18 @@ var state = {
     '.spk-sec .bf-num{ color:var(--text); }',
     '.spk-sec .bf-who{ color:var(--text); }',
     '@media (min-width:700px){ .spk-sec .bf-kpis{ grid-template-columns:repeat(4,1fr); } }',
-    // ── 條列／講稿 ──
+    // ── 條目：一份 DOM、兩層（條列句／講稿句），密度用 CSS 切 ──
     '.spk-sec .bf-band{ margin:0 0 20px; }',
     '.spk-sec .bf-tag{ font-size:13px; padding:4px 12px; margin:0 0 8px; border-radius:999px; }',
     '.spk-sec .bf-tag-decide{ background:transparent; color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }',
     '.spk-sec .bf-tag-watch{ background:var(--card-2); color:var(--muted); box-shadow:inset 0 0 0 1px var(--border); }',
     '.spk-sec .bf-tag-good{ background:transparent; color:var(--ok); box-shadow:inset 0 0 0 1px var(--ok); }',
-    // 圓點 emoji（🔴🟠🟢）在深色底上是另一組不受控的顏色；種類已由上方標籤說明
-    '.spk-sec .bf-mk{ display:none; }',
-    '.spk-sec .bf-list > li{ font-size:16.5px; line-height:1.85; padding:9px 0; gap:0; }',
+    '.spk-sec .bf-list > li.bf-ent{ display:block; font-size:16.5px; line-height:1.9; padding:10px 0; }',
+    '.spk-sec .bf-gist{ font-size:16.5px; line-height:1.9; margin:0; }',
+    '.spk-sec .bf-speak{ font-size:17px; line-height:1.95; margin:0; }',
+    '.spk-sec .bf-ask{ font-size:16px; line-height:1.75; margin:6px 0 0; }',
     '.spk-sec .bf-m{ font-size:16px; color:var(--muted); }',
-    '.spk-sec .bf-script p{ font-size:16.5px; line-height:1.9; margin:0 0 14px; }',
-    '.spk-sec .bf-script p:last-child{ margin-bottom:0; }',
-    '.spk-sec .bf-cue{ font-size:15px; color:var(--muted); }',
-    '.spk-sec .bf-ask{ color:var(--accent); }',
+    '.spk-sec .bf-cue{ font-size:16px; color:var(--muted); }',
     // ── 本期分析細部（類別／課別）：全檔只一份，放在模式區塊之外 ──
     '#spkDetail{ margin:0; }',
     '#spkDetail .bf-dblock:first-child{ margin-top:0; }',
@@ -11951,48 +12116,56 @@ var state = {
     // 開場三句話：整份檔只留一份，放在模式切換區之外的最上方。
     //   快照各模式時用 SPK_SUPPRESS_O3 關掉，否則三個模式各印一次（舊版就是這樣）。
     var o3 = noData ? [] : buildOpening3(spkRows, filteredRows, spkRanges);
+    // 「一份資料、兩種密度」：DOM 只快照一次，兩層（.bf-gist／.bf-speak）都在裡面，
+    //   密度由 CSS 切換。舊版對 list／script 各快照一次 → 同一件事兩份 HTML、
+    //   複製文字也是兩支 builder 各寫一份，兩邊遲早漂移。
+    var spkBuilt = noData ? { entries: [], bad: 0 } :
+      buildBriefEntries(spkRows, filteredRows, spkRanges, reviewNow);
     SPK_SUPPRESS_O3 = true;
-    setBriefMode('list');
-    // ⚠ 模式沒變時 setBriefMode 不會重繪 → 快照會拿到上一次（含開場三句話）的 DOM，
+    setBriefMode('script');           // 密度＝講稿（預設）；DOM 與密度無關，兩層都畫
+    // ⚠ 密度沒變時 setBriefMode 不會重繪 → 快照會拿到上一次（含開場三句話）的 DOM，
     //   於是「只留一份」立刻破功（實測：開場三句話還是出現兩次）。這裡強制重繪一次。
     refreshBrief();
-    var listHtml = snapshotBriefSection(), listText = state.briefCopyText || '';
-    setBriefMode('script');
-    var scriptHtml = snapshotBriefSection(), scriptText = state.briefCopyText || '';
+    var readHtml = snapshotBriefSection();
+    // 兩份複製文字取自同一份條目（speak／gist），不是兩份內容
+    var sOpts = { range: spkRanges.range, trendRows: filteredRows,
+                  staleN: briefStaleRows(spkRows).length };
+    var scriptText = noData ? '' : buildScriptText(spkRows, filteredRows, spkRanges, spkBuilt.entries, sOpts);
+    var listText = noData ? '' : buildListText(spkRows, filteredRows, spkRanges, spkBuilt.entries);
     SPK_SUPPRESS_O3 = false;
     setBriefMode(prevMode);
     refreshBrief();   // 還原：把開場三句話畫回來，不留成被抑制的狀態
     state.briefGmVariant = prevVar;
-    // 期間內 0 筆：各模式都給同一句空狀態，不重複、不留舊數字
+    // 期間內 0 筆：整份給同一句空狀態，不重複、不留舊數字
     var emptyHtml = '';
     if(noData){
       emptyHtml = '<p class="pending">' + escHtml(
         periodScopeLabel(state.period) + '沒有案件，無法產生重點分析。') + '</p>';
-      listHtml = emptyHtml; scriptHtml = emptyHtml;
+      readHtml = emptyHtml;
       listText = ''; scriptText = '';
     }
-    // ---- 共用區塊從各模式快照移除（整份只放一次）----
+    // ---- 共用區塊從快照移除（整份只放一次）----
     function cutShared(html){
       html = cutDivById(html, 'briefDetail');
       html = cutDivById(html, 'briefDetailBar');
       html = html.replace(/<p class="bf-base"[^>]*>[\s\S]*?<\/p>/, '');
       html = html.replace(/<h2>重點分析[\s\S]*?<\/h2>/, '');
-      // 兩個模式各自快照出一份 <div id="brief"> → 同一個 id 出現兩次（無效 HTML）。
-      // 講者版沒有任何程式碼會抓 #brief，這裡把 id 拿掉即可。
+      // 快照出來的 <div id="brief"> 在講者版不需要 id（沒有任何程式會抓它），
+      // 留著會與主報表的 #brief 同名。
       html = html.replace(/<div id="brief"([^>]*)>/, '<div$1>');
       return html;
     }
-    listHtml = cutShared(listHtml);
-    scriptHtml = cutShared(scriptHtml);
-    // 目錄的落點：三個分組（要決定／要注意／值得肯定）在條列模式裡才有標題列，
-    // 在這裡把 id 掛上去；沒有該分組時目錄該項顯示為不可跳（aria-disabled）。
+    readHtml = cutShared(readHtml);
+    // 目錄的落點：三個分組（決定／注意／肯定）的標題列在這裡掛 id。
+    //   ⚠ 現在只有一份 DOM，所以「哪個密度」都跳得到同一個段落。
     function markBand(html, cls, id){
-      return html.replace('<div class="bf-band"><span class="bf-tag ' + cls + '">',
-        '<div class="bf-band" id="' + id + '"><span class="bf-tag ' + cls + '">');
+      var tag = BRIEF_KIND_CLASS[cls];      // 'bf-tag-decide' 等（不是 'decide'）
+      return html.replace('<div class="bf-band d-' + cls + '"><span class="bf-tag ' + tag + '">',
+        '<div class="bf-band d-' + cls + '" id="' + id + '"><span class="bf-tag ' + tag + '">');
     }
-    listHtml = markBand(listHtml, 'bf-tag-decide', 'spkDecide');
-    listHtml = markBand(listHtml, 'bf-tag-watch', 'spkWatch');
-    listHtml = markBand(listHtml, 'bf-tag-good', 'spkGood');
+    readHtml = markBand(readHtml, 'decide', 'spkDecide');
+    readHtml = markBand(readHtml, 'watch', 'spkWatch');
+    readHtml = markBand(readHtml, 'good', 'spkGood');
     // ---- 開場三句話（唯一一份）----
     var o3Html = '';
     if(o3.length){
@@ -12088,12 +12261,13 @@ var state = {
       '<pre class="spk-mail spk-line" id="spkLineText">' + escHtml(lineText) + '</pre>' +
       '<button type="button" class="spk-btn" id="spkCopyLine">複製 LINE 訊息</button>' +
       '</section>');
-    // ---- sticky 目錄（5 項）----
+    // ---- sticky 目錄（5 項）：開場 → 決定 → 注意 → 肯定 → 郵件 ----
+    // 使用者定案：目錄第一項是開場，第二項就是決定（會議的價值在決策）。
     var tocDefs = [
       { id: 'spkOpening', t: '開場', ok: !!o3Html },
-      { id: 'spkWatch', t: '注意', ok: listHtml.indexOf('id="spkWatch"') >= 0 },
-      { id: 'spkDecide', t: '決定', ok: listHtml.indexOf('id="spkDecide"') >= 0 },
-      { id: 'spkGood', t: '肯定', ok: listHtml.indexOf('id="spkGood"') >= 0 },
+      { id: 'spkDecide', t: '決定', ok: readHtml.indexOf('id="spkDecide"') >= 0 },
+      { id: 'spkWatch', t: '注意', ok: readHtml.indexOf('id="spkWatch"') >= 0 },
+      { id: 'spkGood', t: '肯定', ok: readHtml.indexOf('id="spkGood"') >= 0 },
       { id: 'spkMail', t: '郵件', ok: !noData }
     ];
     var tocHtml = '<nav id="spkToc" aria-label="段落快速跳轉">';
@@ -12111,11 +12285,16 @@ var state = {
       + '<style>\n' + css + '</style>\n'
       + '<style>\n' + SPEAKER_CSS + '</style>\n'
       + '</head>\n<body class="spk-body">\n'
+      // 模式 2 個（重點／GM 郵件）＋ 密度 2 個（講稿／條列）。
+      //   密度不是模式：同一份 DOM、只換哪一層可見（預設講稿 —— 使用者照著唸）。
       + '<div id="spkBar"><span class="spk-title">講者版　·　會議主持用</span>'
       + '<span id="spkModes">'
-      + '<button type="button" class="spk-m on" data-m="list" aria-pressed="true">條列</button>'
-      + '<button type="button" class="spk-m" data-m="script" aria-pressed="false">講稿</button>'
+      + '<button type="button" class="spk-m on" data-m="read" aria-pressed="true">重點</button>'
       + '<button type="button" class="spk-m" data-m="gm" aria-pressed="false">GM 郵件</button>'
+      + '</span>'
+      + '<span id="spkDens" role="group" aria-label="內容密度：同一份資料的兩種密度">'
+      + '<button type="button" class="spk-d on" data-dens="script" aria-pressed="true">講稿</button>'
+      + '<button type="button" class="spk-d" data-dens="list" aria-pressed="false">條列</button>'
       + '</span><span class="spk-gap"></span>'
       + '<button type="button" id="spkCopy">複製</button></div>\n'
       + tocHtml + '\n'
@@ -12124,14 +12303,14 @@ var state = {
       + '<h2 class="spk-h">週會數字（今年累計／上個月／上週）</h2>\n'
       + '<div id="spkWeeklyReview">' + weeklyFlowHtml + '</div>\n'
       + '<h2 class="spk-h" id="spkModeH">重點分析</h2>\n'
-      + '<div id="spkList" class="spk-sec">' + listHtml + '</div>\n'
-      + '<div id="spkScript" class="spk-sec spk-hide">' + scriptHtml + '</div>\n'
+      + '<div id="spkRead" class="spk-sec">' + readHtml + '</div>\n'
       + '<div id="spkGm" class="spk-sec spk-hide">' + mailHtml + '</div>\n'
       + '<h2 class="spk-h">本期分析細部（類別／課別）</h2>\n'
       + detailHtml + '\n'
       + '<h2 class="spk-h">圖表</h2>\n'
       + '<div id="spkCharts" class="spk-sec">' + periodCatHtml + keCatHtml + '</div>\n'
-      // 複製用的純文字（隱藏）—— 不要抓畫面 textContent（沒有換行）
+      // 複製用的純文字（隱藏）—— 不要抓畫面 textContent（沒有換行）。
+      //   兩份都來自同一份條目：講稿＝speak、條列＝gist。
       + '<textarea id="spkTxtList" hidden readonly>' + escHtml(listText) + '</textarea>\n'
       + '<textarea id="spkTxtScript" hidden readonly>' + escHtml(scriptText) + '</textarea>\n'
       + '<div id="spkFoot">' + appFooterText() + '</div>\n'
@@ -12142,7 +12321,8 @@ var state = {
       + 'var bx=document.getElementById("spkBar");'
       + 'function syncBar(){if(bx)document.documentElement.style.setProperty("--spkbar-h",bx.offsetHeight+"px");}'
       + 'syncBar();window.addEventListener("resize",syncBar);window.addEventListener("orientationchange",syncBar);'
-      + 'var IDS={list:"spkList",script:"spkScript",gm:"spkGm"};var curs="list";'
+      // 模式：2 個（重點／GM 郵件）
+      + 'var IDS={read:"spkRead",gm:"spkGm"};var curs="read";'
       + 'var bs=document.querySelectorAll(".spk-m");'
       + 'function show(m){if(!IDS[m])return;for(var k in IDS){var el=document.getElementById(IDS[k]);'
       + 'if(el)el.className="spk-sec"+(k===m?"":" spk-hide");}'
@@ -12151,6 +12331,8 @@ var state = {
       + 'curs=m;syncBar();'
       // GM 模式有自己的標題（會後郵件草稿）→ 共用的「重點分析」大標在 GM 時收起來
       + 'var mh=document.getElementById("spkModeH");if(mh)mh.style.display=(m==="gm")?"none":"";'
+      // 密度切換器只在「重點」模式有意義（GM 郵件沒有密度）
+      + 'var dg=document.getElementById("spkDens");if(dg)dg.style.display=(m==="gm")?"none":"";'
       // 隱藏時 scrollHeight 是 0 → 切到 GM 模式必須重新量一次輸入框高度
       + 'if(m==="gm")fit();}'
       + 'for(var i=0;i<bs.length;i++)bs[i].addEventListener("click",function(){show(this.getAttribute("data-m"));});'
@@ -12164,19 +12346,31 @@ var state = {
       + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
       + 'navigator.clipboard.writeText(txt).then(function(){done(b,label,"已複製");},legacy);}else legacy();}'
       + 'catch(e){legacy();}}'
+      // ── 密度：同一份 DOM 只換哪一層可見（不重建、不改文字來源）──
+      //   curs 是模式（'read'/'gm'），dens 是密度（'script'/'list'）。
+      + 'var dens="script";'
+      + 'var ds=document.querySelectorAll(".spk-d");'
+      + 'function setDens(d){if(d!=="list"&&d!=="script")d="script";dens=d;'
+      + 'var box=document.querySelector("#spkRead .bf-uni");'
+      + 'if(box)box.setAttribute("data-dens",d);'
+      + 'for(var i=0;i<ds.length;i++){var on=ds[i].getAttribute("data-dens")===d;'
+      + 'ds[i].className="spk-d"+(on?" on":"");ds[i].setAttribute("aria-pressed",on?"true":"false");}}'
+      + 'for(var i=0;i<ds.length;i++)ds[i].addEventListener("click",function(){setDens(this.getAttribute("data-dens"));});'
       + 'function curText(){if(curs==="gm")return EMAIL;'
-      + 'var t=document.getElementById(curs==="script"?"spkTxtScript":"spkTxtList");return t?t.value:"";}'
+      + 'var t=document.getElementById(dens==="list"?"spkTxtList":"spkTxtScript");return t?t.value:"";}'
       + 'var cp=document.getElementById("spkCopy");'
       + 'if(cp)cp.addEventListener("click",function(){copy(curText(),cp,"複製");});'
-      // 目錄：切到有該段落的模式再捲過去（GM 郵件在 GM 模式、注意／決定／肯定在條列模式）
+      // 目錄：切到有該段落的模式再捲過去（郵件在 GM 模式；決定／注意／肯定都在重點模式）
       + 'var toc=document.getElementById("spkToc");'
       + 'if(toc){var ln=toc.querySelectorAll("a");for(var j=0;j<ln.length;j++){'
       + 'ln[j].addEventListener("click",function(ev){ev.preventDefault();'
       + 'if(this.getAttribute("aria-disabled")==="true")return;'
       + 'var id=this.getAttribute("data-t");'
-      + 'if(id==="spkMail")show("gm");else if(id!=="spkOpening")show("list");'
+      + 'if(id==="spkMail")show("gm");else if(id!=="spkOpening")show("read");'
       + 'var el=document.getElementById(id);if(!el)return;'
-      + 'el.scrollIntoView({behavior:"smooth",block:"start"});});}}'
+      // 捲動用 instant：smooth 在不推進動畫的環境（背景分頁、部分無障礙設定、headless）
+      // 完全不會動，使用者按了目錄會「沒反應」且沒有任何錯誤訊息。
+      + 'el.scrollIntoView({behavior:"instant",block:"start"});});}}'
       // 郵件草稿：畫面上只有這一份（pre），編輯後就地重組
       + 'var mail=document.getElementById("spkMailText"),mi=document.getElementById("spkMeetInput")'
       + ',dn=document.getElementById("spkDirectionInput"),fu=document.getElementById("spkFollowupInput");'
@@ -12199,7 +12393,7 @@ var state = {
       + 'if(ce)ce.addEventListener("click",function(){copy(EMAIL,ce,"複製郵件本文");});'
       + 'var cl=document.getElementById("spkCopyLine");'
       + 'if(cl)cl.addEventListener("click",function(){copy(LINE,cl,"複製 LINE 訊息");});'
-      + 'show("list");})();' + E + '\n'
+      + 'show("read");setDens("script");})();' + E + '\n'
       + '</body>\n</html>\n';
   }
 
@@ -13299,6 +13493,16 @@ var state = {
       execNumberLines: execNumberLines,
       execEmailSegments: execEmailSegments,
       buildExecEmail: buildExecEmail,
+      execKeStatusRows: execKeStatusRows,
+      DECIDE_RULES: DECIDE_RULES,
+      DECIDE_CAP: DECIDE_CAP,
+      decideCandidates: decideCandidates,
+      buildDecideEntries: buildDecideEntries,
+      briefEntry: briefEntry,
+      briefTitleOf: briefTitleOf,
+      buildBriefEntries: buildBriefEntries,
+      buildListText: buildListText,
+      buildScriptText: buildScriptText,
       flowBlockHtml: flowBlockHtml,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
