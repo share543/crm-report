@@ -1562,8 +1562,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.19.0';   // 1.11.0：未合作結案原因分析增用「類別」分類（長條依類別分段、展開清單依類別分組、類別小計）
-  var APP_VERSION_DATE = '2026-10-15';
+  var APP_VERSION = '1.20.0';   // 1.20.0：講者版會後郵件草稿改為使用者實際寄出的九段結構（資料段自動、政策段可編輯、需協助事項不指名）
+  var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -2657,6 +2657,346 @@ var state = {
       '', '需跨課協調或 GM 介入的具名個案（僅列必要個案）：',
       String(escalations||'').trim()||'（無／待主持人確認）'];
     return out.join(String.fromCharCode(10));
+  }
+
+  // ---------------------------------------------------------------------------
+  // 會後郵件草稿（Executive Summary）九段結構（v1.20.0）
+  // ---------------------------------------------------------------------------
+  // 使用者定案（2026-10-22）：草稿要對齊他實際寄出的那封信，不是報表語氣的摘要。
+  //   1 處長好：{第N次會議}({MM/DD})重點摘要   ← 會議次數取自「開會資訊」，沒有就「本次會議」
+  //   2 推展方向（固定策略句，可編輯）
+  //   3 今年累計（只算填單日期在今年）＋未合作主因一句
+  //   4 上週新增（填單日期落在上一週）＋與前一週比較一句
+  //   5 各課進行中＋階段分布＋合計
+  //   6 需協助事項（只給件數與課別，不指名公司、不指名業務）
+  //   7 今年累計案件（純文字對齊表格，貼進 Outlook 仍對齊）
+  //   8 會後追蹤重點（可編輯，預設 7 條）
+  //   9 簽名檔＋保密聲明
+  //
+  // 四狀態一律走 weeklyStatusBucket(classifyStatus(r))：合作成功／進行中／未啟動／未合作（其餘）。
+  // 四桶相加必須等於該期間件數 —— 這是可驗的硬條件，不要另外造第二套分類。
+  var EXEC_DIRECTION_DEFAULT = '以甲指客戶為主要推進項目，零擔客戶同步開發。';
+  var EXEC_FOLLOWUP_DEFAULT = [
+    '持續聚焦甲指開發，同時培養客情為甲指轉甲配製造機會。',
+    '推動各課種子人員的成長，可就近協助業務推廣，建立客戶服務與客戶導入流程。',
+    '作業時效跟進 -MO+、SCM案件皆須於 D+2 內完成後台作業及 Excel 回覆。',
+    '服務轄區-富昇有開發之轄區，應全數服務(含委外)如有推展問題及時反應。',
+    '宣導momo甲指客戶的後台問題反應與立案流程。',
+    '更新業務導入指南簡報。',
+    '宣導接下來會開始進行分析客戶量體，請大家填寫客戶量體資訊以利分析預估營收。'
+  ];
+  var EXEC_SIGNATURE = 'Arthur Hu｜富昇物流';
+  var EXEC_CONFIDENTIAL = '（本信件含客戶開發資訊，僅供內部使用，請勿轉寄外部。）';
+
+  // 純函式：四狀態桶；coop+doing+notStarted+notCoop === total
+  function execStatusBuckets(rows){
+    var b = { coop: 0, doing: 0, notStarted: 0, notCoop: 0, total: 0 };
+    var list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var k = weeklyStatusBucket(classifyStatus(list[i]));
+      if(k === '合作成功') b.coop++;
+      else if(k === '進行中') b.doing++;
+      else if(k === '未啟動') b.notStarted++;
+      else b.notCoop++;
+      b.total++;
+    }
+    return b;
+  }
+
+  // 純函式：自然週（週一起算）→ { from, to }（YYYY-MM-DD）；offsetWeeks -1 ＝ 上一週
+  function execWeekRange(now, offsetWeeks){
+    now = now || new Date();
+    offsetWeeks = offsetWeeks || 0;
+    var y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate();
+    var dw = new Date(y, m - 1, d).getDay();
+    var off = (dw + 6) % 7;
+    var base = d - off + offsetWeeks * 7;
+    return { from: isoDate(new Date(y, m - 1, base)), to: isoDate(new Date(y, m - 1, base + 6)) };
+  }
+
+  // 純函式：填單日期落在 [from,to]（日期層級）的列
+  function execRowsInDays(rows, from, to){
+    var out = [], list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var k = periodKeyDay(list[i] && list[i]['填單日期']);
+      if(!k) continue;
+      if(from && k < from) continue;
+      if(to && k > to) continue;
+      out.push(list[i]);
+    }
+    return out;
+  }
+
+  // 純函式：填單日期在「今年」的列（不是全部資料 —— 與全量口徑分開）
+  function execRowsThisYear(rows, now){
+    now = now || new Date();
+    var y = String(now.getFullYear()) + '-';
+    var out = [], list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var k = periodKeyDay(list[i] && list[i]['填單日期']);
+      if(k && k.slice(0, 5) === y) out.push(list[i]);
+    }
+    return out;
+  }
+
+  // 純函式：未合作主因（結案欄原文經 dropReasonLabel 正規化後的前 N 名）
+  function execNotCoopReasons(rows, topN){
+    topN = topN || 3;
+    var counts = {}, order = [], list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      if(weeklyStatusBucket(classifyStatus(r)) !== '未合作（含婉拒、失聯、暫緩等）') continue;
+      var label = dropReasonLabel(fieldStr(r, '結案')) || '原因未填';
+      if(!(label in counts)){ counts[label] = 0; order.push(label); }
+      counts[label]++;
+    }
+    return order.map(function(k){ return { reason: k, count: counts[k] }; })
+      .sort(function(a, b){ return (b.count - a.count) || (a.reason < b.reason ? -1 : (a.reason > b.reason ? 1 : 0)); })
+      .slice(0, topN);
+  }
+
+  // 純函式：課別件數（多→少）
+  function execKeCounts(rows){
+    var counts = {}, order = [], list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var ke = fieldStr(list[i], '課別').trim() || blankLabel('課別');
+      if(!(ke in counts)){ counts[ke] = 0; order.push(ke); }
+      counts[ke]++;
+    }
+    return order.map(function(k){ return { name: k, count: counts[k] }; })
+      .sort(function(a, b){ return (b.count - a.count) || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)); });
+  }
+
+  // 純函式：課別分布文字（最多 maxN 個課別，其餘併「其他 N」）
+  function execKeText(rows, maxN){
+    var arr = execKeCounts(rows);
+    maxN = maxN || 5;
+    var head = arr.slice(0, maxN).map(function(x){ return x.name + ' ' + x.count; });
+    var rest = 0;
+    for(var i = maxN; i < arr.length; i++) rest += arr[i].count;
+    if(rest) head.push('其他 ' + rest);
+    return head.join('、');
+  }
+
+  // 純函式：需協助事項（只給件數與課別分布；不得指名公司、不得指名業務）
+  // 來源：逾期未結案（既有 collectOverdue）／資料矛盾（導入與結案不一致）／本週新增未接洽
+  function execHelpItems(rows, now){
+    var list = rows || [];
+    now = now || new Date();
+    var items = [];
+    var od = collectOverdue(list, isoDate(now));
+    if(od.total){
+      // od.items 的課別欄名是 ke（collectOverdue 的輸出結構），不是「課別」
+      var odRows = od.items.map(function(x){ return { '課別': x.ke }; });
+      items.push('逾期未結案 ' + od.total + ' 件（' + execKeText(odRows, 5) + '）');
+    }
+
+    var bad = [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      var imp = fieldStr(r, '導入'), end = fieldStr(r, '結案');
+      var isDone = end.indexOf('導入完成') >= 0;
+      if((imp !== '' && end !== '' && !isDone) || (imp === '' && isDone)) bad.push(r);
+    }
+    if(bad.length) items.push('導入與結案欄位不一致 ' + bad.length + ' 件（' + execKeText(bad, 5) + '）');
+
+    var wr = execWeekRange(now, 0);
+    var wk = execRowsInDays(list, wr.from, wr.to);
+    var idle = [];
+    for(var j = 0; j < wk.length; j++){
+      if(fieldStr(wk[j], '結案').trim() !== '') continue;
+      if(fieldStr(wk[j], '初步接洽').trim() !== '') continue;
+      idle.push(wk[j]);
+    }
+    if(idle.length) items.push('本週新增尚未初步接洽 ' + idle.length + ' 件（' + execKeText(idle, 5) + '）');
+
+    if(!items.length) items.push('本週無逾期未結案、無導入與結案不一致、無尚未接洽的新增案件。');
+    return items;
+  }
+
+  // 純函式：顯示寬度（CJK／全形算 2）—— 純文字表格要靠它才會在 Outlook 對齊
+  function execDisplayWidth(s){
+    var t = String(s === undefined || s === null ? '' : s), w = 0;
+    for(var i = 0; i < t.length; i++){
+      var c = t.charCodeAt(i);
+      var wide = (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) ||
+                 (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) ||
+                 (c >= 0xfe30 && c <= 0xfe6f) || (c >= 0xff00 && c <= 0xff60) ||
+                 (c >= 0xffe0 && c <= 0xffe6);
+      w += wide ? 2 : 1;
+    }
+    return w;
+  }
+  function execPad(s, width, right){
+    var t = String(s === undefined || s === null ? '' : s);
+    var pad = width - execDisplayWidth(t);
+    if(pad <= 0) return t;
+    var sp = new Array(pad + 1).join(' ');
+    return right ? (sp + t) : (t + sp);
+  }
+  function execRule(widths){
+    var out = [];
+    for(var i = 0; i < widths.length; i++){
+      var n = Math.max(3, Math.round(widths[i] / 2));
+      out.push(new Array(n + 1).join('─'));
+    }
+    return out.join('　');
+  }
+
+  // 純函式：今年累計案件表（課別 × 四狀態 ＋ 合計）。合計列一定等於 execStatusBuckets 的四桶。
+  function execEmailTable(rows){
+    var groups = {}, order = [], list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      var ke = fieldStr(r, '課別').trim() || blankLabel('課別');
+      if(!(ke in groups)){
+        groups[ke] = { name: ke, coop: 0, doing: 0, notStarted: 0, notCoop: 0, total: 0 };
+        order.push(ke);
+      }
+      var g = groups[ke], k = weeklyStatusBucket(classifyStatus(r));
+      if(k === '合作成功') g.coop++;
+      else if(k === '進行中') g.doing++;
+      else if(k === '未啟動') g.notStarted++;
+      else g.notCoop++;
+      g.total++;
+    }
+    var lines = order.map(function(k2){ return groups[k2]; })
+      .sort(function(a, b){ return (b.total - a.total) || (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)); });
+    var tot = { name: '合計', coop: 0, doing: 0, notStarted: 0, notCoop: 0, total: 0 };
+    for(var j = 0; j < lines.length; j++){
+      tot.coop += lines[j].coop; tot.doing += lines[j].doing;
+      tot.notStarted += lines[j].notStarted; tot.notCoop += lines[j].notCoop;
+      tot.total += lines[j].total;
+    }
+    function cells(g){ return [g.name, g.coop, g.doing, g.notStarted, g.notCoop, g.total]; }
+    var head = ['課別', '合作成功', '進行中', '未啟動', '未合作', '合計'];
+    var body = lines.map(cells);
+    body.push(cells(tot));
+    var widths = [];
+    for(var c = 0; c < head.length; c++){
+      var w = execDisplayWidth(head[c]);
+      for(var ri = 0; ri < body.length; ri++) w = Math.max(w, execDisplayWidth(String(body[ri][c])));
+      widths.push(w);
+    }
+    function line(row){
+      var out = [];
+      for(var ci = 0; ci < row.length; ci++){
+        out.push(ci === 0 ? execPad(String(row[ci]), widths[ci], false)
+                          : execPad(String(row[ci]), widths[ci], true));
+      }
+      return out.join('  ').replace(/\s+$/, '');
+    }
+    var out2 = [line(head), execRule(widths)];
+    for(var b2 = 0; b2 < body.length - 1; b2++) out2.push(line(body[b2]));
+    out2.push(execRule(widths));
+    out2.push(line(body[body.length - 1]));
+    return out2.join('\n');
+  }
+
+  // 純函式：會議次數（取自「開會資訊」文字；沒有該欄位就寫「本次會議」）
+  function execMeetingLabel(text){
+    var t = String(text === undefined || text === null ? '' : text);
+    var m = /第\s*([0-9０-９一二三四五六七八九十]+)\s*次/.exec(t);
+    return m ? ('第' + m[1] + '次會議') : '本次會議';
+  }
+  function execDateMMDD(now){
+    now = now || new Date();
+    return (now.getMonth() + 1) + '/' + now.getDate();
+  }
+  function execMeetLine(text, now){
+    return execMeetingLabel(text) + '(' + execDateMMDD(now) + ')';
+  }
+
+  // 純函式：把「一行一條」正規化成 1. 2. 3.
+  // 去掉使用者自打的編號（負向先行排除小數，例「1.5 億」不動）與項目符號。
+  function execNumberLines(text){
+    var ls = String(text === undefined || text === null ? '' : text).split(/\r?\n/);
+    var out = [], n = 0;
+    for(var i = 0; i < ls.length; i++){
+      var t = ls[i].replace(/^\s*\d+\s*[.、．]\s*(?!\d)/, '').replace(/^\s*[-*•]\s+/, '').trim();
+      if(!t) continue;
+      n++;
+      out.push(n + '. ' + t);
+    }
+    return out.join('\n');
+  }
+
+  // 純函式：郵件段落切片。k='f' 固定、'meet'/'dir'/'follow' 為可編輯槽。
+  // 切片是為了讓瀏覽器端只替換被改的那幾段（舊版對已替換過的文字再 replace，第二次編輯會失效）。
+  function execEmailSegments(ctx){
+    ctx = ctx || {};
+    var rows = ctx.rows || [];
+    var now = ctx.now || new Date();
+    var meetLine = String(ctx.meetLine || '').trim() || execMeetLine(ctx.meetingText, now);
+    var direction = (ctx.direction === undefined || ctx.direction === null) ? EXEC_DIRECTION_DEFAULT : String(ctx.direction);
+    direction = direction.trim() || EXEC_DIRECTION_DEFAULT;
+    var followup = (ctx.followup === undefined || ctx.followup === null)
+      ? EXEC_FOLLOWUP_DEFAULT.join('\n') : String(ctx.followup);
+
+    var annualRows = execRowsThisYear(rows, now);
+    var ab = execStatusBuckets(annualRows);
+    var lw = execWeekRange(now, -1), pw = execWeekRange(now, -2);
+    var lb = execStatusBuckets(execRowsInDays(rows, lw.from, lw.to));
+    var pb = execStatusBuckets(execRowsInDays(rows, pw.from, pw.to));
+    var reasons = execNotCoopReasons(annualRows, 3);
+    var prog = weeklyCurrentProgress(rows);
+    var help = execHelpItems(rows, now);
+
+    function statusLine(b){
+      return '合作成功 ' + b.coop + '／ 進行中 ' + b.doing + '／ 未啟動 ' + b.notStarted +
+             '／ 未合作 （含婉拒、失聯、暫緩等） ' + b.notCoop;
+    }
+    function mmdd(iso){ return iso ? (Number(iso.slice(5, 7)) + '/' + Number(iso.slice(8, 10))) : ''; }
+
+    var reasonLine = '';
+    if(reasons.length){
+      reasonLine = '\n　　未合作主因：' + reasons.map(function(x){
+        return x.reason + ' ' + x.count + ' 件';
+      }).join('、') + '。';
+    }
+
+    var delta = lb.total - pb.total;
+    var prevSpan = mmdd(pw.from) + '–' + mmdd(pw.to);
+    var trendLine;
+    if(delta > 0) trendLine = '\n　　較前一週（' + prevSpan + '）增加 ' + delta + ' 件（' + pb.total + ' → ' + lb.total + '）。';
+    else if(delta < 0) trendLine = '\n　　較前一週（' + prevSpan + '）減少 ' + (0 - delta) + ' 件（' + pb.total + ' → ' + lb.total + '）。';
+    else trendLine = '\n　　與前一週（' + prevSpan + '）持平，同為 ' + lb.total + ' 件。';
+
+    // 各課進行中＋階段分布：直接沿用 weeklyCurrentProgress 的行式輸出（同一套階段順序與定義）
+    var keLines = String(prog.text || '').split('\n').filter(function(x){ return String(x).trim() !== ''; });
+    var keBlock;
+    if(keLines.length){
+      keBlock = keLines.map(function(x){ return '　' + x; }).join('\n') +
+                '\n　合計：進行中 ' + prog.total + ' 件';
+    } else {
+      keBlock = '　目前沒有進行中案件。';
+    }
+
+    var helpBlock = (help.length === 1 && help[0].indexOf('本週無') === 0)
+      ? '　' + help[0]
+      : '　・' + help.join('\n　・');
+
+    return [
+      { k: 'f', t: '處長好：' },
+      { k: 'meet', t: meetLine },
+      { k: 'f', t: '重點摘要\n1. 推展方向：' },
+      { k: 'dir', t: direction },
+      { k: 'f', t: '\n2. 今年累計新增（載入資料命中） ' + ab.total + ' 件；目前狀態：' + statusLine(ab) + '。' + reasonLine },
+      { k: 'f', t: '\n3. 上週新增：新增 ' + lb.total + ' 件；目前狀態：' + statusLine(lb) + '。' + trendLine },
+      { k: 'f', t: '\n4. 各課業代分享｜輔導開發案件進度：\n' + keBlock },
+      { k: 'f', t: '\n5. 需協助事項（僅列件數與課別，不指名案件與人員）：\n' + helpBlock },
+      { k: 'f', t: '\n今年累計案件：\n' + execEmailTable(annualRows) },
+      { k: 'f', t: '\n會後追蹤重點：\n' },
+      { k: 'follow', t: followup },
+      { k: 'f', t: '\n\n' + EXEC_SIGNATURE + '\n' + EXEC_CONFIDENTIAL }
+    ];
+  }
+
+  // 純函式：組出完整草稿（可編輯槽以 ctx 的值代入；追蹤重點自動編號）
+  function buildExecEmail(ctx){
+    return execEmailSegments(ctx).map(function(seg){
+      return seg.k === 'follow' ? execNumberLines(seg.t) : seg.t;
+    }).join('');
   }
 
   // 純函式：會議結尾提示（固定文字，不隨資料變）
@@ -11567,16 +11907,34 @@ var state = {
     weeklyFlowHtml += flowBlockHtml('各課目前開發進度（在手案件）', weekly.progress.text || '目前沒有可列示的進行中案件。');
     weeklyFlowHtml += flowBlockHtml('各課代表分享目前開發進度', buildClosingLine());
     weeklyFlowHtml += flowBlockHtml('分階段資料品質檢核（待輔導／待確認）', weekly.quality.text);
+    // ---- 會後郵件草稿：九段結構（v1.20.0）----
+    // 數字段（第 1 行會議次數日期、今年累計、上週、各課進度、需協助事項、今年累計案件表）
+    // 全部由載入資料自動算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改。
+    // 郵件本文在講者版裡由 SEG 切片重組：改哪一段只影響那一段，不必回頭重跑主程式。
+    var meetSrc = '';
+    if(typeof document !== 'undefined' && document.getElementById){
+      var miEl = document.getElementById('meetingInfo');
+      if(miEl) meetSrc = miEl.textContent || '';
+    }
+    var emailMeet = execMeetLine(meetSrc, reviewNow);
+    var emailCtx = { rows: flowRows, now: reviewNow, meetLine: emailMeet,
+                     direction: EXEC_DIRECTION_DEFAULT,
+                     followup: EXEC_FOLLOWUP_DEFAULT.join('\n') };
+    var emailSegs = execEmailSegments(emailCtx);
+    var emailText = buildExecEmail(emailCtx);
+    var emailDefaults = { meet: emailMeet, dir: EXEC_DIRECTION_DEFAULT,
+                          follow: EXEC_FOLLOWUP_DEFAULT.join('\n') };
     var emailPanel = '<section class="spk-flow spk-email-panel"><h2>會後郵件草稿（Executive Summary）</h2>' +
-      '<p class="spk-flow-body">同一封郵件：GM 摘要在前、完整會議資料與行動追蹤在後。先由主持人補入會議中實際確認的決議與需升級個案，再複製本文寄送；不自動產生負責人或期限，也不附講者版 HTML。</p>' +
-      '<label for="spkDecisionInput">會議決議／追蹤事項（決議｜負責人｜期限）</label>' +
-      '<textarea id="spkDecisionInput" rows="5" placeholder="請填入會議中已確認的決議、負責人與期限"></textarea>' +
-      '<label for="spkEscalationInput">需跨課協調或 GM 介入的具名個案（必要時填寫）</label>' +
-      '<textarea id="spkEscalationInput" rows="3" placeholder="只填需升級處理的個案；一般案件不列名"></textarea>' +
+      '<p class="spk-flow-body">九段結構：數字段（第 1 行日期、今年累計、上週新增、各課進度、需協助事項、今年累計案件表）由載入資料自動計算；只有「會議次數與日期」「推展方向」「會後追蹤重點」可改，每週只改有變的那幾條。需協助事項只給件數與課別，不指名公司與業務。「今年累計案件」是等寬對齊的純文字表：貼進 Outlook 後把該段字型設為 Consolas（等寬字）就會對齊，或直接貼到 Excel 即成表格。</p>' +
+      '<label for="spkMeetInput">第 1 行：會議次數與日期（自動帶入，可改）</label>' +
+      '<textarea id="spkMeetInput" rows="1" aria-label="會議次數與日期"></textarea>' +
+      '<label for="spkDirectionInput">第 2 段：推展方向（可改）</label>' +
+      '<textarea id="spkDirectionInput" rows="2" aria-label="推展方向"></textarea>' +
+      '<label for="spkFollowupInput">第 8 段：會後追蹤重點（一行一條，自動編號；每週只改有變的）</label>' +
+      '<textarea id="spkFollowupInput" rows="9" aria-label="會後追蹤重點"></textarea>' +
       '<button type="button" id="spkBuildEmail">更新郵件本文</button>' +
-      '<textarea id="spkEmailOutput" rows="18" readonly aria-label="Executive Summary 郵件本文"></textarea>' +
+      '<textarea id="spkEmailOutput" rows="30" readonly aria-label="Executive Summary 郵件本文"></textarea>' +
       '<button type="button" id="spkCopyEmail">複製郵件本文</button></section>';
-    var emailText = weeklyEmailText(weekly, '', '');
     // 代表分享緊接三段新增 cohort；品質檢核置於分享後作輔導清單。
     // 講者版另含既有補充洞見模式；清楚標明它跟隨產生快照時所選期間。
     var rangesF = briefRanges(state.period, reviewNow);
@@ -11649,12 +12007,20 @@ var state = {
       + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){'
       + 'navigator.clipboard.writeText(txt).then(function(){done("已複製"+tag);},legacy);}else legacy();}'
       + 'catch(e){legacy();}});'
-      + 'var ep=document.getElementById("spkEmailOutput"),di=document.getElementById("spkDecisionInput"),ei=document.getElementById("spkEscalationInput");'
+      + 'var SEG=' + JSON.stringify(emailSegs) + ',DEF=' + JSON.stringify(emailDefaults) + ';'
+      + 'var ep=document.getElementById("spkEmailOutput"),mi=document.getElementById("spkMeetInput")'
+      + ',dn=document.getElementById("spkDirectionInput"),fu=document.getElementById("spkFollowupInput");'
       + 'if(ep) ep.value=' + JSON.stringify(emailText) + ';'
-      + 'var EB_DEC=' + JSON.stringify('（待主持人補入決議｜負責人｜期限）') + ',EB_ESC=' + JSON.stringify('（無／待主持人確認）') + ',EB_BASE=ep?ep.value:"";'
-      + 'var eb=document.getElementById("spkBuildEmail");if(eb) eb.addEventListener("click",function(){'
-      + 'var t=EB_BASE;if(t&&di&&di.value)t=t.replace(EB_DEC,di.value);'
-      + 'if(t&&ei&&ei.value)t=t.replace(EB_ESC,ei.value);if(ep)ep.value=t;});'
+      + 'if(mi&&!mi.value)mi.value=DEF.meet;if(dn&&!dn.value)dn.value=DEF.dir;if(fu&&!fu.value)fu.value=DEF.follow;'
+      + 'function numLines(t){var ls=String(t||"").split(/\\r?\\n/),o=[],n=0,i,s;'
+      + 'for(i=0;i<ls.length;i++){s=ls[i].replace(/^\\s*\\d+\\s*[.、．]\\s*(?!\\d)/,"").replace(/^\\s*[-*•]\\s+/,"").trim();if(!s)continue;n++;o.push(n+". "+s);}'
+      + 'return o.join("\\n");}'
+      + 'function rebuildEmail(){if(!ep)return;var o=[],i,s;for(i=0;i<SEG.length;i++){s=SEG[i];'
+      + 'if(s.k==="meet")o.push(mi?mi.value:s.t);else if(s.k==="dir")o.push(dn?dn.value:s.t);'
+      + 'else if(s.k==="follow")o.push(numLines(fu?fu.value:s.t));else o.push(s.t);}ep.value=o.join("");}'
+      + 'rebuildEmail();'
+      + 'var eb=document.getElementById("spkBuildEmail");if(eb)eb.addEventListener("click",rebuildEmail);'
+      + 'var flds=[mi,dn,fu];for(var fi=0;fi<flds.length;fi++){if(flds[fi])flds[fi].addEventListener("input",rebuildEmail);}'
       + 'var cb=document.getElementById("spkCopyEmail");if(cb)cb.addEventListener("click",function(){'
       + 'var ta=ep,ok=false;if(ta){ta.focus();ta.select();try{ok=document.execCommand("copy");}catch(e){ok=false;}}'
       + 'cb.textContent=ok?"已複製":"請長按選取";setTimeout(function(){cb.textContent="複製郵件本文";},1600);});'
@@ -12737,6 +13103,27 @@ var state = {
       weeklyQualityReview: weeklyQualityReview,
       weeklyReviewBundle: weeklyReviewBundle,
       weeklyEmailText: weeklyEmailText,
+      EXEC_DIRECTION_DEFAULT: EXEC_DIRECTION_DEFAULT,
+      EXEC_FOLLOWUP_DEFAULT: EXEC_FOLLOWUP_DEFAULT,
+      EXEC_SIGNATURE: EXEC_SIGNATURE,
+      EXEC_CONFIDENTIAL: EXEC_CONFIDENTIAL,
+      execStatusBuckets: execStatusBuckets,
+      execWeekRange: execWeekRange,
+      execRowsInDays: execRowsInDays,
+      execRowsThisYear: execRowsThisYear,
+      execNotCoopReasons: execNotCoopReasons,
+      execKeCounts: execKeCounts,
+      execKeText: execKeText,
+      execHelpItems: execHelpItems,
+      execDisplayWidth: execDisplayWidth,
+      execPad: execPad,
+      execEmailTable: execEmailTable,
+      execMeetingLabel: execMeetingLabel,
+      execDateMMDD: execDateMMDD,
+      execMeetLine: execMeetLine,
+      execNumberLines: execNumberLines,
+      execEmailSegments: execEmailSegments,
+      buildExecEmail: buildExecEmail,
       flowBlockHtml: flowBlockHtml,
       KE_BASE_ORDER: KE_BASE_ORDER,
       fieldValue: fieldValue,
