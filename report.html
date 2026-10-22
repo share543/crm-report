@@ -209,6 +209,9 @@
   .pc-fill{ display:block; height:100%; border-radius:3px 0 0 3px; }
   .pc-num{ flex:0 0 108px; font-size:12.5px; font-variant-numeric:tabular-nums; color:var(--muted); }
   .pc-warn{ font-size:12px; color:var(--warn,#c9a227); margin:8px 0 0; }
+  .pc-note{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
+  .type-catnote{ font-size:12px; color:var(--muted); margin:10px 0 0; line-height:1.6; }
+  .stat-catnote{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
   .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
     padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
@@ -1575,7 +1578,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.24.0';   // 1.24.0：案件清單類別篩選改為四個勾選欄（多類別／多選交集／未分類）＋每列顯示全部類別＋「符合 X 筆／共 Y 筆」
+  var APP_VERSION = '1.25.0';   // 1.25.0：類別口徑全面改讀四個勾選欄——件數各欄各計一次（甲配不再消失）、佔比／比例圖改互斥組合桶（合計＝案件數）
   var APP_VERSION_DATE = '2026-10-22';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1706,8 +1709,13 @@ var state = {
       byStatus[s] = (byStatus[s] || 0) + 1;
       var ke = r['課別'] || blankLabel('課別');
       byKe[ke] = (byKe[ke] || 0) + 1;
-      var cat = r['類別'] || blankLabel('類別');
-      byCategory[cat] = (byCategory[cat] || 0) + 1;
+      // 2026-10-22：件數口徑＝四個勾選欄**各計一次**（多勾客戶在每個類別各算一次）。
+      // ⚠ 不可讀合成單值 `類別`：它只存優先序最高的一類、且甲配根本不在裡面
+      //   （實測甲配 1 件會完全消失、7 件多勾客戶只被算進一類）。
+      var catLabels = catTickLabels(r);
+      for(var ci = 0; ci < catLabels.length; ci++){
+        byCategory[catLabels[ci]] = (byCategory[catLabels[ci]] || 0) + 1;
+      }
       if(s === '合作成功') coop++;
       else if(s !== '進行中' && s !== '未啟動') nonCoop++;
     }
@@ -1748,26 +1756,37 @@ var state = {
   var KE_ORDER = ['北一課','北二課','北三課','中課','南一課','南二課','分轉部'];
   var CAT_ORDER = ['零擔','1P(SCM)','3P(MO+)','甲配'];
 
-  function computeProgress(rows, field, order){
+  // labeler（選填）：row → 標籤陣列。一列回多個標籤時，該列在**各群組各計一次**
+  //   （2026-10-22 使用者定案：類別要看四個勾選欄，同時勾兩類的客戶在兩類都算、甲配要有整列）。
+  //   ⇒ 「依類別」表的合計會大於案件數，表下必須有口徑註記，否則會被讀成算錯。
+  function computeProgress(rows, field, order, labeler){
     var by = {};
-    for(var i = 0; i < rows.length; i++){
-      var r = rows[i];
-      var g = (r && r[field] !== undefined && r[field] !== null && String(r[field]).trim() !== '')
-        ? String(r[field]).trim() : blankLabel(field);
+    function groupOf(g){
       if(!by[g]) by[g] = { group: g, total: 0, stages: {}, coop: 0, doing: 0, rejected: 0,
                            _o: (order.indexOf(g) === -1) ? 999 : order.indexOf(g) };
-      var o = by[g];
-      o.total++;
-      for(var m = 0; m < MILESTONES.length; m++){
-        var v = r[MILESTONES[m]];
-        if(v !== undefined && v !== null && String(v).trim() !== '') o.stages[MILESTONES[m]] = (o.stages[MILESTONES[m]] || 0) + 1;
-      }
-      if(classifyStatus(r) === '合作成功') o.coop++;
-      // 2026-10-19 使用者定案：表上要看「進行中」與「婉拒合作」——
-      // 原本的「合作結案」與「導入」幾乎重複（57 vs 56），「填單數」與「填單日期」完全相同（234 vs 234）。
-      if(classifyStatus(r) === '進行中') o.doing++;
+      return by[g];
+    }
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var labels = labeler ? labeler(r)
+        : [(r && r[field] !== undefined && r[field] !== null && String(r[field]).trim() !== '')
+            ? String(r[field]).trim() : blankLabel(field)];
+      if(!labels || !labels.length) labels = [blankLabel(field)];
+      var st = classifyStatus(r);
       var endV = (r['結案'] === undefined || r['結案'] === null) ? '' : String(r['結案']).trim();
-      if(endV !== '' && classifyStatus(r) !== '合作成功') o.rejected++;
+      for(var li = 0; li < labels.length; li++){
+        var o = groupOf(labels[li]);
+        o.total++;
+        for(var m = 0; m < MILESTONES.length; m++){
+          var v = r[MILESTONES[m]];
+          if(v !== undefined && v !== null && String(v).trim() !== '') o.stages[MILESTONES[m]] = (o.stages[MILESTONES[m]] || 0) + 1;
+        }
+        if(st === '合作成功') o.coop++;
+        // 2026-10-19 使用者定案：表上要看「進行中」與「婉拒合作」——
+        // 原本的「合作結案」與「導入」幾乎重複（57 vs 56），「填單數」與「填單日期」完全相同（234 vs 234）。
+        if(st === '進行中') o.doing++;
+        if(endV !== '' && st !== '合作成功') o.rejected++;
+      }
     }
     var list = [];
     for(var k in by) list.push(by[k]);
@@ -1780,7 +1799,9 @@ var state = {
   }
 
   function computeKeProgress(rows){ return computeProgress(rows, '課別', KE_ORDER); }
-  function computeCatProgress(rows){ return computeProgress(rows, '類別', CAT_ORDER); }
+  // 「依類別」＝四個勾選欄各計一次（不是合成單值）：甲配有自己的整列，
+  // 同時勾兩類的客戶在兩列都算 → 合計大於案件數（表下註記口徑）。
+  function computeCatProgress(rows){ return computeProgress(rows, '類別', CAT_ORDER, catTickLabels); }
 
   // 純函式：各課追蹤簡表（課別 × 甲指/甲配/零擔，無 DOM 依賴，可於 Node 測試）
   // scopeRows  = 已套「課別/開發者/關鍵字」篩選、不含期間的全量列（供 開發累計／已導入累計）
@@ -1991,8 +2012,9 @@ var state = {
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       if(classifyStatus(r) === '合作成功') continue;
-      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : blankLabel('類別');
+      // 2026-10-22：改讀勾選集合的**互斥組合桶**（每筆只進一桶）——
+      // 這樣各類別區塊的流失件數相加仍等於總流失件數，不會因為多勾而重複計算。
+      var cat = catBucketLabel(r);
       var idx = lastMilestone(r);
       if(idx < 0) continue;
       var bucket = nodeLabels[idx];
@@ -2003,16 +2025,21 @@ var state = {
     return { byCat: byCat, nodeLabels: nodeLabels };
   }
 
-  // 純函式：類別分析（占比 + 導入成功率）
-  // 導入成功率 = classifyStatus==='合作成功' 數 / 類別總數；類別空白標 (空白)。
-  // 回傳陣列 [{cat, total, coop, rate}]，順序：零擔 → 1P(SCM) → 3P(MO+) → 其餘排序。
+  // 純函式：類別分析（甜甜圈占比 + 導入成功率）
+  // ⚠ 2026-10-22 口徑（使用者定案）——兩種數字不可互換：
+  //   ① **佔比／甜甜圈**一律走**互斥組合桶**（每筆只進一桶，加總＝案件數 251）。
+  //      合成單值 `類別` 會讓「零擔+1P」只算進零擔、甲配完全消失，
+  //      且四欄各計一次時各段占比相加會 >100%（甜甜圈畫不出來）。
+  //   ② 另外回傳「四欄各計一次」的件數 tickTotals 與 sumNote，畫面一起顯示，
+  //      讓看的人知道「橫向相加可大於案件數」是口徑、不是算錯。
+  // 導入成功率 = classifyStatus==='合作成功' 數 / 該桶件數。
+  // 回傳 { total, items:[{cat,total,coop,rate,share}], tickTotals, sumNote }
   function computeCategoryAnalysis(rows){
-    var byCat = {};
-    var order = [];
-    for(var i = 0; i < rows.length; i++){
-      var r = rows[i];
-      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : blankLabel('類別');
+    var list = rows || [];
+    var byCat = {}, order = [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i] || {};
+      var cat = catBucketLabel(r);
       if(!byCat[cat]){
         byCat[cat] = { cat: cat, total: 0, coop: 0 };
         order.push(cat);
@@ -2020,21 +2047,24 @@ var state = {
       byCat[cat].total++;
       if(classifyStatus(r) === '合作成功') byCat[cat].coop++;
     }
-    var out = order.map(function(c){
+    var total = list.length;
+    var items = order.map(function(c){
       var o = byCat[c];
-      var rate = o.total ? Math.round(o.coop / o.total * 100) : 0;
-      return { cat: o.cat, total: o.total, coop: o.coop, rate: rate };
+      return { cat: o.cat, total: o.total, coop: o.coop,
+               rate: o.total ? Math.round(o.coop / o.total * 100) : 0,
+               share: total ? o.total / total : 0 };
     });
-    var fixed = ['零擔','1P(SCM)','3P(MO+)'];
-    var byName = {};
-    for(var j = 0; j < out.length; j++) byName[out[j].cat] = out[j];
-    var sorted = [];
-    for(var f = 0; f < fixed.length; f++){
-      if(byName[fixed[f]]){ sorted.push(byName[fixed[f]]); delete byName[fixed[f]]; }
-    }
-    var rest = Object.keys(byName).sort();
-    for(var s = 0; s < rest.length; s++) sorted.push(byName[rest[s]]);
-    return sorted;
+    // 固定桶順序（組合桶的順序是「基礎類別 → 組合 → 未填」），其餘依件數多→少
+    items.sort(function(a, b){
+      var ra = catBucketRank(a.cat), rb = catBucketRank(b.cat);
+      if(ra !== rb) return ra - rb;
+      return (b.total - a.total) || (a.cat < b.cat ? -1 : (a.cat > b.cat ? 1 : 0));
+    });
+    // 顯示用百分比：一位小數且加總 100.0（share 留給需要精確比例的地方）
+    var pcts = pctOneDecimal(items.map(function(x){ return x.total; }));
+    for(var q = 0; q < items.length; q++) items[q].sharePct = pcts[q];
+    return { total: total, items: items,
+             tickTotals: catTickTotals(list), sumNote: catSumNote(list) };
   }
 
   // 純函式：本期新增案件的類別分布（講者版用）。
@@ -2044,13 +2074,15 @@ var state = {
   // 回傳：{ total, items:[{cat,count,share,coop,rate}] }，依件數多→少，
   //       share 以 total 為分母（未填類別獨立成一類，不併進「其他」——
   //       講者要看得出來那是沒填，不是被歸類掉了）。
+  // ⚠ 口徑與 computeCategoryAnalysis 相同（2026-10-22）：**互斥組合桶**算佔比，
+  //   另回傳 tickTotals（四欄各計一次）與 sumNote。分母 total ＝ 案件數，
+  //   所以 share 相加一定等於 100%（舊版用合成單值，多勾客戶會漏算、甲配消失）。
   function computePeriodCategory(rows){
     var list = rows || [];
     var byCat = {}, order = [];
     for(var i = 0; i < list.length; i++){
       var r = list[i] || {};
-      var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-        ? String(r['類別']).trim() : blankLabel('類別');
+      var cat = catBucketLabel(r);
       if(!byCat[cat]){ byCat[cat] = { cat: cat, count: 0, coop: 0 }; order.push(cat); }
       byCat[cat].count++;
       if(classifyStatus(r) === '合作成功') byCat[cat].coop++;
@@ -2061,11 +2093,17 @@ var state = {
                share: list.length ? o.count / list.length : 0,
                rate: o.count ? Math.round(o.coop / o.count * 100) : 0 };
     });
-    // 件數多→少；同件數依名稱，讓排序穩定（快照才可重現）
+    // 件數多→少；同件數依組合桶固定順序，讓排序穩定（快照才可重現）
     items.sort(function(a, b){
-      return (b.count - a.count) || (a.cat < b.cat ? -1 : (a.cat > b.cat ? 1 : 0));
+      if(b.count !== a.count) return b.count - a.count;
+      var ra = catBucketRank(a.cat), rb = catBucketRank(b.cat);
+      if(ra !== rb) return ra - rb;
+      return (a.cat < b.cat ? -1 : (a.cat > b.cat ? 1 : 0));
     });
-    return { total: list.length, items: items };
+    var pcts = pctOneDecimal(items.map(function(x){ return x.count; }));
+    for(var q = 0; q < items.length; q++) items[q].sharePct = pcts[q];
+    return { total: list.length, items: items,
+             tickTotals: catTickTotals(list), sumNote: catSumNote(list) };
   }
 
   // ---------------------------------------------------------------------------
@@ -2326,6 +2364,8 @@ var state = {
   //   2. **不列站所**：分類別後站所幾乎都是 1 筆（實測 1P 5 個皆 1 筆、3P 6 個皆 1 筆）。
   //   3. 每組最多 topK 名（預設 3），不足就列實際有幾個。
   // 回傳 { total, byCat: [{cat, kes:[{name,n}], devs:[{name,n}]}], text }
+  // ⚠ 未接線（2026-10-22 盤查：全檔沒有呼叫端，僅保留供日後表揚段使用）。
+  //   計數仍改讀勾選集合，避免哪天接回去時又拿到合成單值。
   function computePraise(rows, opts){
     opts = opts || {};
     var minN = (opts.minN === undefined) ? 2 : opts.minN;
@@ -2338,9 +2378,13 @@ var state = {
     for(var i = 0; i < list.length; i++){
       if(classifyStatus(list[i]) !== '合作成功') continue;
       total++;
-      var c = String(list[i]['類別'] || '').trim() || blankLabel('類別');
-      byCat[c] = byCat[c] || [];
-      byCat[c].push(list[i]);
+      // 件數口徑：勾了兩類就進兩堆（各計一次），甲配不再消失
+      var cs = catTickLabels(list[i]);
+      for(var ci2 = 0; ci2 < cs.length; ci2++){
+        var c = cs[ci2];
+        byCat[c] = byCat[c] || [];
+        byCat[c].push(list[i]);
+      }
     }
     function tally(arr, field){
       var m = {};
@@ -2395,18 +2439,19 @@ var state = {
   //   舊版排名恆為全期現況（北二課 65 件第一），選上個月時與其他各段的期間口徑不一致。
   //   排名跟著期間走才是一致的 —— 選上個月就排上個月開發最多，選全部數據就排全期最多。
   // 回傳 { scope, rows, text }；scope 由呼叫端傳入（與按鈕同一套詞）。
+  // ⚠ 未接線（2026-10-22 盤查：全檔沒有呼叫端）。類別改讀勾選集合，各欄各計一次。
   function buildKeRanking(rows, scope){
     var list = rows || [];
     var m = {};
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var ke = String(r['課別'] || '').trim() || blankLabel('課別');
-      var cat = String(r['類別'] || '').trim() || blankLabel('類別');
       m[ke] = m[ke] || { name: ke, n: 0, cats: {} };
       m[ke].n++;
-      m[ke].cats[cat] = (m[ke].cats[cat] || 0) + 1;
+      var cs = catTickLabels(r);
+      for(var ci = 0; ci < cs.length; ci++) m[ke].cats[cs[ci]] = (m[ke].cats[cs[ci]] || 0) + 1;
     }
-    var order = ['零擔','甲配','1P(SCM)','3P(MO+)'];
+    var order = ['零擔','1P(SCM)','3P(MO+)','甲配'];
     var out = Object.keys(m).map(function(k){
       var o = m[k];
       var cats = Object.keys(o.cats).map(function(c){
@@ -2433,25 +2478,29 @@ var state = {
   // 純函式：第 5 段「各課追蹤簡表」。課別 × 類別 的 新增／開發累計／已導入。
   // ⚠ 與主報表各課追蹤簡表**同一口徑**：新增＝選定期間內填單；開發累計／已導入累計＝全量，
   //   不隨期間縮放。兩處數字必須一致，否則會議上會被打對台。
+  // ⚠ 未接線（2026-10-22 盤查：全檔沒有呼叫端）。類別改讀勾選集合，各欄各計一次。
   function buildKeQuickSummary(periodRows, allRows){
     var cur = periodRows || [], all = allRows || [];
-    var order = ['零擔','甲配','1P(SCM)','3P(MO+)'];
+    var order = ['零擔','1P(SCM)','3P(MO+)','甲配'];
     function blank(){ return { newN: 0, dev: 0, imp: 0 }; }
     var m = {};
     function ensure(ke){ return (m[ke] = m[ke] || {}); }
     for(var i = 0; i < all.length; i++){
       var r = all[i];
       var ke = String(r['課別'] || '').trim() || blankLabel('課別');
-      var cat = String(r['類別'] || '').trim() || blankLabel('類別');
-      var cell = ensure(ke)[cat] = ensure(ke)[cat] || blank();
-      cell.dev++;
-      if(classifyStatus(r) === '合作成功') cell.imp++;
+      var impOk = classifyStatus(r) === '合作成功';
+      var cs = catTickLabels(r);
+      for(var ci = 0; ci < cs.length; ci++){
+        var cell = ensure(ke)[cs[ci]] = ensure(ke)[cs[ci]] || blank();
+        cell.dev++;
+        if(impOk) cell.imp++;
+      }
     }
     for(var j = 0; j < cur.length; j++){
       var r2 = cur[j];
       var ke2 = String(r2['課別'] || '').trim() || blankLabel('課別');
-      var cat2 = String(r2['類別'] || '').trim() || blankLabel('類別');
-      (ensure(ke2)[cat2] = ensure(ke2)[cat2] || blank()).newN++;
+      var cs2 = catTickLabels(r2);
+      for(var cj = 0; cj < cs2.length; cj++) (ensure(ke2)[cs2[cj]] = ensure(ke2)[cs2[cj]] || blank()).newN++;
     }
     var rows = Object.keys(m).map(function(ke){
       var cats = Object.keys(m[ke]).map(function(c){
@@ -2489,11 +2538,18 @@ var state = {
     if(status === '未啟動') return '未啟動';
     return '未合作（含婉拒、失聯、暫緩等）';
   }
-  function weeklyCountBy(rows, field){
+  // labeler（選填）：row → 標籤陣列，供「類別」這種多勾欄位使用。
+  //   ⚠ 2026-10-22：類別不可再讀合成單值 `類別`（多勾客戶只會被算進一類、甲配消失），
+  //   一律傳 catBucketLabels 走互斥組合桶，才會與該 cohort 的件數對得起來。
+  function weeklyCountBy(rows, field, labeler){
     var counts = {};
     for(var i = 0; i < (rows || []).length; i++){
-      var value = String((rows[i] && rows[i][field]) || '').trim() || blankLabel(field);
-      counts[value] = (counts[value] || 0) + 1;
+      var labels = labeler ? labeler(rows[i])
+        : [String((rows[i] && rows[i][field]) || '').trim() || blankLabel(field)];
+      for(var li = 0; li < (labels || []).length; li++){
+        var value = labels[li];
+        counts[value] = (counts[value] || 0) + 1;
+      }
     }
     return Object.keys(counts).map(function(name){ return { name: name, count: counts[name] }; })
       .sort(function(a,b){ return (b.count - a.count) || (a.name < b.name ? -1 : 1); });
@@ -2544,7 +2600,7 @@ var state = {
       outside = (coverage.from > rangeStart || coverage.to < rangeEnd);
     }
     return { label:label, preset:preset, count:cohort.length, rows:cohort,
-      categories:weeklyCountBy(cohort,'類別'), teams:weeklyCountBy(cohort,'課別'),
+      categories:weeklyCountBy(cohort,'類別',catBucketLabels), teams:weeklyCountBy(cohort,'課別'),
       statuses:status, range:range, coverage:coverage, outsideCoverage:outside };
   }
   function weeklyCohortReviews(rows, now){
@@ -2618,7 +2674,11 @@ var state = {
     function mark(row,field){ missing[field]++; issueRows[String(list.indexOf(row))]=1; }
     for(var a=0;a<active.length;a++){
       var r=active[a];
-      ['公司名稱','填單日期','類別','開發者','課別'].forEach(function(f){ if(!String(r[f]||'').trim()) mark(r,f); });
+      ['公司名稱','填單日期','開發者','課別'].forEach(function(f){ if(!String(r[f]||'').trim()) mark(r,f); });
+      // 2026-10-22：類別缺漏改判「四個勾選欄都沒勾」——
+      // 新格式的 `類別` 只是顯示用合成值（勾了甲配也不會寫進 `類別`），
+      // 用 `類別` 空白判定會把「只勾甲配」的正常案件誤報成缺漏。
+      if(rowCatSet(r).length === 0) mark(r,'類別');
       if(stationNamesOf(r).length===0) mark(r,'收貨站所');
     }
     for(var p=0;p<progressed.length;p++){
@@ -3285,13 +3345,16 @@ var state = {
       }
     }
     // 該筆的類別標籤集合：新格式讀勾選欄，舊格式退回 類別 單值
+    // 2026-10-22：打勾判定改用 isTickMark()，與 rowCatSet／案件清單同一條規則。
+    // ⚠ 原本用「非空就算勾」的 has()，`x`／`-`／`N` 之類的註記也會被當成勾選，
+    //   同一份資料在「規則檢核」與「案件清單」會得到不同的類別集合。
     function catItems(r){
       if(!tickFmt) return [catOf(r)];
       var out = [];
-      if(has(r, '零擔')) out.push('零擔');
-      if(has(r, '1P(SCM)')) out.push('1P(SCM)');
-      if(has(r, '3P(MO+)')) out.push('3P(MO+)');
-      if(has(r, '甲配')) out.push('甲配');
+      if(isTickMark(r['零擔'])) out.push('零擔');
+      if(isTickMark(r['1P(SCM)'])) out.push('1P(SCM)');
+      if(isTickMark(r['3P(MO+)'])) out.push('3P(MO+)');
+      if(isTickMark(r['甲配'])) out.push('甲配');
       if(!out.length) out.push(blankLabel('類別'));
       return out;
     }
@@ -3782,7 +3845,12 @@ var state = {
       if(order.indexOf(k) === -1) remaining.push(k);
     }
     remaining.sort();
+    // ⚠ 兩個口徑、兩個資料源（v1.25.0）：
+    //   卡片藥丸排＝**件數**（四欄各計一次，甲配要出現）；
+    //   下方長條圖＝**互斥組合桶**（每筆只進一桶，色段相加＝柱高、百分比相加＝100%）。
+    //   混用會出現「柱高 13 但色段相加 16」這種看起來像 bug 的圖。
     var keCats = catsByKe(model.rows);
+    var keBuckets = catsByKeBuckets(model.rows);
     var keGrid = document.createElement('div');
     keGrid.className = 'ke-grid';
     for(var oi = 0; oi < order.length; oi++){
@@ -3802,8 +3870,14 @@ var state = {
       chartTitle.textContent = '各業務單位案件數與類別比例';
       keBarWrap.appendChild(chartTitle);
       var keHost = document.createElement('div');
-      makeKeCategoryChart(keHost, computeKeCategoryBars(stats.byKe, keCats), { colW: 92, barH: 130 });
+      makeKeCategoryChart(keHost, computeKeCategoryBars(stats.byKe, keBuckets), { colW: 92, barH: 130 });
       keBarWrap.appendChild(keHost);
+      // 兩個口徑的註記（缺了它，藥丸排橫向加總大於卡片數字會被當成算錯）
+      var keNote = document.createElement('p');
+      keNote.className = 'note ke-cat-note';
+      keNote.textContent = '卡片內的類別件數：' + catSumNote(model.rows) +
+        '。下方長條圖為' + catShareNote(model.rows) + '。';
+      keBarWrap.appendChild(keNote);
     }
 
     sec.hidden = false;
@@ -3998,7 +4072,10 @@ var state = {
       if(fill === '') continue;                       // 沒有基準日無法計算
       var d = overdueDays(fill, todayStr);
       if(d === null) continue;
-      var cat = fieldStr(r, '類別').trim() || blankLabel('類別');
+      var catRaw = fieldStr(r, '類別').trim() || blankLabel('類別');
+      // 顯示用標籤：勾選集合的組合名稱（多勾顯示「零擔1P」、甲配不再消失）。
+      // ⚠ 舊格式的規則比對仍用 catRaw（那時 類別 是唯一真相）。
+      var catLabel = rowCatSet(r).length ? catSetLabel(rowCatSet(r)) : blankLabel('類別');
       // 2026-10-19：規則的類別比對改看「勾選身分」，不可用合成後的單一值
       //（否則「零擔+1P」被合成成零擔 → 永遠走不到 1P/3P 規則；「3P+甲配」走不到甲配規則）。
       // 舊格式（沒有勾選欄）退回 類別 單值，行為與原版完全相同。
@@ -4009,8 +4086,8 @@ var state = {
         catsZD = isTickMark(r['零擔']) || isTickMark(r['甲配']);
         cats13 = isTickMark(r['1P(SCM)']) || isTickMark(r['3P(MO+)']);
       } else {
-        catsZD = (cat === '零擔' || cat === '甲配');
-        cats13 = (cat === '1P(SCM)' || cat === '3P(MO+)');
+        catsZD = (catRaw === '零擔' || catRaw === '甲配');
+        cats13 = (catRaw === '1P(SCM)' || catRaw === '3P(MO+)');
       }
       var cj = fieldStr(r, '初步接洽');
       var xq = fieldStr(r, '需求確認');
@@ -4041,7 +4118,7 @@ var state = {
           row: r, code: ru.code, days: d,
           label: ru.label.replace('{N}', String(ru.days)),
           ke: fieldStr(r, '課別').trim() || blankLabel('課別'),
-          cat: cat,
+          cat: catLabel,
           co: fieldStr(r, '公司名稱').trim() || blankLabel('公司名稱'),
           dev: fieldStr(r, '開發者').trim() || blankLabel('開發者'),
           isNotStarted: classifyStatus(r) === '未啟動'
@@ -4087,7 +4164,8 @@ var state = {
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var ke = fieldStr(r, '課別') || blankLabel('課別');
-      var cat = fieldStr(r, '類別') || blankLabel('類別');
+      // 2026-10-22：互斥組合桶（每筆只進一桶）—— 長條總計才等於該課未啟動件數
+      var cat = catBucketLabel(r);
       if(!byKe[ke]) byKe[ke] = { total: 0, cats: {} };
       byKe[ke].total++;
       if(!byKe[ke].cats[cat]) byKe[ke].cats[cat] = [];
@@ -4852,6 +4930,13 @@ var state = {
     note.className = 'pg-note';
     // 2026-10-20：內容已遷移到「規則說明」（BLOCK_RULES.progressSection）
     keBox.appendChild(note);
+    // 2026-10-22：依類別改用四個勾選欄各計一次 → 合計會大於案件數，必須在表下寫明口徑
+    var catNote = document.createElement('p');
+    catNote.className = 'pg-note';
+    catNote.textContent = '依類別的件數：' + catSumNote(model.rows) +
+      '（四欄各計一次：' + catTickTotalsText(catTickTotals(model.rows)) + '）。' +
+      '本表「全體合計」為各類別列相加，不會等於案件數 ' + model.rows.length + '。';
+    catBox.appendChild(catNote);
     sec.hidden = false;
   }
 
@@ -5019,38 +5104,216 @@ var state = {
   // ⚠ 甲指／甲配 必須在清單內：真實資料的類別就是 零擔／甲指／甲配
   //   （各課追蹤簡表的欄位也是這三個），漏掉會被 catOf 全數併成「其他」——
   //   統計卡圓點與類別組成圖就再也分不出甲指與甲配（實測兩者都變灰色）。
-  var CATS_ORDER = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
+  // 藥丸排的顯示順序＝四個勾選欄的順序（甲配排在 3P 之後），
+  // 甲指／其他只會出現在舊格式（沒有勾選欄）的檔案，留著以免舊檔靜默消失。
+  var CATS_ORDER = ['零擔', '1P(SCM)', '3P(MO+)', '甲配', '甲指', '其他'];
   // 色票：與統計卡圓點／類別組成圖／本期新增類別分布共用同一套。
   // 新增色刻意避開既有四色（藍／綠／黃／灰），並都夠亮 —— 段內百分比用深色字才看得清。
   var CAT_COLORS = { '零擔': '#4f8eff', '甲指': '#f472b6', '甲配': '#a78bfa',
     '1P(SCM)': '#5ad98b', '3P(MO+)': '#ffc94d', '其他': '#9aa3b2' };
+  // (類別未填) 沿用既有的中性灰（**不新增顏色**）
+  CAT_COLORS[blankLabel('類別')] = CAT_COLORS['其他'];
 
-  function catOf(r){
-    var cv = r && r['類別'];
-    var c = (cv !== undefined && cv !== null && String(cv).trim() !== '') ? String(cv).trim() : blankLabel('類別');
-    return (CATS_ORDER.indexOf(c) !== -1 && c !== '其他') ? c : '其他';
+  // ---------------------------------------------------------------------------
+  // 類別口徑（v1.25.0，使用者 2026-10-22 定案）—— 兩種數字，用途不同、不可互換
+  // ---------------------------------------------------------------------------
+  // Excel 的類別是**四個獨立勾選欄**（零擔／1P(SCM)／3P(MO+)／甲配），一個客戶可多勾。
+  //   ① **件數**：四個勾選欄各計一次 → 多勾客戶在每個類別各算一次。
+  //      分類標籤合計會大於案件數（實測 241，案件 251 中 234 件有標記）。
+  //   ② **佔比／比例圖**：互斥組合桶（每筆只進一桶）→ 加總必等於案件數。
+  //      「零擔+1P」不是兩個桶，是「零擔1P」這一個桶；沒勾任何一欄是「(類別未填)」。
+  // ⚠ 合成單值 `類別`（優先序 零擔→1P→3P、甲配另存 `_甲配`）只能當舊格式的退路，
+  //   不可拿來算件數或佔比：多勾客戶只會進一類、甲配整個消失（實測 1 件）。
+  // ⚠ 兩個口徑都要在畫面上寫清楚（catSumNote／catShareNote），否則
+  //   「橫向加起來不是 251」會被讀成算錯，而改用列數算又會讓甲配不見。
+  var CAT_BUCKET_BLANK = blankLabel('類別');
+  // 組合桶固定順序：基礎類別 → 兩類組合 → 未填（未列出的組合排在最後一群）
+  var CAT_BUCKET_ORDER = ['零擔', '零擔1P', '1P(SCM)', '零擔3P', '3P(MO+)', '3P轉甲配',
+                          '1P轉甲配', '零擔+甲配', '1P(SCM)+3P(MO+)', CAT_BUCKET_BLANK];
+  // 組合桶的顏色＝組成的兩個既有類別色（**不新增顏色**）：
+  //   HTML 用 CSS 漸層、SVG 用 linearGradient；單一類別直接用 CAT_COLORS。
+  var CAT_COMBO_PARTS = {
+    '零擔1P': ['零擔', '1P(SCM)'],
+    '零擔3P': ['零擔', '3P(MO+)'],
+    '3P轉甲配': ['3P(MO+)', '甲配'],
+    '1P轉甲配': ['1P(SCM)', '甲配'],
+    '零擔+甲配': ['零擔', '甲配'],
+    '1P(SCM)+3P(MO+)': ['1P(SCM)', '3P(MO+)']
+  };
+
+  // 純函式：該筆勾了哪些類別（新格式）；舊格式（沒有勾選欄）退回 類別 單值。
+  function catTickCats(r){
+    var out = [];
+    if(!r) return out;
+    var tickFmt = false;
+    for(var t = 0; t < CAT_TICK_COLS.length; t++){
+      if(CAT_TICK_COLS[t] in r){ tickFmt = true; break; }
+    }
+    if(!tickFmt){
+      var c = fieldStr(r, '類別');
+      return c ? [c] : out;
+    }
+    for(var i = 0; i < CAT_TICK_COLS.length; i++){
+      if(isTickMark(r[CAT_TICK_COLS[i]])) out.push(CAT_TICK_COLS[i]);
+    }
+    return out;
+  }
+  // ① 件數用：要 +1 的類別標籤陣列（四欄都沒勾 → (類別未填)）
+  function catTickLabels(r){
+    var cats = catTickCats(r);
+    return cats.length ? cats : [CAT_BUCKET_BLANK];
+  }
+  // ① 件數合計：{ byCat, labels, rows }（labels＝四欄各計一次的標籤總數，可大於 rows）
+  function catTickTotals(rows){
+    var list = rows || [], m = {}, labels = 0;
+    for(var i = 0; i < list.length; i++){
+      var cs = catTickLabels(list[i]);
+      for(var j = 0; j < cs.length; j++){ m[cs[j]] = (m[cs[j]] || 0) + 1; labels++; }
+    }
+    return { byCat: m, labels: labels, rows: list.length };
+  }
+  // ② 佔比用：一筆只回一個桶標籤（互斥、完整，走既有 catSetLabel 組合名稱）
+  function catBucketLabel(r){
+    var cats = catTickCats(r);
+    return cats.length ? catSetLabel(cats) : CAT_BUCKET_BLANK;
+  }
+  // 供 weeklyCountBy 這類「row → 標籤陣列」的函式使用
+  function catBucketLabels(r){ return [catBucketLabel(r)]; }
+  function catBucketRank(label){
+    var i = CAT_BUCKET_ORDER.indexOf(label);
+    return i === -1 ? 89 : i;
+  }
+  // 組合桶 → 兩個既有顏色的配對；單一類別回 null
+  function catColorParts(label){
+    var p = CAT_COMBO_PARTS[label];
+    if(!p) return null;
+    return [CAT_COLORS[p[0]] || CAT_COLORS['其他'], CAT_COLORS[p[1]] || CAT_COLORS['其他']];
+  }
+  // HTML 用（圖例圓點／單一系列橫條）：組合桶用兩色漸層，其餘用既有色
+  function catColorCss(label){
+    var p = catColorParts(label);
+    if(p) return 'linear-gradient(90deg, ' + p[0] + ' 0 50%, ' + p[1] + ' 50% 100%)';
+    return CAT_COLORS[label] || CAT_COLORS['其他'];
+  }
+  // 單色版本（純函式回傳值／區塊標頭色塊）：組合桶取第一個組成色
+  function catSolidColor(label){
+    var p = catColorParts(label);
+    return p ? p[0] : (CAT_COLORS[label] || CAT_COLORS['其他']);
+  }
+  // SVG 填色：組合桶 → 兩個既有類別色的水平漸層（需 <defs>，**不新增顏色**）；
+  //   單一類別 → 既有色。⚠ 只有 DOM 端能呼叫（會建立 defs），純函式請用 catSolidColor。
+  var CAT_GRAD_SEQ = 0;
+  function svgCatPaint(svg, label){
+    var parts = catColorParts(label);
+    if(!parts) return catSolidColor(label);
+    var ids = svg.__catGradIds = svg.__catGradIds || {};
+    if(ids[label]) return 'url(#' + ids[label] + ')';
+    var id = 'catgrad' + (++CAT_GRAD_SEQ);
+    ids[label] = id;
+    var defs = svg.__catGradDefs;
+    if(!defs){
+      defs = svgEl('defs', {});
+      if(svg.insertBefore && svg.firstChild) svg.insertBefore(defs, svg.firstChild);
+      else svg.appendChild(defs);
+      svg.__catGradDefs = defs;
+    }
+    var grad = svgEl('linearGradient', { id: id, x1: '0', y1: '0', x2: '1', y2: '0' });
+    grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': parts[0] }));
+    grad.appendChild(svgEl('stop', { offset: '0.5', 'stop-color': parts[0] }));
+    grad.appendChild(svgEl('stop', { offset: '0.5', 'stop-color': parts[1] }));
+    grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': parts[1] }));
+    defs.appendChild(grad);
+    return 'url(#' + id + ')';
+  }
+  // 一位小數的百分比，且**加總恰好 100.0**（最大餘數法）。
+  //   ⚠ 7 個桶各自四捨五入會相加成 100.1%（實測），畫面上就會出現
+  //   「佔比加起來超過 100%」——那是顯示誤差，但看的人只會覺得統計壞了。
+  //   最大餘數法把不足/超出的 0.1 分配給餘數最大的桶，總和恆為 100.0。
+  function pctOneDecimal(values){
+    var list = values || [], n = list.length, out = [];
+    if(!n) return out;
+    var total = 0, i;
+    for(i = 0; i < n; i++) total += (Number(list[i]) || 0);
+    if(!total){ for(i = 0; i < n; i++) out.push(0); return out; }
+    var tenths = [], rest = [], used = 0;
+    for(i = 0; i < n; i++){
+      var t = (Number(list[i]) || 0) * 1000 / total;   // 以 0.1% 為單位
+      var f = Math.floor(t);
+      tenths.push(f);
+      rest.push({ i: i, r: t - f });
+      used += f;
+    }
+    var left = 1000 - used;
+    rest.sort(function(a, b){ return (b.r - a.r) || (a.i - b.i); });
+    for(i = 0; i < left && i < rest.length; i++) tenths[rest[i].i] += 1;
+    for(i = 0; i < n; i++) out.push(tenths[i] / 10);
+    return out;
   }
 
-  // 依 filterFn 篩選後，各類別計數（含 0 值省略的產出）
+  // 口徑註記文字（件數）：零擔 140 件、1P(SCM) 65 件…
+  function catTickTotalsText(totals){
+    var byCat = (totals && totals.byCat) || {};
+    var order = ['零擔', '1P(SCM)', '3P(MO+)', '甲配', CAT_BUCKET_BLANK];
+    var parts = [];
+    for(var i = 0; i < order.length; i++){
+      if(byCat[order[i]]) parts.push(order[i] + ' ' + byCat[order[i]] + ' 件');
+    }
+    return parts.join('、');
+  }
+  // 多勾件數（件數口徑註記用；真實資料實測 7 件）
+  function catMultiTickCount(rows){
+    var list = rows || [], n = 0;
+    for(var i = 0; i < list.length; i++) if(catTickCats(list[i]).length > 1) n++;
+    return n;
+  }
+  // 口徑註記（件數）：句子的前半段由資料算，後半段固定
+  function catSumNote(rows){
+    var m = catMultiTickCount(rows);
+    return m ? (m + ' 件同時屬兩類，各類別各計一次，橫向相加可大於案件數')
+             : '各類別各計一次，橫向相加等於案件數';
+  }
+  // 口徑註記（佔比）：互斥組合桶，加總＝案件數
+  function catShareNote(rows){
+    return '佔比為互斥組合桶（每件只算一次），合計 ' + ((rows || []).length) + ' 件＝案件數';
+  }
+
+  // ⚠ v1.25.0 移除了合成單值 catOf()：它把「不是零擔/1P/3P」的一律併成「其他」，
+  //   於是甲配消失、多勾客戶只被算進優先序最高的那一類（實測 8 處受影響）。
+  //   統計一律走上面兩個口徑函式：件數 catTickLabels／佔比 catBucketLabel。
+
+  // ① 件數：依 filterFn 篩選後，各類別計數（四欄各計一次；甲配有自己的鍵）
   function catsBreakdown(rows, filterFn){
     var out = {};
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       if(filterFn && !filterFn(r)) continue;
-      var k = catOf(r);
-      out[k] = (out[k] || 0) + 1;
+      var labels = catTickLabels(r);
+      for(var j = 0; j < labels.length; j++) out[labels[j]] = (out[labels[j]] || 0) + 1;
     }
     return out;
   }
 
-  // 各課別 → 各類別計數（keKey 與 computeStats.byKe 一致）
+  // ① 各課別 → 各類別件數（四欄各計一次）—— 給各課統計卡的藥丸排
   function catsByKe(rows){
     var out = {};
     for(var i = 0; i < rows.length; i++){
       var r = rows[i];
       var ke = (r && r['課別']) || blankLabel('課別');
       out[ke] = out[ke] || {};
-      var k = catOf(r);
+      var labels = catTickLabels(r);
+      for(var j = 0; j < labels.length; j++) out[ke][labels[j]] = (out[ke][labels[j]] || 0) + 1;
+    }
+    return out;
+  }
+
+  // ② 各課別 → 互斥組合桶件數（每筆只進一桶）—— 給長條圖的色段
+  function catsByKeBuckets(rows){
+    var out = {};
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var ke = (r && r['課別']) || blankLabel('課別');
+      out[ke] = out[ke] || {};
+      var k = catBucketLabel(r);
       out[ke][k] = (out[ke][k] || 0) + 1;
     }
     return out;
@@ -5061,21 +5324,23 @@ var state = {
     for(var i = 0; i < CATS_ORDER.length; i++){
       if(counts[CATS_ORDER[i]]) return true;
     }
-    return false;
+    return !!(counts[CAT_BUCKET_BLANK]);        // 只有未填類別的案件也要顯示
   }
 
   // 依 counts（{零擔:n,…}）產出藥丸排並附加到 container
   function appendStatCats(container, counts){
     var cb = document.createElement('div');
     cb.className = 'stat-cats';
-    for(var ci = 0; ci < CATS_ORDER.length; ci++){
-      var kc = CATS_ORDER[ci];
+    // 順序：四個勾選欄（甲配在 3P 之後）→ 舊格式的甲指／其他 → (類別未填)
+    var catOrderPills = CATS_ORDER.concat([CAT_BUCKET_BLANK]);
+    for(var ci = 0; ci < catOrderPills.length; ci++){
+      var kc = catOrderPills[ci];
       if(!counts[kc]) continue;
       var cd = document.createElement('div');
       cd.className = 'stat-cat';
       var dot = document.createElement('span');
       dot.className = 'sc-dot';
-      dot.style.background = CAT_COLORS[kc];
+      dot.style.background = catSolidColor(kc);
       var cs = document.createElement('span');
       cs.className = 'sc-name';
       cs.textContent = kc;
@@ -5194,6 +5459,15 @@ var state = {
       grid.appendChild(c);
     }
     container.appendChild(grid);
+    // 口徑註記（件數）：藥丸排是「四個勾選欄各計一次」，多勾客戶在兩個類別各算一次
+    //   ⇒ 橫向相加會大於卡片上的案件數。沒有這句話，看的人會以為統計壞了。
+    var catNote = document.createElement('p');
+    catNote.className = 'stat-catnote';
+    // ⚠ 用 model.rows（卡片實際的列，含期間篩選）算多勾件數；
+    //   用全期列算會在選「上個月」時說「7 件同時屬兩類」而那 7 件根本不在本期。
+    catNote.textContent = '卡片內的類別件數：' + catSumNote(model.rows) +
+      '（甲配自成一類；未勾任何一欄顯示' + blankLabel('類別') + '）。';
+    container.appendChild(catNote);
 
     var ul = document.createElement('ul');
     ul.className = 'hl-list';
@@ -6514,33 +6788,54 @@ var state = {
   }
 
   // ---- 本期分析：新增案件的類別分佈（含與上期比較） ----
+  // ⚠ v1.25.0 口徑（使用者 2026-10-22 定案）：
+  //   佔比類數字（share／pp／甜甜圈）走**互斥組合桶**，所以每一列的
+  //   「count（該桶件數）／share／imp／stale」都在同一個集合裡 ——
+  //   imp ÷ count 才是真的轉換率（舊版用合成單值，導入數與件數來自不同集合）。
+  //   件數（四欄各計一次）另以 tickTotals／sumNote 回傳，畫面要一起顯示。
   function computeBriefCategory(curRows, prevRows, staleRows){
-    var cur = briefGroupCount(curRows, '類別');
-    var prv = briefGroupCount(prevRows || [], '類別');
     var cn = curRows.length, pn = (prevRows || []).length;
+    function bucketMap(rows){
+      var m = {}, order = [];
+      for(var i = 0; i < (rows || []).length; i++){
+        var k = catBucketLabel(rows[i]);
+        if(!m[k]){ m[k] = 0; order.push(k); }
+        m[k]++;
+      }
+      return { m: m, order: order };
+    }
+    var curM = bucketMap(curRows), prvM = bucketMap(prevRows || []);
+    var cur = curM.order.map(function(k){ return { name: k, count: curM.m[k] }; });
+    var prv = prvM.order.map(function(k){ return { name: k, count: prvM.m[k] }; });
     var pMap = {};
     for(var i = 0; i < prv.length; i++) pMap[prv[i].name] = prv[i].count;
-    // 導入完成件數（依類別）—— GM 的第二問一定是「哪個類別轉得動」
+    // 導入完成件數（依同一個互斥桶）—— GM 的第二問一定是「哪個類別轉得動」
     var impMap = {};
     for(var q1 = 0; q1 < curRows.length; q1++){
       if(classifyStatus(curRows[q1]) !== '合作成功') continue;
-      var cq1 = String(fieldStr(curRows[q1], '類別') || '').trim() || blankLabel('類別');
+      var cq1 = catBucketLabel(curRows[q1]);
       impMap[cq1] = (impMap[cq1] || 0) + 1;
     }
-    // 停滯件數（依類別）—— 停滯是相對「全資料最新進度」，不是相對本期，
+    // 停滯件數（依同一個互斥桶）—— 停滯是相對「全資料最新進度」，不是相對本期，
     // 所以要吃傳進來的 staleRows（全資料算好的），不能只用本期。
     var staleMap = {};
     var sRows = staleRows || [];
     for(var q2 = 0; q2 < sRows.length; q2++){
-      var cq2 = String(fieldStr(sRows[q2], '類別') || '').trim() || blankLabel('類別');
+      var cq2 = catBucketLabel(sRows[q2]);
       staleMap[cq2] = (staleMap[cq2] || 0) + 1;
     }
+    // 顯示用佔比：一位小數且加總 100.0（最大餘數法）——
+    //   逐桶四捨五入會讓 7 個桶相加 100.1%，看起來像佔比破表。
+    var curPct = pctOneDecimal(cur.map(function(x){ return x.count; }));
+    var prvPctMap = {};
+    var prvPct = pctOneDecimal(prv.map(function(x){ return x.count; }));
+    for(var pi = 0; pi < prv.length; pi++) prvPctMap[prv[pi].name] = prvPct[pi];
     var out = [];
     for(var c = 0; c < cur.length; c++){
       var n = cur[c].count;
-      var share = cn ? Math.round(n * 1000 / cn) / 10 : 0;
+      var share = curPct[c] || 0;
       var pc = pMap[cur[c].name] || 0;
-      var pshare = pn ? Math.round(pc * 1000 / pn) / 10 : 0;
+      var pshare = prvPctMap[cur[c].name] || 0;
       var ci = impMap[cur[c].name] || 0;
       out.push({ name: cur[c].name, count: n, share: share, prevCount: pc, prevShare: pshare,
                  pp: (pn ? Math.round((share - pshare) * 10) / 10 : null),
@@ -6552,15 +6847,18 @@ var state = {
       var found = false;
       for(var o = 0; o < out.length; o++) if(out[o].name === prv[p2].name) found = true;
       if(!found) out.push({ name: prv[p2].name, count: 0, share: 0, prevCount: prv[p2].count,
-                            prevShare: pn ? Math.round(prv[p2].count * 1000 / pn) / 10 : 0,
+                            prevShare: prvPctMap[prv[p2].name] || 0,
                             // ⚠ 必須與上面的 prevShare 同一個算式（先前多乘一次 10，
                             //    實測出現「-250pp」這種不可能的占比變化）
-                            pp: pn ? -(Math.round(prv[p2].count * 1000 / pn) / 10) : null,
+                            pp: pn ? -(prvPctMap[prv[p2].name] || 0) : null,
                             imp: 0, rate: 0, stale: staleMap[prv[p2].name] || 0 });
     }
     out.sort(function(a, b){ return b.count - a.count || b.prevCount - a.prevCount ||
+                                    catBucketRank(a.name) - catBucketRank(b.name) ||
                                     (a.name < b.name ? -1 : 1); });
-    return { list: out, total: cn, prevTotal: pn };
+    return { list: out, total: cn, prevTotal: pn,
+             tickTotals: catTickTotals(curRows), sumNote: catSumNote(curRows),
+             shareNote: catShareNote(curRows) };
   }
 
   // ---- 本期分析：課別開發導入進度與排名（依本期導入件數） ----
@@ -6611,9 +6909,11 @@ var state = {
     var arr = [], k;
     for(k in map) if(map[k] > 0) arr.push({ name: k, n: map[k] });
     arr.sort(function(a, b){ return b.n - a.n || (a.name < b.name ? -1 : 1); });
-    // ⚠ 上限 4：真實資料的類別是「零擔／1P(SCM)／3P(MO+)／未填」四桶，
-    //   上限 3 會把「未填」收成「其他 2」—— 看不出那是未分類，會誤導。
-    var lim = maxN || 4, parts = [], i;
+    // ⚠ 上限＝所有可能出現的桶（7）：零擔／零擔1P／1P(SCM)／零擔3P／3P(MO+)／3P轉甲配／(類別未填)。
+    //   舊上限 4 是給「四個類別」的時代用的；2026-10-22 起類別走互斥組合桶，
+    //   固定 4 會把第 5 個以後的桶收成「其他 N」—— 那等於把「零擔1P」藏起來，
+    //   而「其他」正是這次要消滅的東西（實測北二課「新增 …3P轉甲配 1／其他 1」）。
+    var lim = maxN || 7, parts = [], i;
     for(i = 0; i < arr.length && i < lim; i++) parts.push(arr[i].name + ' ' + arr[i].n);
     if(arr.length > lim){
       var rest = 0;
@@ -6743,7 +7043,8 @@ var state = {
       if(!k) k = blankLabel('課別');
       // 新增與導入都要標明「客戶類別」—— GM 要看的不是課別總數，
       // 而是「這個課的量集中在哪個類別、導入的又是哪個類別」。
-      var cx = String(fieldStr(curRows[i], '類別') || '').trim() || blankLabel('類別');
+      // 2026-10-22：走互斥組合桶，nByCat 相加才等於該課的 n（多勾客戶不會被算兩次）。
+      var cx = catBucketLabel(curRows[i]);
       if(!nBy[k]) nBy[k] = {};
       nBy[k][cx] = (nBy[k][cx] || 0) + 1;
       if(classifyStatus(curRows[i]) !== '合作成功') continue;
@@ -7451,6 +7752,13 @@ var state = {
         '停滯以全資料最新進度計算。注意：報表其他地方的「累計轉換率」是全期口徑，'
         + '與此處的' + (ranges.kpiLabel || '本期') + '轉換率不可互相比較。';
       d1.appendChild(n1);
+      // 2026-10-22：件數（四欄各計一次）與佔比（互斥組合桶）是兩個數字，一起講清楚
+      var n1b = document.createElement('p');
+      n1b.className = 'bf-dnote';
+      n1b.textContent = '類別件數（四個勾選欄各計一次）：' + catTickTotalsText(cat.tickTotals) +
+        '。' + cat.sumNote + '。右側「件數與佔比」為互斥組合桶（每件只算一次），合計 ' +
+        cat.total + ' 件＝案件數。';
+      d1.appendChild(n1b);
       // 一句可以直接講的說明（與課別區塊的 bf-dsum 對稱）
       if(cat.list.length && cat.list[0].count){
         var tc = cat.list[0];
@@ -8167,16 +8475,20 @@ var state = {
   }
 
   // 渲染：類別占比甜甜圈（stroke-dasharray 分段）+ 導入成功率橫條
+  // ⚠ v1.25.0：data 是 { total, items, tickTotals, sumNote }（舊版是陣列）。
+  //   甜甜圈與每一列的佔比都走**互斥組合桶**，所以扇區相加＝總計、百分比相加＝100%。
+  //   件數（四欄各計一次）另外用一行文字說明 —— 那才是「分類標籤合計」，可大於案件數。
   function renderCategoryAnalysis(container, data){
     container.textContent = '';
-    if(!data || !data.length){
+    var list = (data && data.items) ? data.items : (data || []);
+    if(!list.length){
       container.className = 'pending';
       container.textContent = '無資料';
       return;
     }
     container.className = '';
     var total = 0;
-    for(var i = 0; i < data.length; i++) total += data[i].total;
+    for(var i = 0; i < list.length; i++) total += list[i].total;
 
     var wrap = document.createElement('div');
     wrap.className = 'type-analysis';
@@ -8187,12 +8499,13 @@ var state = {
     pieBox.className = 'type-pie';
     var svg = svgEl('svg', { viewBox: '0 0 ' + size + ' ' + size, width: size, height: size });
     var g = svgEl('g', { transform: 'rotate(-90 ' + cx + ' ' + cy + ')' });
-    for(var d = 0; d < data.length; d++){
-      var share = total ? (data[d].total / total * 100) : 0;
+    for(var d = 0; d < list.length; d++){
+      var share = total ? (list[d].total / total * 100) : 0;
       var dash = Math.max(share - GAP, 0);
       var seg = svgEl('circle', {
         cx: cx, cy: cy, r: r, fill: 'none',
-        stroke: catColor(data[d].cat),
+        // 組合桶＝兩個既有色各半（不新增顏色），單一類別＝既有色
+        stroke: svgCatPaint(svg, list[d].cat),
         'stroke-width': sw,
         'pathLength': 100,
         'stroke-dasharray': dash + ' ' + (100 - dash),
@@ -8219,8 +8532,8 @@ var state = {
     barTitle.className = 'type-bars-title';
     barTitle.textContent = '導入成功率（合作成功 ÷ 類別總數）';
     right.appendChild(barTitle);
-    for(var j = 0; j < data.length; j++){
-      var o = data[j];
+    for(var j = 0; j < list.length; j++){
+      var o = list[j];
       var sharePct = total ? (o.total / total * 100) : 0;
       var row = document.createElement('div');
       row.className = 'type-row';
@@ -8228,13 +8541,15 @@ var state = {
       head.className = 'type-row-head';
       var sw2 = document.createElement('span');
       sw2.className = 'type-swatch';
-      sw2.style.background = catColor(o.cat);
+      sw2.style.background = catColorCss(o.cat);
       var name = document.createElement('span');
       name.className = 'type-cat';
       name.textContent = o.cat;
       var cnt = document.createElement('span');
       cnt.className = 'type-count';
-      cnt.textContent = o.total + ' 筆（' + sharePct.toFixed(1) + '%）　成功率 ' + o.coop + '/' + o.total + '＝' + o.rate + '%';
+      // 百分比用 sharePct（一位小數、加總 100.0）；successRate 仍用該桶件數當分母
+      cnt.textContent = o.total + ' 筆（' + (o.sharePct === undefined ? sharePct.toFixed(1) : o.sharePct.toFixed(1)) +
+        '%）　成功率 ' + o.coop + '/' + o.total + '＝' + o.rate + '%';
       head.appendChild(sw2);
       head.appendChild(name);
       head.appendChild(cnt);
@@ -8250,6 +8565,13 @@ var state = {
     }
     wrap.appendChild(right);
     container.appendChild(wrap);
+    // 口徑註記：件數（四欄各計一次）與佔比（互斥組合桶）是兩個數字，必須同時講清楚
+    var note = document.createElement('p');
+    note.className = 'type-catnote';
+    note.textContent = '類別件數（四個勾選欄各計一次）：' + catTickTotalsText(data && data.tickTotals) +
+      '。' + ((data && data.sumNote) || '各類別各計一次') +
+      '。甜甜圈與佔比為互斥組合桶（每件只算一次），合計 ' + total + ' 件＝案件數。';
+    container.appendChild(note);
   }
 
   // ---------------------------------------------------------------------------
@@ -8464,7 +8786,8 @@ var state = {
       head.appendChild(name);
       var chipCat = document.createElement('span');
       chipCat.className = 'do-chip';
-      chipCat.textContent = '類別 ' + fieldVal(r, '類別');
+      // 2026-10-22：多勾客戶顯示組合名稱（零擔1P），與案件清單同一套標籤
+      chipCat.textContent = '類別 ' + catCellLabel(r);
       var chipKe = document.createElement('span');
       chipKe.className = 'do-chip';
       chipKe.textContent = '課別 ' + fieldVal(r, '課別');
@@ -8695,13 +9018,12 @@ var state = {
     name.className = 'do-cust-name';
     var cName = (r['公司名稱'] !== undefined && r['公司名稱'] !== null) ? String(r['公司名稱']).trim() : '';
     name.textContent = cName || blankLabel('公司名稱');
-    var cat = (r['類別'] !== undefined && r['類別'] !== null && String(r['類別']).trim() !== '')
-      ? String(r['類別']).trim() : blankLabel('類別');
     var ke = (r['課別'] !== undefined && r['課別'] !== null && String(r['課別']).trim() !== '')
       ? String(r['課別']).trim() : blankLabel('課別');
     var chipCat = document.createElement('span');
     chipCat.className = 'do-chip';
-    chipCat.textContent = '類別 ' + cat;
+    // 2026-10-22：多勾客戶顯示組合名稱（3P轉甲配），與案件清單同一套標籤
+    chipCat.textContent = '類別 ' + catCellLabel(r);
     var chipKe = document.createElement('span');
     chipKe.className = 'do-chip';
     chipKe.textContent = '課別 ' + ke;
@@ -8861,7 +9183,8 @@ var state = {
     var list = rows || [];
     var m = {}, order = [];
     for(var i = 0; i < list.length; i++){
-      var cat = fieldStr(list[i], '類別') || blankLabel('類別');
+      // 2026-10-22：互斥組合桶（多勾客戶不會同時出現在兩組，組件數相加＝母體）
+      var cat = catBucketLabel(list[i]);
       if(!m[cat]){ m[cat] = { cat: cat, count: 0, rows: [] }; order.push(cat); }
       m[cat].count++;
       m[cat].rows.push(list[i]);
@@ -9184,39 +9507,35 @@ var state = {
 
   // 純函式：案件狀態統計長條圖的類別組成；柱高保留總件數，色段表示各類別占比。
   // categoriesByKe 由 catsByKe() 提供，並沿用 CAT_COLORS（與統計卡圓點同一色票）。
+  // ⚠ 2026-10-22：資料源改為**互斥組合桶**（catsByKeBuckets）。
+  //   每筆只進一桶 ⇒ 色段相加＝柱高（案件數）、百分比相加必為 100%。
+  //   舊版吃「四欄各計一次」的計數，多勾客戶被算兩次，再用「差額補其他」硬湊回柱高
+  //   —— 補差額會把重複計數當成缺漏，柱子上的比例因此是假的（也可能 >100%）。
   function computeKeCategoryBars(byKe, categoriesByKe){
     var entries = computeKeBars(byKe || {});
     categoriesByKe = categoriesByKe || {};
-    var catOrder = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
     return entries.map(function(entry){
       var counts = categoriesByKe[entry.label] || {};
-      var categories = [];
-      var sum = 0;
-      for(var i = 0; i < catOrder.length; i++){
-        var name = catOrder[i];
-        var count = Number(counts[name]) || 0;
+      var categories = [], sum = 0;
+      var names = Object.keys(counts);
+      names.sort(function(a, b){
+        var ra = catBucketRank(a), rb = catBucketRank(b);
+        if(ra !== rb) return ra - rb;
+        if(counts[b] !== counts[a]) return counts[b] - counts[a];
+        return a < b ? -1 : 1;
+      });
+      for(var i = 0; i < names.length; i++){
+        var count = Number(counts[names[i]]) || 0;
         if(count <= 0) continue;
         sum += count;
-        categories.push({ label: name, count: count,
+        categories.push({ label: names[i], count: count,
           share: entry.count ? count / entry.count : 0,
-          color: CAT_COLORS[name] || CAT_COLORS['其他'] });
+          color: catSolidColor(names[i]),
+          parts: catColorParts(names[i]) });
       }
-      // 確保總數仍能由色段完整表示；資料分類缺漏時併入「其他」。
-      if(sum < entry.count){
-        var missing = entry.count - sum;
-        var other = null;
-        for(var j = 0; j < categories.length; j++){
-          if(categories[j].label === '其他'){ other = categories[j]; break; }
-        }
-        if(other){
-          other.count += missing;
-          other.share = entry.count ? other.count / entry.count : 0;
-        } else {
-          categories.push({ label: '其他', count: missing,
-            share: entry.count ? missing / entry.count : 0, color: CAT_COLORS['其他'] });
-        }
-      }
-      return { label: entry.label, count: entry.count, categories: categories };
+      // **不補「其他」**：組合桶互斥且完整，sum 必然等於柱高。
+      // 若真的不等（資料源被改壞），保留 sum 讓它看得出來，不要偽裝成一個類別。
+      return { label: entry.label, count: entry.count, categories: categories, sum: sum };
     });
   }
 
@@ -9546,8 +9865,9 @@ var state = {
         if(cat.count <= 0) continue;
         var segmentHeight = cat.count / max * barH;
         var y = yBottom - segmentHeight;
+        // 組合桶 → 兩個既有色的漸層（不新增顏色）；單一類別 → 既有色
         var segment = svgEl('rect', { x: x, y: y, width: bw, height: segmentHeight,
-          fill: cat.color || CAT_COLORS['其他'], 'class': 'ke-bar-segment' });
+          fill: svgCatPaint(svg, cat.label), 'class': 'ke-bar-segment' });
         segment.setAttribute('data-ke', item.label);
         segment.setAttribute('data-category', cat.label);
         segment.setAttribute('data-count', String(cat.count));
@@ -9577,7 +9897,9 @@ var state = {
 
     var legend = document.createElement('div');
     legend.className = 'ke-bar-legend';
-    var order = ['零擔', '甲指', '甲配', '1P(SCM)', '3P(MO+)', '其他'];
+    // 圖例順序＝組合桶固定順序（不是舊的合成單值順序），未列出的桶接在後面
+    var order = CAT_BUCKET_ORDER.slice();
+    for(var ek in legendNames) if(order.indexOf(ek) === -1) order.push(ek);
     for(var k = 0; k < order.length; k++){
       var name = order[k];
       if(!legendNames[name]) continue;
@@ -9585,7 +9907,7 @@ var state = {
       entry.className = 'ke-bar-legend-item';
       var dot = document.createElement('span');
       dot.className = 'sc-dot';
-      dot.style.background = CAT_COLORS[name];
+      dot.style.background = catColorCss(name);
       var text = document.createElement('span');
       text.textContent = name;
       entry.appendChild(dot);
@@ -9595,7 +9917,9 @@ var state = {
     if(legend.children.length) container.appendChild(legend);
     var note = document.createElement('p');
     note.className = 'note ke-bar-note';
-    note.textContent = '柱高表示該單位案件總數；柱內顏色表示類別比例。游標停留在色段可查看件數與精確比例；手機版可左右滑動查看。';
+    note.textContent = '柱高表示該單位案件總數；柱內色段為互斥組合桶（每件只算一次，' +
+      '例如「零擔+1P」是一段「零擔1P」而不是兩段），所以色段相加＝柱高、比例相加＝100%。' +
+      '游標停留在色段可查看件數與精確比例；手機版可左右滑動查看。';
     container.appendChild(note);
     return svg;
   }
@@ -12085,6 +12409,13 @@ var state = {
     head.className = 'pc-head';
     head.textContent = (isAll ? '累計（全期）' : scope + '新增') + ' ' + data.total + ' 件，依類別分布：';
     box.appendChild(head);
+    // 口徑註記：件數（四欄各計一次）vs 佔比（互斥組合桶）
+    var sNote = document.createElement('p');
+    sNote.className = 'pc-note';
+    sNote.textContent = '類別件數（四個勾選欄各計一次）：' + catTickTotalsText(data.tickTotals) +
+      '。' + data.sumNote + '。右側佔比為互斥組合桶（每件只算一次），合計 ' +
+      data.total + ' 件＝案件數。';
+    box.appendChild(sNote);
     var max = 1;
     for(var i = 0; i < data.items.length; i++) if(data.items[i].count > max) max = data.items[i].count;
     for(var j = 0; j < data.items.length; j++){
@@ -12099,13 +12430,15 @@ var state = {
       var fill = document.createElement('span');
       fill.className = 'pc-fill';
       fill.style.width = (it.count / max * 100).toFixed(2) + '%';
-      // 色票與統計卡圓點／類別組成圖同一套，講者版與主報表對得起來
-      fill.style.background = (typeof CAT_COLORS !== 'undefined' && CAT_COLORS[it.cat])
-        ? CAT_COLORS[it.cat] : 'var(--muted)';
+      // 色票與統計卡圓點／類別組成圖同一套，講者版與主報表對得起來；
+      // 組合桶用兩個既有色的漸層（不新增顏色）
+      fill.style.background = (typeof catColorCss === 'function')
+        ? catColorCss(it.cat) : 'var(--muted)';
       track.appendChild(fill);
       var num = document.createElement('span');
       num.className = 'pc-num';
-      num.textContent = it.count + ' 件（' + (it.share * 100).toFixed(1) + '%）';
+      num.textContent = it.count + ' 件（' +
+        (it.sharePct === undefined ? (it.share * 100).toFixed(1) : it.sharePct.toFixed(1)) + '%）';
       row.appendChild(name); row.appendChild(track); row.appendChild(num);
       box.appendChild(row);
     }
@@ -12322,6 +12655,7 @@ var state = {
     '.spk-sec .pc-track{ height:18px; }',
     '.spk-sec .pc-num{ flex:0 0 118px; font-size:13.5px; }',
     '.spk-sec .pc-warn{ font-size:13px; color:var(--muted); }',
+    '.spk-sec .pc-note{ font-size:13px; color:var(--muted); }',
     '.spk-sec .ke-category-chart{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }',
     '.spk-sec .ke-category-chart svg{ min-width:680px; max-width:none; }',
     '.spk-sec .ke-bar-legend{ font-size:13.5px; }',
@@ -13723,6 +14057,32 @@ var state = {
       lastMilestone: lastMilestone,
       computeKeProgress: computeKeProgress,
       computeCatProgress: computeCatProgress,
+      // v1.25.0 類別口徑（件數＝四欄各計一次／佔比＝互斥組合桶）
+      CAT_BUCKET_ORDER: CAT_BUCKET_ORDER,
+      CAT_BUCKET_BLANK: CAT_BUCKET_BLANK,
+      CAT_COMBO_PARTS: CAT_COMBO_PARTS,
+      catTickCats: catTickCats,
+      catTickLabels: catTickLabels,
+      catTickTotals: catTickTotals,
+      catTickTotalsText: catTickTotalsText,
+      catBucketLabel: catBucketLabel,
+      catBucketLabels: catBucketLabels,
+      catBucketRank: catBucketRank,
+      catMultiTickCount: catMultiTickCount,
+      catSumNote: catSumNote,
+      pctOneDecimal: pctOneDecimal,
+      catShareNote: catShareNote,
+      catColorParts: catColorParts,
+      catColorCss: catColorCss,
+      catSolidColor: catSolidColor,
+      catsBreakdown: catsBreakdown,
+      catsByKe: catsByKe,
+      catsByKeBuckets: catsByKeBuckets,
+      rowCatSet: rowCatSet,
+      catSetLabel: catSetLabel,
+      catCellLabel: catCellLabel,
+      notStartedGroups: notStartedGroups,
+      groupByCategory: groupByCategory,
       computeKeQuick: computeKeQuick,
       renderKeQuickSection: renderKeQuickSection,
       KE_QUICK_ORDER: KE_QUICK_ORDER,
