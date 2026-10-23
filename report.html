@@ -212,7 +212,7 @@
   .pc-note{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
   .type-catnote{ font-size:12px; color:var(--muted); margin:10px 0 0; line-height:1.6; }
   .stat-catnote{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
-  /* v1.27.0：潛在月價值一列（L2 開發價值）。刻意不新增顏色 ——
+  /* v1.27.0：預估月運費一列（L2 開發價值）。刻意不新增顏色 ——
      數字用 --text 加粗、標籤與口徑用 --muted，顏色預算留給 4 張卡的既有語意
      （accent 已經代表「進行中」，拿去標金額等於一個顏色代表兩件事）。 */
   .hl-value{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px;
@@ -221,6 +221,10 @@
   .hl-value .hv-k{ color:var(--muted); }
   .hl-value .hv-n{ color:var(--text); font-weight:700; font-size:17px; font-variant-numeric:tabular-nums; }
   .hl-value .hv-m{ color:var(--muted); font-size:12px; }
+  /* v1.27.1：案件清單的數字欄（日均量體／預估月運費）右對齊＋等寬數字，方便上下對算 */
+  .list-table td.list-num{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  /* 收窄這兩欄的左右內距（12→8px）：11 欄在 1440 螢幕仍貼合，不必橫向捲動 */
+  .list-table td.list-num, .list-table th.list-num-h{ padding-left:8px; padding-right:8px; }
   .bf-money{ margin:10px 0 0; padding:6px 0 6px 10px; border-left:3px solid var(--border);
     color:var(--muted); font-size:13px; line-height:1.65; }
   .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
@@ -1589,7 +1593,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.27.0';   // 1.27.0：新增「潛在月價值」一列（L2 開發價值，非實際營收）＋修正 4 處與程式脫節的規則說明／2 處舊標題，並加上說明守門測試
+  var APP_VERSION = '1.27.1';   // 1.27.1：價值口徑正名為「預估月運費」（65 元/件是運費、向 momo 與直客同價、預估參考）＋案件清單新增「日均量體」「預估月運費」兩欄（可排序、未填顯示未填量體）
   var APP_VERSION_DATE = '2026-10-23';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -5396,10 +5400,14 @@ var state = {
   // ---------------------------------------------------------------------------
   var DEV_VALUE_REV_COL = '預估營收/月';
   var DEV_VALUE_QTY_COL = '日均量體';
-  // 月以 30 日曆日計、單價 65 元/件 ⇒ 每件/日的月額 1950 元。
-  // 這個常數只用於「檔案沒有 預估營收/月 欄」時的退回計算；有該欄就以 Excel 的值為準。
-  // 兩者都是待校準的先驗值（上線 1–2 個月後用實際資料回算），不要當定案。
-  var DEV_VALUE_PER_UNIT_MONTH = 1950;
+  // 使用者 2026-10-23 定案：**65 元/件是運費**，向 momo 收的運費與向零擔／甲配客戶收的同一個價，
+  //   僅作「預估參考」，不是財務實績；可以公開查詢，不是秘密。
+  //   月以 30 日曆日計 ⇒ 每件/日的月額 1950 元。只用於「檔案沒有 預估營收/月 欄」時的退回計算，
+  //   有該欄就以 Excel 的值為準（Excel 公式就是 量體 × 30 × 65，實測 77/77 筆一致）。
+  //   ⚠ 65 與 30 都是待校準的先驗值（上線 1–2 個月後用實際資料回算），不要當定案。
+  var DEV_VALUE_DAYS = 30;
+  var DEV_VALUE_UNIT_PRICE = 65;
+  var DEV_VALUE_PER_UNIT_MONTH = DEV_VALUE_DAYS * DEV_VALUE_UNIT_PRICE;   // 1950
 
   // 純函式：把「9,750」「9750元」「 9750 」「－」解析成數字；無法解析回 null
   function parseAmount(v){
@@ -5419,7 +5427,19 @@ var state = {
     return Math.round(n).toLocaleString('en-US') + ' 元';
   }
 
-  // 純函式：一組案件 → 潛在月價值（L2）
+  // 純函式：單筆的預估月運費（元）—— 案件清單那一欄就是用它
+  //   口徑（使用者 2026-10-23 定案）：65 元/件是**運費**，向 momo 收的與向零擔／甲配客戶收的
+  //   同一個價；它是**預估參考**，不是財務實績。沒填量體回 0，由呼叫端顯示「未填量體」。
+  function devValueOfRow(r){
+    if(!r) return 0;
+    var amt = parseAmount(r[DEV_VALUE_REV_COL]);
+    if(amt !== null && amt > 0) return amt;
+    var q = parseAmount(r[DEV_VALUE_QTY_COL]);
+    if(q !== null && q > 0) return q * DEV_VALUE_PER_UNIT_MONTH;
+    return 0;
+  }
+
+  // 純函式：一組案件 → 預估月運費（L2）
   //   { total, filled, missing, sum, rate, source:'revenue'|'qty'|'none' }
   function computeDevValue(rows){
     var list = rows || [];
@@ -5430,42 +5450,35 @@ var state = {
       else if(DEV_VALUE_QTY_COL in probe) source = 'qty';
     }
     for(var i = 0; i < total; i++){
-      var r = list[i] || {};
-      var amt = null;
-      if(source === 'revenue'){
-        amt = parseAmount(r[DEV_VALUE_REV_COL]);
-      } else if(source === 'qty'){
-        var q = parseAmount(r[DEV_VALUE_QTY_COL]);
-        amt = (q === null) ? null : q * DEV_VALUE_PER_UNIT_MONTH;
-      }
-      if(amt !== null && amt > 0){ filled++; sum += amt; }
+      var amt = devValueOfRow(list[i]);
+      if(amt > 0){ filled++; sum += amt; }
     }
     return { total: total, filled: filled, missing: total - filled, sum: sum,
              rate: total ? Math.round(filled / total * 1000) / 10 : 0, source: source };
   }
 
-  // 純函式：畫面上的「潛在月價值」一列（數字＋口徑註記）
+  // 純函式：畫面上的「預估月運費」一列（數字＋口徑註記）
   function devValueText(dev, scopeLabel){
     var scope = String(scopeLabel || '');
     if(!dev || !dev.total || dev.source === 'none'){
       return { big: '尚未填報',
-               note: (scope ? scope + '　·　' : '') + '本檔沒有「' + DEV_VALUE_REV_COL + '」或「' + DEV_VALUE_QTY_COL + '」欄位（L2 開發價值，非實際營收）' };
+               note: (scope ? scope + '　·　' : '') + '本檔沒有「' + DEV_VALUE_REV_COL + '」或「' + DEV_VALUE_QTY_COL + '」欄位，無法估算運費' };
     }
     if(!dev.filled){
       return { big: '尚未填報',
-               note: (scope ? scope + '　·　' : '') + '本期間 ' + dev.total + ' 件都還沒填客戶量體（L2 開發價值，非實際營收）' };
+               note: (scope ? scope + '　·　' : '') + '本期間 ' + dev.total + ' 件都還沒填客戶量體，無法估算運費' };
     }
     return { big: formatMoney(dev.sum),
              note: (scope ? scope + '　·　' : '') + '已填量體 ' + dev.filled + ' / ' + dev.total + ' 件（' + dev.rate + '%）'
                    + (dev.missing ? '　·　另有 ' + dev.missing + ' 件未填，未填不計入總額' : '')
-                   + '　·　L2 開發價值＝' + DEV_VALUE_REV_COL + ' 合計，非實際營收' };
+                   + '　·　預估月運費＝日均量體 × ' + DEV_VALUE_DAYS + ' 日 × ' + DEV_VALUE_UNIT_PRICE + ' 元（向 momo 與向直客同價，預估參考、非財務實績）' };
   }
 
   // 純函式：講者版／講稿用的一句話（口語，不用報表用語）
   function devValueSpeak(dev){
     if(!dev || !dev.total || dev.source === 'none') return '客戶量體還沒建檔，潛在價值目前算不出來。';
     if(!dev.filled) return '這一期的 ' + dev.total + ' 件都還沒填量體，潛在價值算不出來。';
-    var s = '已經填量體的有 ' + dev.filled + ' 件，預估每月 ' + formatMoney(dev.sum) + '；';
+    var s = '已經填量體的有 ' + dev.filled + ' 件，預估每月運費 ' + formatMoney(dev.sum) + '；';
     s += dev.missing ? '另外 ' + dev.missing + ' 件還沒填量體，這塊之後還會再往上加。'
                      : '名單上的案件都已經填了量體。';
     return s;
@@ -5579,14 +5592,14 @@ var state = {
       grid.appendChild(c);
     }
     container.appendChild(grid);
-    // 潛在月價值（L2）—— 刻意做成「一列」而不是第 5 張卡：
+    // 預估月運費（L2）—— 刻意做成「一列」而不是第 5 張卡：
     //   卡片固定 4 張是 v1.19.0 為了「縮到 20cm 截圖後字級仍可讀」併卡換來的，
     //   再加第 5 張會把字級打回去（等於撤銷那次的成果）。
     var dvLine = document.createElement('p');
     dvLine.className = 'hl-value';
     var dvDev = computeDevValue(model.rows);
     var dvText = devValueText(dvDev, periodScopeLabel(state.period, new Date()));
-    var dvK = document.createElement('span'); dvK.className = 'hv-k'; dvK.textContent = '潛在月價值';
+    var dvK = document.createElement('span'); dvK.className = 'hv-k'; dvK.textContent = '預估月運費';
     var dvN = document.createElement('span'); dvN.className = 'hv-n'; dvN.textContent = dvText.big;
     var dvM = document.createElement('span'); dvM.className = 'hv-m'; dvM.textContent = dvText.note;
     dvLine.appendChild(dvK); dvLine.appendChild(dvN); dvLine.appendChild(dvM);
@@ -7548,7 +7561,7 @@ var state = {
       grid.appendChild(card);
     }
     box.appendChild(grid);
-    // 潛在月價值（L2）—— 共用事實：放在 KPI 帶之後、模式切換區之外，
+    // 預估月運費（L2）—— 共用事實：放在 KPI 帶之後、模式切換區之外，
     //   所以 3 種模式都看得到，講者版也只快照一份（放進各模式會變成 3 份）。
     var money = document.createElement('p');
     money.className = 'bf-money';
@@ -10284,10 +10297,18 @@ var state = {
     { key: '報價', label: '報價' },
     { key: '簽約', label: '簽約' },
     { key: '導入', label: '導入' },
-    { key: '狀態', label: '狀態' }
+    { key: '狀態', label: '狀態' },
+    // v1.27.1：使用者定案「65 元是運費，可以向 momo 收也可以向直客收，都是預估參考、不是秘密」
+    //   ⇒ 案件清單要看得到「量體」與「預估月運費」，讓每一筆都能自己驗算（65 × 30 × 量體）。
+    //   ⚠ 沒有量體的案件顯示「未填量體」，不顯示 0（0 會被讀成「這家沒量」）。
+    { key: '日均量體', label: '日均量體' },
+    { key: '預估月運費', label: '預估月運費' }
   ];
 
   // 會議精簡 profile：預設核心欄位（寬度可完整塞進一屏，簡報最好讀）
+  // ⚠ 核心 profile 刻意維持 9 欄：實測 9 欄剛好貼合 1440 螢幕（1028px），
+  //   再加兩欄會多出約 166px → 運費欄被推到捲動區外，等於「看不到」。
+  //   兩欄改走兩條路：① 右上「全欄位」一次顯示並可排序 ② 點該列展開明細就有一行金額（查詢用）。
   var LIST_CORE_IDS = ['序號', '公司名稱', '課別', '開發者', '類別', '收貨站所', '填單日期', '導入', '狀態'];
   var ALL_LIST_COLS = (function(){
     var o = {};
@@ -10775,6 +10796,10 @@ var state = {
     if(col === '狀態') return classifyStatus(r);
     // 類別欄顯示的是勾選集合的組合名稱 → 排序也照顯示值排，否則畫面上會看起來亂序
     if(col === '類別') return catCellLabel(r);
+    // v1.27.1：預估月運費是計算欄（不是原始欄位），排序要照它自己的數值，否則會照空字串排
+    //   沒有量體的案件（0）回 null → compareVal／sortRows 會把它們固定排最後，
+    //   否則升冪時 174 筆「未填量體」會整批擋在第一頁。
+    if(col === '預估月運費'){ var fee = devValueOfRow(r); return fee > 0 ? String(fee) : null; }
     return fieldStr(r, col);
   }
 
@@ -10805,6 +10830,11 @@ var state = {
       arr.push({ r: rows[i], v: sortValue(rows[i], col), i: i });
     }
     arr.sort(function(a, b){
+      // null＝這一欄沒有值（例如沒填量體就沒有預估月運費）：不論升降冪都排最後
+      if(a.v === null || b.v === null){
+        if(a.v === null && b.v === null) return (a.i < b.i) ? -1 : (a.i > b.i ? 1 : 0);
+        return (a.v === null) ? 1 : -1;
+      }
       var c = compareVal(a.v, b.v);
       if(c === 0) c = (a.i < b.i) ? -1 : (a.i > b.i ? 1 : 0);
       return c * d;
@@ -11218,6 +11248,22 @@ var state = {
       { label: '說明', key: '說明', empty: '（無說明）' },
       { label: '結案', key: '結案', empty: '（無結案原因）' }
     ];
+    // v1.27.1：預估月運費（查詢用；與清單「全欄位」那一欄同一個算法）。
+    //   沒填量體寫「未填量體」，不寫 0 —— 0 會被讀成「這家沒量」。
+    var feeRow = devValueOfRow(r);
+    var feeP = document.createElement('p');
+    var feeLb = document.createElement('span');
+    feeLb.className = 'do-field-label';
+    feeLb.textContent = '預估月運費：';
+    feeP.appendChild(feeLb);
+    if(feeRow > 0){
+      feeP.appendChild(document.createTextNode(
+        Math.round(feeRow).toLocaleString('en-US') + ' 元（日均量體 ' + fieldStr(r, '日均量體') + ' × 30 日 × 65 元）'));
+    } else {
+      feeP.classList.add('do-empty');
+      feeP.appendChild(document.createTextNode('未填量體，無法估算'));
+    }
+    inner.appendChild(feeP);
     for(var i = 0; i < fields.length; i++){
       var p = document.createElement('p');
       var lb = document.createElement('span');
@@ -11314,7 +11360,8 @@ var state = {
     for(var c = 0; c < cols.length; c++){
       var col = cols[c];
       var th = document.createElement('th');
-      th.className = 'sortable';
+      th.className = 'sortable' +
+        ((col.key === '日均量體' || col.key === '預估月運費') ? ' list-num-h' : '');
       th.setAttribute('scope', 'col');
       var lab = document.createElement('span');
       lab.textContent = col.label;
@@ -11436,6 +11483,23 @@ var state = {
           }
           td.setAttribute('data-cats', cats.join('|'));
         }
+      } else if(cols[v].key === '日均量體'){
+        var qtyTxt = fieldStr(row, '日均量體');
+        td.textContent = qtyTxt || '未填量體';
+        td.className = 'list-num';
+        if(!qtyTxt) td.classList.add('do-empty');
+      } else if(cols[v].key === '預估月運費'){
+        // 預估月運費 ＝ 日均量體 × 30 日 × 65 元（＝Excel 的「預估營收/月」）
+        //   使用者定案：這是**運費**（向 momo 與向直客同價），預估參考、不是財務實績。
+        var amtRow = devValueOfRow(row);
+        if(amtRow > 0){
+          td.textContent = Math.round(amtRow).toLocaleString('en-US');
+          td.className = 'list-num';
+        } else {
+          td.textContent = '未填量體';
+          td.className = 'do-empty';
+        }
+        td.title = '預估月運費 ＝ 日均量體 × 30 日 × 65 元（預估參考，非財務實績）';
       } else {
         var val = (cols[v].key === '狀態') ? classifyStatus(row) : fieldStr(row, cols[v].key);
         td.textContent = val;
@@ -11638,7 +11702,7 @@ var state = {
       //    改這裡之前先跑 test-blocksync.js，它會抓「說明與實際不符」。
       '四張統計卡跟著「篩選 ＋ 分析期間」變動；期間不是「全部數據」時，前兩張改為「本期新增案件」與「本期導入完成」，第二張右側並排「成案率」。',
       '下方排行榜與主要流失節點同樣用「篩選 ＋ 分析期間」後的案件計算；只有卡片上的「全期累計」才是不受期間影響的全部資料。',
-      '統計卡下方的「潛在月價值」是「預估營收/月」合計（L2 開發價值，不是實際營收）；只計有填量體的案件，沒填的一律以「尚未填報」表示，不當成 0。'
+      '統計卡下方的「預估月運費」＝日均量體 × 30 日 × 65 元（＝「預估營收/月」欄）合計；65 元是運費，向 momo 與向零擔／甲配客戶收同一個價，屬預估參考、非財務實績。只計有填量體的案件，沒填一律顯示「尚未填報」，不當成 0。'
     ],
     statSection: [
       '每張卡是一個課別的客戶案件數，跟著「分析期間」與篩選變動；期間以填單日期為準。',
@@ -11712,7 +11776,9 @@ var state = {
       '類別是一個客戶可勾多個（1P／3P／甲配／零擔四個獨立勾選欄），所以類別可以多選；同時選兩項表示兩項都要有。',
       '勾了多個類別的案件，在它的每一個類別下都找得到；「未分類」是四欄都沒勾的案件。',
       '類別欄會列出該案的全部類別，多個類別時先顯示組合名稱（例如零擔1P），滑鼠移上去可看完整組合。',
-      '點任一列可展開明細；從其他區塊點案件名稱跳過來時，會自動定位並展開那一筆。'
+      '點任一列可展開明細；從其他區塊點案件名稱跳過來時，會自動定位並展開那一筆。',
+      '「日均量體」「預估月運費」兩欄放在右上『全欄位』裡（可排序）；預估月運費 ＝ 日均量體 × 30 日 × 65 元（向 momo 與向直客同價，預估參考、非財務實績），點任一列展開明細也有一行金額可查。',
+      '預設 9 欄是會議用精簡版（剛好貼合一個螢幕），所以預設不顯示這兩欄；沒填量體一律寫「未填量體」，不寫 0。'
     ]
   };
 
@@ -14241,8 +14307,11 @@ var state = {
       // v1.25.0 類別口徑（件數＝四欄各計一次／佔比＝互斥組合桶）
       CAT_BUCKET_ORDER: CAT_BUCKET_ORDER,
       CAT_BUCKET_BLANK: CAT_BUCKET_BLANK,
-      // v1.27.0：L2 開發價值（潛在月價值）＋說明守門用的常數
+      // v1.27.0：L2 開發價值（預估月運費）＋說明守門用的常數
       computeDevValue: computeDevValue,
+      devValueOfRow: devValueOfRow,
+      DEV_VALUE_DAYS: DEV_VALUE_DAYS,
+      DEV_VALUE_UNIT_PRICE: DEV_VALUE_UNIT_PRICE,
       devValueText: devValueText,
       devValueSpeak: devValueSpeak,
       formatMoney: formatMoney,
