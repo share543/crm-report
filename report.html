@@ -212,6 +212,17 @@
   .pc-note{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
   .type-catnote{ font-size:12px; color:var(--muted); margin:10px 0 0; line-height:1.6; }
   .stat-catnote{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.6; }
+  /* v1.27.0：潛在月價值一列（L2 開發價值）。刻意不新增顏色 ——
+     數字用 --text 加粗、標籤與口徑用 --muted，顏色預算留給 4 張卡的既有語意
+     （accent 已經代表「進行中」，拿去標金額等於一個顏色代表兩件事）。 */
+  .hl-value{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px;
+    margin:0 0 10px; padding:8px 12px; border:1px solid var(--border); border-radius:8px;
+    background:var(--card-2); font-size:13px; line-height:1.5; }
+  .hl-value .hv-k{ color:var(--muted); }
+  .hl-value .hv-n{ color:var(--text); font-weight:700; font-size:17px; font-variant-numeric:tabular-nums; }
+  .hl-value .hv-m{ color:var(--muted); font-size:12px; }
+  .bf-money{ margin:10px 0 0; padding:6px 0 6px 10px; border-left:3px solid var(--border);
+    color:var(--muted); font-size:13px; line-height:1.65; }
   .ke-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .ke-card{ background:var(--card-2); border:1px solid var(--border); border-radius:10px;
     padding:6px 10px; display:flex; flex-direction:column; gap:4px; }
@@ -1578,8 +1589,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.26.0';   // 1.26.0：口徑說明句全站統一為「各類別各計一次；N 件同時屬兩類」（N 依各區塊母體即時算）＋案件清單頂端多類別／未分類件數
-  var APP_VERSION_DATE = '2026-10-22';
+  var APP_VERSION = '1.27.0';   // 1.27.0：新增「潛在月價值」一列（L2 開發價值，非實際營收）＋修正 4 處與程式脫節的規則說明／2 處舊標題，並加上說明守門測試
+  var APP_VERSION_DATE = '2026-10-23';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -5372,6 +5383,101 @@ var state = {
   // ---------------------------------------------------------------------------
   // 渲染：開場亮點摘要（總覽數值＋最佳開發/完成導入者·課·站所＋主要流失節點，附跳轉錨點）
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // L2 開發價值（潛在月營收，預估）—— v1.27.0
+  //   口徑：一律稱「開發價值」，不叫營收 —— L3 財務實際營收不進本報表。
+  //   來源優先序：
+  //     ①「預估營收/月」欄（Excel 已用公式＝日均量體 × 30 日 × 單價算出，值已是月額）
+  //     ②沒有該欄時，退回「日均量體」× DEV_VALUE_PER_UNIT_MONTH 現算
+  //     ③兩者都沒有 → 尚未填報
+  //   ⚠ 未填量體的案件會被 Excel 公式帶成 0，所以「0」不等於已填：
+  //     只有值 > 0 才計入 filled，否則 174 筆未填會被算成「這家沒量」而低估總額。
+  //   ⚠ 一律不回 0：0 在畫面上會被讀成「這家沒量」，與「還沒填」是兩件事。
+  // ---------------------------------------------------------------------------
+  var DEV_VALUE_REV_COL = '預估營收/月';
+  var DEV_VALUE_QTY_COL = '日均量體';
+  // 月以 30 日曆日計、單價 65 元/件 ⇒ 每件/日的月額 1950 元。
+  // 這個常數只用於「檔案沒有 預估營收/月 欄」時的退回計算；有該欄就以 Excel 的值為準。
+  // 兩者都是待校準的先驗值（上線 1–2 個月後用實際資料回算），不要當定案。
+  var DEV_VALUE_PER_UNIT_MONTH = 1950;
+
+  // 純函式：把「9,750」「9750元」「 9750 」「－」解析成數字；無法解析回 null
+  function parseAmount(v){
+    if(v === null || v === undefined) return null;
+    if(typeof v === 'number') return isFinite(v) ? v : null;
+    var s = String(v).replace(/[,\s，]/g, '').replace(/元$/, '').replace(/^NT\$?/i, '');
+    if(s === '' || s === '-' || s === '－' || s === '—') return null;
+    var n = Number(s);
+    return isFinite(n) ? n : null;
+  }
+
+  // 純函式：金額 → 口語（億／萬／元）
+  function formatMoney(v){
+    var n = Number(v) || 0;
+    if(Math.abs(n) >= 1e8) return (n / 1e8).toFixed(1) + ' 億元';
+    if(Math.abs(n) >= 1e4) return (n / 1e4).toFixed(1) + ' 萬元';
+    return Math.round(n).toLocaleString('en-US') + ' 元';
+  }
+
+  // 純函式：一組案件 → 潛在月價值（L2）
+  //   { total, filled, missing, sum, rate, source:'revenue'|'qty'|'none' }
+  function computeDevValue(rows){
+    var list = rows || [];
+    var total = list.length, filled = 0, sum = 0, source = 'none';
+    if(total){
+      var probe = list[0] || {};
+      if(DEV_VALUE_REV_COL in probe) source = 'revenue';
+      else if(DEV_VALUE_QTY_COL in probe) source = 'qty';
+    }
+    for(var i = 0; i < total; i++){
+      var r = list[i] || {};
+      var amt = null;
+      if(source === 'revenue'){
+        amt = parseAmount(r[DEV_VALUE_REV_COL]);
+      } else if(source === 'qty'){
+        var q = parseAmount(r[DEV_VALUE_QTY_COL]);
+        amt = (q === null) ? null : q * DEV_VALUE_PER_UNIT_MONTH;
+      }
+      if(amt !== null && amt > 0){ filled++; sum += amt; }
+    }
+    return { total: total, filled: filled, missing: total - filled, sum: sum,
+             rate: total ? Math.round(filled / total * 1000) / 10 : 0, source: source };
+  }
+
+  // 純函式：畫面上的「潛在月價值」一列（數字＋口徑註記）
+  function devValueText(dev, scopeLabel){
+    var scope = String(scopeLabel || '');
+    if(!dev || !dev.total || dev.source === 'none'){
+      return { big: '尚未填報',
+               note: (scope ? scope + '　·　' : '') + '本檔沒有「' + DEV_VALUE_REV_COL + '」或「' + DEV_VALUE_QTY_COL + '」欄位（L2 開發價值，非實際營收）' };
+    }
+    if(!dev.filled){
+      return { big: '尚未填報',
+               note: (scope ? scope + '　·　' : '') + '本期間 ' + dev.total + ' 件都還沒填客戶量體（L2 開發價值，非實際營收）' };
+    }
+    return { big: formatMoney(dev.sum),
+             note: (scope ? scope + '　·　' : '') + '已填量體 ' + dev.filled + ' / ' + dev.total + ' 件（' + dev.rate + '%）'
+                   + (dev.missing ? '　·　另有 ' + dev.missing + ' 件未填，未填不計入總額' : '')
+                   + '　·　L2 開發價值＝' + DEV_VALUE_REV_COL + ' 合計，非實際營收' };
+  }
+
+  // 純函式：講者版／講稿用的一句話（口語，不用報表用語）
+  function devValueSpeak(dev){
+    if(!dev || !dev.total || dev.source === 'none') return '客戶量體還沒建檔，潛在價值目前算不出來。';
+    if(!dev.filled) return '這一期的 ' + dev.total + ' 件都還沒填量體，潛在價值算不出來。';
+    var s = '已經填量體的有 ' + dev.filled + ' 件，預估每月 ' + formatMoney(dev.sum) + '；';
+    s += dev.missing ? '另外 ' + dev.missing + ' 件還沒填量體，這塊之後還會再往上加。'
+                     : '名單上的案件都已經填了量體。';
+    return s;
+  }
+
+  // 開場亮點摘要的統計卡標籤（單一來源：畫面與 test-blocksync.js 都讀這裡）
+  function highlightCardLabels(isPeriodView){
+    return isPeriodView
+      ? ['本期新增案件', '本期導入完成', '進行中', '未啟動']
+      : ['總客戶數', '合作結案', '進行中', '未啟動'];
+  }
+
   function renderHighlights(container, model, allRows){
     container.textContent = '';
     if(!model || !model.rows || !model.rows.length){
@@ -5406,14 +5512,15 @@ var state = {
       metaN = { d: briefDelta(model.rows.length, prevRows.length), prev: prevRows.length, all: allRows2.length };
       metaI = { d: briefDelta(cpn, cpp), prev: cpp, all: countCoop(allRows2) };
     }
+    var hlLabels = highlightCardLabels(isPeriodView);
     var big = [
-      { label: isPeriodView ? '本期新增案件' : '總客戶數', value: String(stats.total), cls: '',
+      { label: hlLabels[0], value: String(stats.total), cls: '',
         cats: catsBreakdown(model.rows, null), meta: metaN },
-      { label: isPeriodView ? '本期導入完成' : '合作結案', value: String(stats.coop), cls: '',
+      { label: hlLabels[1], value: String(stats.coop), cls: '',
         cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '合作成功'; }), meta: metaI,
         rate: stats.rate },   // 2026-10-20：成案率併入同一張卡，左右並排
-      { label: '進行中', value: String(stats.byStatus['進行中'] || 0), cls: 'accent', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '進行中'; }) },
-      { label: '未啟動', value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) }
+      { label: hlLabels[2], value: String(stats.byStatus['進行中'] || 0), cls: 'accent', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '進行中'; }) },
+      { label: hlLabels[3], value: String(stats.byStatus['未啟動'] || 0), cls: '', cats: catsBreakdown(model.rows, function(r){ return classifyStatus(r) === '未啟動'; }) }
     ];
     for(var i = 0; i < big.length; i++){
       var c = document.createElement('div');
@@ -5472,6 +5579,22 @@ var state = {
       grid.appendChild(c);
     }
     container.appendChild(grid);
+    // 潛在月價值（L2）—— 刻意做成「一列」而不是第 5 張卡：
+    //   卡片固定 4 張是 v1.19.0 為了「縮到 20cm 截圖後字級仍可讀」併卡換來的，
+    //   再加第 5 張會把字級打回去（等於撤銷那次的成果）。
+    var dvLine = document.createElement('p');
+    dvLine.className = 'hl-value';
+    var dvDev = computeDevValue(model.rows);
+    var dvText = devValueText(dvDev, periodScopeLabel(state.period, new Date()));
+    var dvK = document.createElement('span'); dvK.className = 'hv-k'; dvK.textContent = '潛在月價值';
+    var dvN = document.createElement('span'); dvN.className = 'hv-n'; dvN.textContent = dvText.big;
+    var dvM = document.createElement('span'); dvM.className = 'hv-m'; dvM.textContent = dvText.note;
+    dvLine.appendChild(dvK); dvLine.appendChild(dvN); dvLine.appendChild(dvM);
+    dvLine.setAttribute('data-dev-value', String(dvDev.sum));
+    dvLine.setAttribute('data-dev-filled', String(dvDev.filled));
+    dvLine.setAttribute('data-dev-total', String(dvDev.total));
+    dvLine.setAttribute('data-dev-source', dvDev.source);
+    container.appendChild(dvLine);
     // 口徑註記（件數）：藥丸排是「四個勾選欄各計一次」，多勾客戶在兩個類別各算一次
     //   ⇒ 橫向相加會大於卡片上的案件數。沒有這句話，看的人會以為統計壞了。
     var catNote = document.createElement('p');
@@ -7425,6 +7548,12 @@ var state = {
       grid.appendChild(card);
     }
     box.appendChild(grid);
+    // 潛在月價值（L2）—— 共用事實：放在 KPI 帶之後、模式切換區之外，
+    //   所以 3 種模式都看得到，講者版也只快照一份（放進各模式會變成 3 份）。
+    var money = document.createElement('p');
+    money.className = 'bf-money';
+    money.textContent = devValueSpeak(computeDevValue(rows));
+    box.appendChild(money);
   }
   // 段內小標（標題欄）。只在「結論句沒有自己講出這件事」時才顯示 ——
   //   例：「停滯超過 30 天 59 件」已經點名停滯，再加一個「停滯」前綴只是雜訊；
@@ -11504,13 +11633,17 @@ var state = {
       '資料缺漏：進行中案件缺 開發者／聯絡窗口／收貨站所（未啟動與已結案不列入）。'
     ],
     highlightSection: [
-      '五張統計卡跟著「篩選 ＋ 分析期間」變動；期間不是「全部數據」時，前兩張改為「本期新增案件」與「本期導入完成」。',
-      '下方排行榜（最佳開發／最佳導入的課、站所、人）固定用全部資料，不隨期間縮放。'
+      // ⚠ v1.27.0：本段曾寫「五張統計卡」與「排行榜固定用全部資料」，兩者都與程式不符
+      //    （v1.19.0 已併成 4 張；排行榜用的是期間篩選後的 model.rows）。
+      //    改這裡之前先跑 test-blocksync.js，它會抓「說明與實際不符」。
+      '四張統計卡跟著「篩選 ＋ 分析期間」變動；期間不是「全部數據」時，前兩張改為「本期新增案件」與「本期導入完成」，第二張右側並排「成案率」。',
+      '下方排行榜與主要流失節點同樣用「篩選 ＋ 分析期間」後的案件計算；只有卡片上的「全期累計」才是不受期間影響的全部資料。',
+      '統計卡下方的「潛在月價值」是「預估營收/月」合計（L2 開發價值，不是實際營收）；只計有填量體的案件，沒填的一律以「尚未填報」表示，不當成 0。'
     ],
     statSection: [
       '每張卡是一個課別的客戶案件數，跟著「分析期間」與篩選變動；期間以填單日期為準。',
       '課別卡照北一、北二、北三、中、南一、南二、分轉部排，其餘依名稱接後，沒有案件的不顯示。',
-      '卡片下方的類別件數只分零擔、甲指、甲配、1P、3P，其他寫法與空白一律歸成「其他」。',
+      '卡片下方的類別件數是四個勾選欄（零擔／1P(SCM)／3P(MO+)／甲配）各計一次；甲配自成一類不併進甲指，四欄都沒勾的顯示「（類別未填）」，沒有「其他」這一桶。',
       '下方長條圖是同一組數字，改成件數多的課別排前面，色段代表該課別的類別組成。',
       '這區塊只按課別與類別計數，沒有再依合作、進行中、未啟動拆開。'
     ],
@@ -11535,7 +11668,8 @@ var state = {
       '導入率＝導入件數 ÷ 填單日期件數，取一位小數；跟著分析期間與篩選變動。'
     ],
     typeSection: [
-      '依「類別」欄原文分組，空白自成一類不併進其他；順序固定零擔、1P、3P，其餘依名稱排。',
+      '依「這一筆勾了哪些類別」分組：只勾一欄就是那個類別，同時勾兩欄的自成一個組合桶（例如零擔1P）；四欄都沒勾的自成「（類別未填）」一桶，不併進其他。',
+      '桶的順序先照固定桶序（零擔、零擔1P、1P(SCM)、零擔3P、3P(MO+)、組合桶…、類別未填），其餘沒列到的依件數多→少排。',
       '圓餅中心的數字是全部案件件數，各類別占比都以它為分母。',
       '導入成功率＝該類別裡標記「導入完成」的件數 ÷ 該類別件數，取整數百分比。',
       '規則檢核只做提示：導入有日期但簽約空白應為 1P／3P，簽約與導入都有日期應為零擔／甲配。',
@@ -13106,7 +13240,7 @@ var state = {
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection', title: '案件狀態統計' },
     { id: 'keQuickSection', title: '各課追蹤簡表' },
-    { id: 'notStartedSection', title: '未啟動案件追蹤表' },
+    { id: 'notStartedSection', title: '案件追蹤與逾期監控' },
     { id: 'progressSection', title: '進度追蹤表' },
     { id: 'typeSection', title: '案件類型分析' },
     { id: 'funnelSection', title: '里程碑漏斗' },
@@ -13142,7 +13276,7 @@ var state = {
     { id: 'highlightSection', title: '開場亮點摘要' },
     { id: 'statSection',      title: '案件狀態統計' },
     { id: 'keQuickSection',   title: '各課追蹤簡表' },
-    { id: 'notStartedSection', title: '未啟動案件追蹤表' },
+    { id: 'notStartedSection', title: '案件追蹤與逾期監控' },
     { id: 'progressSection',  title: '進度追蹤表' },
     { id: 'typeSection',      title: '案件類型分析' },
     { id: 'funnelSection',    title: '漏斗分析' },
@@ -14107,6 +14241,20 @@ var state = {
       // v1.25.0 類別口徑（件數＝四欄各計一次／佔比＝互斥組合桶）
       CAT_BUCKET_ORDER: CAT_BUCKET_ORDER,
       CAT_BUCKET_BLANK: CAT_BUCKET_BLANK,
+      // v1.27.0：L2 開發價值（潛在月價值）＋說明守門用的常數
+      computeDevValue: computeDevValue,
+      devValueText: devValueText,
+      devValueSpeak: devValueSpeak,
+      formatMoney: formatMoney,
+      parseAmount: parseAmount,
+      highlightCardLabels: highlightCardLabels,
+      DEV_VALUE_REV_COL: DEV_VALUE_REV_COL,
+      DEV_VALUE_QTY_COL: DEV_VALUE_QTY_COL,
+      DEV_VALUE_PER_UNIT_MONTH: DEV_VALUE_PER_UNIT_MONTH,
+      BLOCK_RULES: BLOCK_RULES,
+      PRESENT_SLIDES: PRESENT_SLIDES,
+      PRINT_SECTIONS: PRINT_SECTIONS,
+      DATE_COLS: DATE_COLS,
       CAT_COMBO_PARTS: CAT_COMBO_PARTS,
       catTickCats: catTickCats,
       catTickLabels: catTickLabels,
