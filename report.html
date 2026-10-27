@@ -157,6 +157,9 @@
     section.card.collapsible > h2::after{ content:none !important; }
   }
   .table-wrap{ overflow:auto; max-height:480px; border:1px solid var(--border); border-radius:8px; }
+  /* v1.29.1：投影模式一律展開收合區塊（簡報是搬 section 進 pv-body，收合會只剩標題） */
+  body.pv-mode section.card.collapsible.collapsed > :not(h2){ display:block !important; }
+  body.pv-mode section.card.collapsible > h2::after{ content:none !important; }
   table{ border-collapse:collapse; width:max-content; min-width:100%; font-size:13px; }
   thead th{ position:sticky; top:0; background:var(--card-2); color:var(--muted);
     font-weight:600; text-align:left; padding:8px 12px; border-bottom:1px solid var(--border);
@@ -1494,7 +1497,7 @@
     <h2>案件類型分析</h2>
     <div id="typeAnalysis" class="pending">待產生</div>
   </section>
-  <section class="card" id="valueFunnelSection" hidden>
+  <section class="card collapsible collapsed" id="valueFunnelSection" hidden>
     <h2>預估月運費分析 <span class="muted">類別 × 開發階段 · 單位：萬元／月（同一筆只算一次）</span></h2>
     <div id="valueFunnel" class="pending">待產生</div>
   </section>
@@ -1621,7 +1624,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.29.0';   // 1.29.0：新增「預估月運費分析」區塊（類別 × 七階段 × 月運費，金額互斥分配），並把開場亮點的金額兩行搬過去
+  var APP_VERSION = '1.29.1';   // 1.29.1：預估月運費分析改為可開合、預設收合（列印／投影／存圖／跳轉時自動展開）
   var APP_VERSION_DATE = '2026-10-27';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -6487,6 +6490,9 @@ var state = {
   function unfoldSection(el){
     if(!el) return null;
     if(el.classList && el.classList.contains('folded')) el.classList.remove('folded');
+    // v1.29.1：收合區塊（.collapsible.collapsed）被跳轉／回跳指定時也要展開，
+    //   否則使用者點過去只看到一個標題。刻意**不**寫回 localStorage（那是他自己的偏好）。
+    if(el.classList && el.classList.contains('collapsed')) el.classList.remove('collapsed');
     el.hidden = false;
     return el;
   }
@@ -12566,7 +12572,11 @@ var state = {
 
   // 量測＋SVG foreignObject 生成圖片
   function generateSnapshot(sectionEl, opts){
-    return new Promise(function(resolve, reject){
+    // v1.29.1：收合區塊必須「實際」展開再量測 —— 只在輸出 SVG 裡補 CSS 沒用，
+    //   因為高度是用 probe.offsetHeight 在真實 DOM 量的，量到的是收合高度（實測只拍到標題）。
+    var wasCollapsed = !!(sectionEl && sectionEl.classList && sectionEl.classList.contains('collapsed'));
+    if(wasCollapsed) sectionEl.classList.remove('collapsed');
+    var _p = new Promise(function(resolve, reject){
       try{
         if(!sectionEl) throw new Error('找不到目標區塊');
         var host = document.getElementById('snapHost');
@@ -12579,6 +12589,9 @@ var state = {
         snapshotCss += '\n.shot-root .snap-btn{ display:none !important; }';
         // 跳轉按鈕也一樣（操作介面不該進圖片）；整組工具列一起收掉較保險
         snapshotCss += '\n.shot-root .card-tools{ display:none !important; }';
+        // v1.29.1：收合區塊在存圖時要展開，否則只拍到標題（列印已有同類規則）
+        // （收合的展開已改在函式開頭「實際」展開；這裡只收掉箭頭）
+        snapshotCss += '\n.shot-root section.card.collapsible > h2::after{ content:none !important; }';
         snapshotCss += '\n.shot-root #laser, .shot-root .lz-pulse{ display:none !important; }';
         // 重點分析的「切換講稿模式」是操作介面，不進圖片
         snapshotCss += '\n.shot-root .bf-mode, .shot-root .bf-modes{ display:none !important; }';
@@ -12664,6 +12677,9 @@ var state = {
         img.src = url;
       }catch(err){ reject(err); }
     });
+    // 還原使用者的收合狀態（成功或失敗都要還原）
+    return _p.then(function(res){ if(wasCollapsed) sectionEl.classList.add('collapsed'); return res; },
+                   function(err){ if(wasCollapsed) sectionEl.classList.add('collapsed'); throw err; });
   }
 
   function exportSnapshot(action){

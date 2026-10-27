@@ -1839,3 +1839,25 @@ B 版將已導入累計 從原來的一個儲存格拆為 1P/3P 新舊客戶各 
 
 ⚠️ **README 雙欄區塊清單別用兩次 replace 插入**：那份表是「兩欄並排」，插入一列會讓左欄多一格、標題重複
 （實測把「開場亮點摘要」變成兩列）。**整段表格改寫**才安全。
+
+
+### v1.29.1（2026-10-27）預估月運費分析改為可開合、預設收合
+
+使用者：「這個區塊改為可開合，預設合起來」。沿用既有 `collapsible`／`collapsed` 機制（與 `rawSection` 同一套），
+不自己寫一套開合。
+
+- 標記：`<section class="card collapsible collapsed" id="valueFunnelSection" hidden>`；狀態由 `crm-collapse` 的 localStorage 記住。
+- **列印**：既有 `@media print` 規則（`section.card.collapsible.collapsed > :not(h2){display:block!important}`）自動展開。
+- **投影**：新增 `body.pv-mode section.card.collapsible.collapsed > :not(h2){display:block!important}` —— 簡報是把 `<section>` 搬進 `#pvBody`，不展開會只剩標題。
+- **跳轉／回跳**：`unfoldSection()` 增加「若 `.collapsed` 就移除」，但**不寫回 localStorage**（那是使用者的偏好）。
+- **存圖**：⚠ 這是最容易做錯的一處。原本想在 `snapshotCss` 補一條「收合也顯示」的 CSS —— **無效**，
+  因為高度是用 `probe.offsetHeight` 在**真實 DOM** 量測的，那段 CSS 只嵌進最後輸出的 SVG，量測階段拿到的仍是收合高度（實測 PNG 只拍到標題、42 KB）。
+  正確做法：`generateSnapshot()` 開頭**實際** `classList.remove('collapsed')`，並在 Promise 的 then/catch 兩條路徑都還原（PNG 變 352 KB、7 列齊全）。
+
+驗證：`tools/verify-v1291-e2e.py`
+- 預設 `collapsed` + `aria-expanded=false` + 表格高度 0，但資料仍在 DOM（7 列）
+- 點標題：表格高度 0 → 261；再點回 0
+- 收合狀態下列印：PDF 仍有「預估月運費分析」、七階段、999.4／817.1
+- 收合狀態下存圖：PNG 352 KB，7 列＋兩行摘要齊全，且不含 `.card-tools`
+- 簡報第 9 頁（索引 8）自動展開，表格高度 312
+- 重整後維持使用者選擇；console 無錯
