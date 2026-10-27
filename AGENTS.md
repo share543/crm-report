@@ -1872,3 +1872,40 @@ v1.29.1 實測：commit `3b3de3b`、report.html **752,962 bytes**、sha256 `05bc
 另附預覽圖 `crm-report-v1291-preview.png`（281,900 bytes、sha256 `383c8c35…`）——
 **HTML 附件在 Outlook 預覽窗格會被擋 JavaScript 看起來空白**，附圖讓收件者在信裡就能確認版面。
 兩件附件都抓 CDN 回讀比對 sha256，皆 MATCH。
+
+### v1.29.2（2026-10-27）案件清單篩選不再跳版／回跳後膠囊要消失
+
+使用者回報兩件事：① 案件清單點類別鈕時畫面上下跳、甚至跳到別的區塊；② 跳到清單後按「回到原來區塊」膠囊，膠囊不會消失。
+
+#### ① 跳版的真正原因（先量再修）
+
+`rebuild()` 會重畫全部 22 個區塊；篩選後**上方多個區塊變矮**（流失分析 −559px、類型分析 −125px、
+highlight −79、progress −77、stat −72、dropReason −62、alerts −50），清單區塊因此**上移 1,023px**。
+實測：篩選列在視窗 300px 時位移 −61px；在視窗底部時 **−621px**（＝看起來跳到別的區塊）。
+
+修法（`pickRebuildAnchor` / `restoreRebuildAnchor`，rebuild 前後各一次）：
+- 錨點優先序：① 剛互動過的區塊（`pointerdown`／`focusin` 記 `_lastSecId`）② 有焦點的控制項所在區塊 ③ 佔據視窗上緣的區塊。
+- 重建後在 **0／1／2 frames、60～1200ms 共 8 個時間點**反覆「量差距→scrollBy 補差距」。
+  ⚠ **只量一次會更糟**：版面還在重排時量到的差距不準，實測單次校正反而多推 219px。
+- 捲動被文件長度夾住時（篩到 0 筆，文件矮 5,723px，差 143px 補不回來）：**加一段剛好夠用的暫時底部空間**
+  (`#rebuildSpacer`) 再捲，位置就能精準回到原點；使用者下一次 wheel／touch／keydown 就移除，不會留永久空白，列印時也隱藏。
+- `html, body{ overflow-anchor:none }`：關掉瀏覽器原生 scroll anchoring，避免和手動校正互相加乘。
+  ⚠ 只寫在 `main` 上無效（捲動容器是 html）。
+- 使用者期間自己捲動就放棄校正（wheel／touchstart／keydown 一次性 listener），不跟使用者搶捲軸。
+
+實測四情境（真滑鼠點 chip，量篩選列的視窗位置變化）：300px 處 **+1px**、視窗底部 **+1px**、選零擔 **0px**、篩到 0 筆 **0px**。
+
+#### ② 膠囊不消失
+
+`backToJumpFrom()` 回跳後**沒有清 `state.jumpFrom`**，所以膠囊與「← 回到『…』」會一直留著（且捲回清單又會冒出來）。
+修法：回跳完成（捲到來源、pulse）後 `state.jumpFrom = null; updateBackControls();`。
+
+#### ⚠ 純函式測試的坑
+
+`document.addEventListener` 寫在**模組頂層**會讓 `report-under-test.js` 在 Node `require` 階段就
+`ReferenceError: document is not defined`，五支 node 測試全掛（錯誤訊息只顯示「Node.js v22.23.4」，很容易誤判）。
+新加的頂層程式碼一律加 `if(typeof document !== 'undefined' && document.addEventListener){…}` 守衛。
+
+驗證：`tools/verify-v1292-e2e.py`（4 情境位移 ≤2px、膠囊／回跳鈕消失、jumpFrom 清空、之後不再冒出、console 乾淨）；
+`tools/probe-list-jump.py`（位移量測）、`probe-list-jump-why.py`（各區塊高度差）、`probe-anchor-case4.py`（夾住情況）；
+既有 4 組 E2E 與 5 支 node 測試全過。

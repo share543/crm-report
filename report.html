@@ -155,7 +155,10 @@
     /* 列印時一律展開，且不顯示收合指示（避免 PDF 漏印內容） */
     section.card.collapsible.collapsed > :not(h2){ display:block !important; }
     section.card.collapsible > h2::after{ content:none !important; }
+    #rebuildSpacer{ display:none !important; }
   }
+  /* v1.29.2：重建時自己校正捲動位置，關掉瀏覽器原生 scroll anchoring 以免兩者互相加乘 */
+  html, body{ overflow-anchor:none; }
   .table-wrap{ overflow:auto; max-height:480px; border:1px solid var(--border); border-radius:8px; }
   /* v1.29.1：投影模式一律展開收合區塊（簡報是搬 section 進 pv-body，收合會只剩標題） */
   body.pv-mode section.card.collapsible.collapsed > :not(h2){ display:block !important; }
@@ -1624,7 +1627,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.29.1';   // 1.29.1：預估月運費分析改為可開合、預設收合（列印／投影／存圖／跳轉時自動展開）
+  var APP_VERSION = '1.29.2';   // 1.29.2：案件清單點篩選鈕不再整頁跳走（重建時釘住使用者正在看的區塊）
   var APP_VERSION_DATE = '2026-10-27';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -6628,6 +6631,9 @@ var state = {
     }
     try{ card.scrollIntoView({ block: 'start', behavior: 'instant' }); }catch(e){ card.scrollIntoView(); }
     pulseClass(card, 'jump-target');
+    // v1.29.2：回跳完成＝這次跳轉結束。不清掉來源的話，回跳鈕與浮動膠囊會留在畫面上
+    //   （使用者回報：按了膠囊回到原區塊，膠囊還在）。
+    state.jumpFrom = null;
     updateBackControls();
     return true;
   }
@@ -12208,8 +12214,123 @@ var state = {
     }
   }
 
+
+  // ---------------------------------------------------------------------------
+  // v1.29.2：重建時把「使用者正在看的區塊」釘住（避免點篩選鈕後畫面跳走）
+  //   為什麼需要：rebuild() 會重畫全部 22 個區塊；實測在案件清單點「1P(SCM)」，
+  //   因為上方多個區塊變矮（流失分析 −559px、類型分析 −125px…），文件矮了 1024px，
+  //   清單區塊瞬間上移 1023px ⇒ 使用者的視窗落在別的區塊上。
+  //   作法：量「區塊頂端在視窗中的位置」，重建後用 scrollBy 補回差值；
+  //   若被文件長度夾住（頁面變短、捲不到那麼多），退而把該區塊頂端對齊視窗上緣，
+  //   至少不會跑到別的區塊去。
+  // ---------------------------------------------------------------------------
+  var _lastSecId = '';
+
+  function noteInteractionSection(target){
+    if(!target || !target.closest) return;
+    var sec = target.closest('main section.card');
+    if(sec && sec.id) _lastSecId = sec.id;
+  }
+  // ⚠ 這裡是模組頂層：Node 端（tools/report-under-test.js 做純函式測試）沒有 document，
+  //   不加上這個守衛會讓所有 node 測試在 require 階段就 ReferenceError。
+  if(typeof document !== 'undefined' && document.addEventListener){
+    document.addEventListener('pointerdown', function(e){ noteInteractionSection(e.target); }, true);
+    document.addEventListener('focusin', function(e){ noteInteractionSection(e.target); }, true);
+  }
+
+  // 挑錨點：① 剛互動過的區塊 ② 有焦點的控制項所在區塊 ③ 佔據視窗上緣的區塊
+
+  // 暫時的底部空間：頁面變短時，「捲到某個位置」會被文件長度夾住（實測篩到 0 筆時
+  //   差 143px 補不回來）。加一小段隱形空間讓捲動到位，使用者下一次自己捲動／按鍵時就移除，
+  //   不會留下永久空白。列印時不顯示。
+  function _anchorSpacer(height){
+    var sp = document.getElementById('rebuildSpacer');
+    if(!sp){
+      sp = document.createElement('div');
+      sp.id = 'rebuildSpacer';
+      sp.setAttribute('aria-hidden', 'true');
+      sp.style.cssText = 'height:0;margin:0;padding:0;border:0;';
+      document.body.appendChild(sp);
+      var drop = function(){ _anchorSpacer(0); };
+      window.addEventListener('wheel', drop, { passive: true, once: true });
+      window.addEventListener('touchstart', drop, { passive: true, once: true });
+      window.addEventListener('keydown', drop, { once: true });
+    }
+    sp.style.height = height > 0 ? (height + 'px') : '0px';
+    return sp;
+  }
+
+  function pickRebuildAnchor(){
+    var cand = null;
+    if(_lastSecId) cand = document.getElementById(_lastSecId);
+    if(!cand && document.activeElement){
+      var ae = document.activeElement;
+      if(ae.closest) cand = ae.closest('main section.card');
+    }
+    if(!cand || cand.hidden || !cand.getBoundingClientRect().height){
+      var secs = document.querySelectorAll('main section.card');
+      for(var i = 0; i < secs.length; i++){
+        var r = secs[i].getBoundingClientRect();
+        if(secs[i].hidden || !r.height) continue;
+        if(r.top <= 1 && r.bottom > 1){ cand = secs[i]; break; }
+      }
+    }
+    if(!cand || cand.hidden) return null;
+    return { id: cand.id, el: cand, top: cand.getBoundingClientRect().top };
+  }
+
+  function restoreRebuildAnchor(a){
+    if(!a || !a.id) return;
+    var el = (a.el && a.el.isConnected) ? a.el : document.getElementById(a.id);
+    if(!el || el.hidden) return;
+    // 渲染後的字體重排／圖片／收合動畫會讓高度在接下來幾百毫秒內才定案，
+    //   所以不是量一次補一次，而是在幾個時間點反覆「量差距 → 補差距」，收斂後自然停止
+    //   （實測：只量一次的舊寫法會被中途的版面騙，反而多推 219px）。
+    //   使用者在期間自己捲動就立刻放棄校正，不跟使用者搶捲軸。
+    var cancelled = false;
+    function stopIt(){ cancelled = true; }
+    window.addEventListener('wheel', stopIt, { passive: true, once: true });
+    window.addEventListener('touchstart', stopIt, { passive: true, once: true });
+    window.addEventListener('keydown', stopIt, { once: true });
+    function settle(){
+      if(cancelled || !el.isConnected || el.hidden) return;
+      var gap = el.getBoundingClientRect().top - a.top;
+      if(Math.abs(gap) >= 1) window.scrollBy(0, gap);
+    }
+    settle();
+    requestAnimationFrame(settle);
+    requestAnimationFrame(function(){ requestAnimationFrame(settle); });
+    // 時間點往後延伸到 1.2 秒：清單篩到 0 筆時版面會大幅收縮，重排比一般情況久
+    var _delays = [60, 120, 200, 300, 450, 650, 900, 1200];
+    for(var _i = 0; _i < _delays.length; _i++) setTimeout(settle, _delays[_i]);
+    setTimeout(function(){
+      if(cancelled) return;
+      settle();
+      var top = el.getBoundingClientRect().top;
+      var gap = top - a.top;
+      if(Math.abs(gap) <= 2) return;
+      // 補不回來：多半是頁面變短、捲動被文件長度夾住（實測差 143px）。
+      //   加剛好夠用的底部空間再捲一次，位置就能精準回到原點。
+      var maxY = document.documentElement.scrollHeight - window.innerHeight;
+      var wantY = window.pageYOffset + gap;
+      if(gap > 0 && wantY > maxY){
+        _anchorSpacer(wantY - maxY + 2);
+        window.scrollTo(0, wantY);
+      } else if(gap < 0){
+        window.scrollTo(0, Math.max(0, wantY));
+      }
+      // 仍然對不上（極端情況）：至少把這個區塊留在視窗裡
+      top = el.getBoundingClientRect().top;
+      if(Math.abs(top - a.top) > 2 && (top < 0 || top > window.innerHeight - 60)){
+        window.scrollTo(0, Math.max(0, window.pageYOffset + top - 12));
+      }
+    }, 420);
+  }
+
   function rebuild(){
     if(!state.model || !state.model.rows) return;
+    _anchorSpacer(0);                    // v1.29.2：清掉上次校正留下的底部空間
+    var _anchor = pickRebuildAnchor();   // v1.29.2：重建前記住位置
     var filtered = applyFilters(state.model.rows, state.filters);
     var pr = applyPeriod(filtered, state.period);
     updatePeriodBadge(pr.rows.length, pr.excluded);
@@ -12235,6 +12356,7 @@ var state = {
     renderListSection();
     renderRawTable(m);
     syncBlockRules();
+    restoreRebuildAnchor(_anchor);   // v1.29.2：把使用者正在看的區塊放回原位
   }
 
   // ---------------------------------------------------------------------------
