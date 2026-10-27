@@ -611,6 +611,14 @@
   .card-tools{ position:absolute; top:14px; right:14px; display:flex; align-items:center; gap:14px; }
   .snap-btn{ position:static; }
   /* 跳到案件清單（放在「存圖」左邊） */
+  /* v1.28.0：各課追蹤簡表 A版／B版 切換（segmented）。刻意不用 accent —— accent 已代表「進行中」，
+     這裡只表示「選了哪一版」，用底色＋粗體即可。 */
+  .kq-ver{ display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .kq-ver button{ background:none; border:none; padding:2px 9px; font-size:12px; font-family:inherit;
+    color:var(--muted); cursor:pointer; line-height:1.6; }
+  .kq-ver button + button{ border-left:1px solid var(--border); }
+  .kq-ver button:hover{ color:var(--text); }
+  .kq-ver button.on{ background:var(--row-hover-strong); color:var(--text); font-weight:700; }
   .jump-btn{ background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
     color:var(--muted); font-size:12px; display:inline-flex; align-items:center; gap:5px; }
   .jump-btn:hover{ color:var(--accent); }
@@ -1597,8 +1605,8 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.27.2';   // 1.27.2：價值列下方新增「依收款通路」（momo／直客／兩者，三類相加＝總額、各帶填報率）＋進度追蹤表說明補「1P/3P 向 momo 請款、不簽約」
-  var APP_VERSION_DATE = '2026-10-23';
+  var APP_VERSION = '1.28.0';   // 1.28.0：各課追蹤簡表右上「A版／B版」切換（已導入累計：A 版每群一格、B 版拆 1P/3P × 舊客戶/新註冊 四格＋合計移到開發累計下）
+  var APP_VERSION_DATE = '2026-10-27';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
   //    repo 內另附 LICENSE 全文；這裡只放頁腳要顯示的短標示。
@@ -1609,6 +1617,10 @@ var state = {
   // ⚠ 兩者不是兩個模式、也不是兩份文字 —— 是同一份條目的兩層顯示（見 renderBriefEntries）。
   //   預設講稿：使用者是拿著手機照著唸。
   state.briefMode = 'script';
+  // 各課追蹤簡表版本：'A'＝原版（已導入累計：每群一格）、'B'＝明細版
+  //   （甲指拆 1P舊／1P新／3P舊／3P新 四格，原合計移到「開發累計」兩欄下佔一格）
+  //   使用者 2026-10-27 定案：切換鈕寫「A版｜B版」，預設 A。
+  state.keQuickVer = 'A';
   // GM 書面摘要的變體：'line'＝LINE 短版、'mail'＝郵件完整版（預設郵件，因為郵件是主要用途）
   state.briefGmVariant = 'mail';
   // 目前模式的「貼上用純文字」（由 renderBriefSection 產生，複製鈕直接取用）
@@ -1954,26 +1966,42 @@ var state = {
       }
     }
     var importCum = { '甲指': 0, '甲配': 0, '零擔': 0 };
+    // v1.28.0（B 版）：把「甲指的已導入累計」再拆 1P/3P × 舊客戶/新註冊 四格。
+    //   ⚠ 四格是「各類別各計一次」，同時勾 1P 與 3P 的列會在兩處各算一次；
+    //     所以另外回一個不重複的 total13（＝A 版那一格），讓「合計」與「四格相加」可以互相對帳。
+    var importDetail = { '1P舊': 0, '1P新': 0, '3P舊': 0, '3P新': 0,
+                         'total13': 0, '甲配': 0, '零擔': 0 };
     for(var i2 = 0; i2 < scopeRows.length; i2++){
       var r2 = scopeRows[i2];
       if(!hasDate(r2, '導入')) continue;
-      var g13, gJP, gZD;
+      var g13, gJP, gZD, g1, g3;
       if(srcNewFmt){
-        g13 = isTickMark(r2['1P(SCM)']) || isTickMark(r2['3P(MO+)']);
+        g1 = isTickMark(r2['1P(SCM)']);
+        g3 = isTickMark(r2['3P(MO+)']);
+        g13 = g1 || g3;
         gJP = isTickMark(r2['甲配']);
         gZD = isTickMark(r2['零擔']);
       } else {
         var c3 = catOf(r2);
-        g13 = is13(c3);
+        g1 = (c3 === '1P(SCM)');
+        g3 = (c3 === '3P(MO+)');
+        g13 = g1 || g3;
         gJP = (c3 === '甲配');
         gZD = (c3 === '零擔');
       }
       if(g13) importCum['甲指']++;
       if(gJP) importCum['甲配']++;
       if(gZD) importCum['零擔']++;
+      var isOld = (keQuickSource(r2) === KQ_SRC_OLD);
+      if(g1) importDetail[isOld ? '1P舊' : '1P新']++;
+      if(g3) importDetail[isOld ? '3P舊' : '3P新']++;
+      if(g13) importDetail['total13']++;
+      if(gJP) importDetail['甲配']++;
+      if(gZD) importDetail['零擔']++;
     }
     return { kes: KE_QUICK_ORDER.slice(), cols: KE_QUICK_COLUMNS,
-             cells: cells, totals: totals, importCum: importCum };
+             cells: cells, totals: totals, importCum: importCum,
+             importDetail: importDetail };
   }
 
   // 純函式：把手機卡片要顯示的欄定義依 l1（甲指/甲配/零擔）分組（無 DOM 依賴，可於 Node 測試）。
@@ -3961,9 +3989,29 @@ var state = {
         row.appendChild(vals);
         card.appendChild(row);
       }
+      var isBm = (typeof state !== 'undefined' && state.keQuickVer === 'B');
+      var detM = data.importDetail || {};
+      if(isBm){
+        var foot2 = document.createElement('div');
+        foot2.className = 'keq-foot';
+        foot2.textContent = '已導入累計（甲指明細）：';
+        var pairs = [['1P 舊客戶', '1P舊'], ['1P 新註冊', '1P新'], ['3P 舊客戶', '3P舊'], ['3P 新註冊', '3P新']];
+        for(var f2 = 0; f2 < pairs.length; f2++){
+          if(f2) foot2.appendChild(document.createTextNode(' ｜ '));
+          var s2 = document.createElement('span');
+          var l2b = document.createElement('span');
+          l2b.textContent = pairs[f2][0] + ' ';
+          s2.appendChild(l2b);
+          var b2b = document.createElement('b');
+          b2b.textContent = String(detM[pairs[f2][1]] || 0);
+          s2.appendChild(b2b);
+          foot2.appendChild(s2);
+        }
+        card.appendChild(foot2);
+      }
       var foot = document.createElement('div');
       foot.className = 'keq-foot';
-      foot.textContent = '已導入累計：';
+      foot.textContent = isBm ? '已導入累計（合計）：' : '已導入累計：';
       var first = true;
       for(var g2 = 0; g2 < groups.length; g2++){
         var key = groups[g2].l1;
@@ -3974,7 +4022,7 @@ var state = {
         lab2.textContent = key + ' ';
         s.appendChild(lab2);
         var b2 = document.createElement('b');
-        b2.textContent = String(data.importCum[key] || 0);
+        b2.textContent = String((isBm && data.importDetail ? data.importDetail[key === '甲指' ? 'total13' : key] : data.importCum[key]) || 0);
         s.appendChild(b2);
         foot.appendChild(s);
       }
@@ -4820,12 +4868,36 @@ var state = {
     tdImpKe.className = 'qk-ke';
     tdImpKe.textContent = '已導入累計';
     trImp.appendChild(tdImpKe);
+    var isB = (typeof state !== 'undefined' && state.keQuickVer === 'B');
+    var det = data.importDetail || {};
     for(var d = 0; d < l1Runs.length; d++){
+      var l1 = l1Runs[d].l1;
+      if(isB && l1 === '甲指' && l1Runs[d].count >= 6){
+        // B 版：四格（對齊上方「新增」的四欄）＋ 原合計移到「開發累計」兩欄下佔一格
+        //   四格＝各類別各計一次；合計格用不重複的 total13，兩者可以互相對帳。
+        var four = ['1P舊', '1P新', '3P舊', '3P新'];
+        for(var f = 0; f < four.length; f++){
+          var tdF = document.createElement('td');
+          tdF.className = 'qk-import-val qk-g0';
+          tdF.textContent = String(det[four[f]] || 0);
+          tdF.setAttribute('data-imp-cell', four[f]);
+          trImp.appendChild(tdF);
+        }
+        var tdT = document.createElement('td');
+        tdT.className = 'qk-import-val qk-g0';
+        tdT.setAttribute('colspan', '2');
+        tdT.textContent = String(det.total13 || 0);
+        tdT.setAttribute('data-imp-cell', 'total13');
+        tdT.title = '甲指已導入合計（不重複計算；＝1P舊＋1P新＋3P舊＋3P新，多勾案件才會小於四格相加）';
+        trImp.appendChild(tdT);
+        continue;
+      }
       var tdImp = document.createElement('td');
       tdImp.className = 'qk-import-val';
       tdImp.setAttribute('colspan', String(l1Runs[d].count));
       if(d > 0) tdImp.classList.add('qk-gstart');
-      tdImp.textContent = String(data.importCum[l1Runs[d].l1] || 0);
+      tdImp.textContent = String(data.importCum[l1] || 0);
+      tdImp.setAttribute('data-imp-cell', l1);
       trImp.appendChild(tdImp);
     }
     tbody.appendChild(trImp);
@@ -4835,6 +4907,7 @@ var state = {
     // 2026-10-20：註記內容已移到「規則說明」（BLOCK_RULES.keQuickSection）
     box.appendChild(withUnitLabel(wrap, '單位：客戶數'));
     sec.hidden = false;
+    if(typeof syncKeQuickVerButtons === 'function') syncKeQuickVerButtons();
   }
 
   // DOM helper：手機版進度卡片的一列（里程碑 label + 填單數為分母的迷你長條 + 計數）
@@ -5554,6 +5627,9 @@ var state = {
   }
 
   // 開場亮點摘要的統計卡標籤（單一來源：畫面與 test-blocksync.js 都讀這裡）
+  // 純函式：各課追蹤簡表版本正規化（只認 'A' / 'B'，其餘一律回 'A'）
+  function normalizeKeQuickVer(v){ return (v === 'B') ? 'B' : 'A'; }
+
   function highlightCardLabels(isPeriodView){
     return isPeriodView
       ? ['本期新增案件', '本期導入完成', '進行中', '未啟動']
@@ -11799,7 +11875,8 @@ var state = {
       '新增＝分析期間內填單的案件；開發累計／已導入累計＝全部資料，不隨期間縮放。',
       '甲指＝1P(SCM)＋3P(MO+) 的合計；甲配不分新舊客戶。',
       '舊客戶＝「客戶來源」欄標示為舊客戶者；沒有這一欄的舊檔不會推測，全部歸在新註冊。',
-      '同時勾選多個類別的案件（例如零擔＋1P），會在各個類別各算一次，所以橫向相加會大於案件筆數。'
+      '同時勾選多個類別的案件（例如零擔＋1P），會在各個類別各算一次，所以橫向相加會大於案件筆數。',
+      '右上「A版／B版」切換最下面那一列：A 版每個類別一格（原版）；B 版把甲指的已導入累計拆成 1P舊客戶／1P新註冊／3P舊客戶／3P新註冊 四格（對齊上方「新增」四欄），原合計移到「開發累計」兩欄下面佔一格。切換只影響這一列，欄寬與其他數字都不變，選擇會記住。'
     ],
     notStartedSection: [
       '上半只列已填填單日期、狀態為未啟動的案件，不隨分析期間與篩選縮放，課別依件數多→少排。',
@@ -12111,6 +12188,32 @@ var state = {
           jb.addEventListener('click', function(){ jumpToListSection(c); });
         })(card);
         tools.appendChild(jb);
+      }
+      // 各課追蹤簡表專屬：A 版／B 版切換（放進同一個 .card-tools 群組，
+      //   列印、投影、存圖三處本來就會排除 .card-tools，不必另寫規則）
+      if(card.id === 'keQuickSection'){
+        var verBox = document.createElement('span');
+        verBox.className = 'kq-ver';
+        verBox.id = 'kqVer';
+        verBox.setAttribute('role', 'group');
+        verBox.setAttribute('aria-label', '各課追蹤簡表版本');
+        var vers = [['A', 'A版'], ['B', 'B版']];
+        for(var vi = 0; vi < vers.length; vi++){
+          (function(vCode, vLabel){
+            var vb = document.createElement('button');
+            vb.type = 'button';
+            vb.setAttribute('data-ver', vCode);
+            vb.setAttribute('aria-pressed', vCode === state.keQuickVer ? 'true' : 'false');
+            vb.title = (vCode === 'A')
+              ? 'A 版：已導入累計每群一格（原版）'
+              : 'B 版：甲指已導入拆成 1P/3P × 舊客戶/新註冊 四格，合計移到開發累計下';
+            vb.textContent = vLabel;
+            if(vCode === state.keQuickVer) vb.className = 'on';
+            vb.addEventListener('click', function(){ setKeQuickVer(vCode); });
+            verBox.appendChild(vb);
+          })(vers[vi][0], vers[vi][1]);
+        }
+        tools.appendChild(verBox);
       }
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -12602,7 +12705,8 @@ var state = {
       listCols: normalizeListCols(state.listCols),
       printEnabled: normalizePrintEnabled(state.printEnabled),
       printView: normalizePrintView(state.printView),
-      printList: normalizePrintList(state.printList)
+      printList: normalizePrintList(state.printList),
+      keQuickVer: normalizeKeQuickVer(state.keQuickVer)
     };
     return JSON.stringify(data).replace(/<\//g, '<\\/');
   }
@@ -12662,7 +12766,7 @@ var state = {
     try{
       if(!state.model) return;
       state.savedAt = new Date().toISOString();
-      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols), printEnabled: normalizePrintEnabled(state.printEnabled), printView: normalizePrintView(state.printView), printList: normalizePrintList(state.printList) });
+      var payload = JSON.stringify({ v: 1, savedAt: state.savedAt, name: state.fileName, model: state.model, agenda: state.agenda, presentEnabled: state.presentEnabled, listCols: normalizeListCols(state.listCols), printEnabled: normalizePrintEnabled(state.printEnabled), printView: normalizePrintView(state.printView), printList: normalizePrintList(state.printList), keQuickVer: normalizeKeQuickVer(state.keQuickVer) });
       localStorage.setItem(DATA_STORAGE_KEY, payload);
       renderMeetingInfo();
     }catch(_){}
@@ -12689,6 +12793,7 @@ var state = {
     state.printEnabled = {};
     state.printView = 'auto';
     state.printList = 'page';
+    state.keQuickVer = 'A';
     var mr = document.getElementById('memoryRow');
     if(mr) mr.hidden = true;
     renderAgenda();
@@ -14046,6 +14151,32 @@ var state = {
     state.printList = normalizePrintList(d && d.printList);
     persistData();
   }
+  // 各課追蹤簡表版本：跟著記憶／存檔副本一起還原（缺欄＝舊檔，回 A）
+  function restoreKeQuickVer(d){
+    state.keQuickVer = normalizeKeQuickVer(d && d.keQuickVer);
+  }
+  // 切換 A／B 版：改狀態 → 存 → 只重畫該區塊（不動其他區塊，避免捲動位置跳掉）
+  function setKeQuickVer(v){
+    var next = normalizeKeQuickVer(v);
+    if(state.keQuickVer === next){
+      syncKeQuickVerButtons();
+      return;
+    }
+    state.keQuickVer = next;
+    persistData();
+    syncKeQuickVerButtons();
+    if(state.model && state.model.rows) renderKeQuickSection({ headers: state.model.headers, rows: applyPeriod(applyFilters(state.model.rows, state.filters), state.period).rows, sheetName: state.model.sheetName });
+  }
+  function syncKeQuickVerButtons(){
+    var box = document.getElementById('kqVer');
+    if(!box) return;
+    var btns = box.querySelectorAll('button');
+    for(var i = 0; i < btns.length; i++){
+      var on = btns[i].getAttribute('data-ver') === state.keQuickVer;
+      btns[i].classList.toggle('on', on);
+      btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
   function tryRestoreData(){
     var emb = document.getElementById('crm-embedded');
     if(emb && emb.textContent && String(emb.textContent).trim() !== ''){
@@ -14056,6 +14187,9 @@ var state = {
           restoreAgenda(payload);
           restorePresentConfig(payload);
           restoreListCols(payload);
+          // ⚠ 必須在 restorePrintConfig 之前：那個函式結尾會 persistData()，
+          //   先還原版本才不會把 B 版寫回 A（實測踩到：重整後畫面是 B、存檔卻是 A）。
+          restoreKeQuickVer(payload);
           restorePrintConfig(payload);
           return true;
         }
@@ -14067,6 +14201,7 @@ var state = {
       restoreAgenda(stored);
       restorePresentConfig(stored);
       restoreListCols(stored);
+      restoreKeQuickVer(stored);   // 同上：要在 restorePrintConfig 之前
       restorePrintConfig(stored);
       return true;
     }
@@ -14393,6 +14528,8 @@ var state = {
       CAT_BUCKET_ORDER: CAT_BUCKET_ORDER,
       CAT_BUCKET_BLANK: CAT_BUCKET_BLANK,
       // v1.27.0：L2 開發價值（預估月運費）＋說明守門用的常數
+      // v1.28.0：各課追蹤簡表 A/B 版
+      normalizeKeQuickVer: normalizeKeQuickVer,
       computeDevValue: computeDevValue,
       devValueOfRow: devValueOfRow,
       DEV_VALUE_DAYS: DEV_VALUE_DAYS,
