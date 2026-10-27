@@ -1909,3 +1909,10 @@ highlight −79、progress −77、stat −72、dropReason −62、alerts −50�
 驗證：`tools/verify-v1292-e2e.py`（4 情境位移 ≤2px、膠囊／回跳鈕消失、jumpFrom 清空、之後不再冒出、console 乾淨）；
 `tools/probe-list-jump.py`（位移量測）、`probe-list-jump-why.py`（各區塊高度差）、`probe-anchor-case4.py`（夾住情況）；
 既有 4 組 E2E 與 5 支 node 測試全過。
+
+### 寄送紀錄（v1.29.2）
+
+`send_crm_report_email.py` 四處改：`SUBJECT`／`IDEMPOTENCY`／`BODY`／`PREVIEW`（預覽圖檔名也要一起改，否則會夾到上一版的圖）。
+實測：commit `e84b8c5`、report.html **759,473 bytes**、sha256 `718f3dc0…`；
+預覽圖 `crm-report-v1292-preview.png`（340,571 bytes、sha256 `15592eb2…`）；兩件附件抓 CDN 回讀比對皆 MATCH。
+預覽圖用整頁截圖（含清單與右下角回跳膠囊）再縮到 1500px 寬，比只拍區塊更能讓收件者確認「檔案打得開」。
