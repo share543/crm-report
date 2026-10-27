@@ -1861,3 +1861,14 @@ B 版將已導入累計 從原來的一個儲存格拆為 1P/3P 新舊客戶各 
 - 收合狀態下存圖：PNG 352 KB，7 列＋兩行摘要齊全，且不含 `.card-tools`
 - 簡報第 9 頁（索引 8）自動展開，表格高度 312
 - 重整後維持使用者選擇；console 無錯
+
+### 寄送紀錄（v1.29.1）
+
+`/home/arthur/slide/send_crm_report_email.py` 每次寄送改四處：`SUBJECT`、`IDEMPOTENCY`（版號＋時間戳，同版重寄要換鍵）、
+`BODY` 路徑、`PREVIEW`（預覽圖）。腳本會**從 GitHub clone 最新 commit** 當附件來源（不是本機工作檔），
+所以**要先 push 再寄**；寄前用動態正則讀附件的 `APP_VERSION` 比對主旨／內文，避免「檢查通過、內容是舊版」。
+
+v1.29.1 實測：commit `3b3de3b`、report.html **752,962 bytes**、sha256 `05bc3fac…`；
+另附預覽圖 `crm-report-v1291-preview.png`（281,900 bytes、sha256 `383c8c35…`）——
+**HTML 附件在 Outlook 預覽窗格會被擋 JavaScript 看起來空白**，附圖讓收件者在信裡就能確認版面。
+兩件附件都抓 CDN 回讀比對 sha256，皆 MATCH。
