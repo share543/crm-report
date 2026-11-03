@@ -334,6 +334,31 @@
   .drk-total-row{ background:var(--card-2); border-top:2px solid var(--border); }
   .drk-total-row .drk-c-ke{ font-weight:800; }
   .drk-base{ font-weight:700; font-size:12.5px; }
+  /* ── 婉拒追蹤條與「較基準」欄（v1.31.0）──
+     形狀顏色規則：減少＝ok（綠）、增加＝warning（黃）、持平＝muted；只用既有色票，不新增顏色 */
+  .drk-track{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:8px 0 6px;
+              padding:8px 10px; background:var(--card-2); border:1px solid var(--border);
+              border-radius:8px; font-size:12.5px; }
+  .drk-track-label{ font-weight:700; color:var(--text); }
+  .drk-track-chain{ display:inline-flex; align-items:center; gap:6px; color:var(--muted);
+                    font-variant-numeric:tabular-nums; }
+  .drk-track-seg.is-cur{ color:var(--text); font-weight:700; }
+  .drk-track-arrow{ color:var(--border); }
+  .drk-track-delta{ padding:1px 9px; border-radius:999px; border:1px solid var(--border); font-weight:700; }
+  .drk-track-delta.is-good{ color:var(--ok); border-color:var(--ok); }
+  .drk-track-delta.is-bad{ color:var(--warning); border-color:var(--warning); }
+  .drk-track-delta.is-flat{ color:var(--muted); }
+  .drk-track-sel{ font:inherit; font-size:12px; color:var(--text); background:var(--card);
+                  border:1px solid var(--border); border-radius:6px; padding:3px 6px; max-width:260px; }
+  .drk-track-hint{ color:var(--muted); font-size:11.5px; }
+  .drk-c-delta{ width:64px; font-weight:700; }
+  .drk-wrap .is-good{ color:var(--ok); }
+  .drk-wrap .is-bad{ color:var(--warning); }
+  .drk-wrap .is-flat{ color:var(--muted); }
+  .drk-base-d{ font-size:12px; font-weight:800; }   /* 投影時 11px 太小，放大一級 */
+  @media print{
+    .drk-track-sel, .drk-track-hint{ display:none; }   /* 列印時下拉選單沒有意義 */
+  }
   .drk-total-row .drk-c-act{ color:var(--muted); }
   /* 手機：原因欄改為可縮＋省略號，長條與數字縮窄，避免橫向溢出 */
   /* 限 screen：A4 直式可列印寬約 794px，未限會讓列印版也吃到手機規則 */
@@ -1654,7 +1679,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.30.1';   // 1.30.1：說明／洽談內容填充率改為當場量（不再寫死 20%）
+  var APP_VERSION = '1.31.0';   // 1.31.0：每週快照＋婉拒追蹤（localStorage，只存彙總）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -9951,6 +9976,141 @@ var state = {
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // 每週快照與婉拒追蹤（v1.31.0）
+  // ---------------------------------------------------------------------------
+  // 目的：讓「婉拒件數有沒有下降」變成可追的數字，而不是每週重新感覺。
+  // 做法：每次載入資料就在 localStorage 留一份**摘要**（不存原始列），下次載入新檔自動與
+  //      上一份比；也可手動選一份當基準（例如固定跟月初比）。
+  // ⚠ 只存彙總、不存客戶資料：快照大小 <2KB，12 份也不會爆 localStorage。
+  var DR_SNAP_KEY = 'crmReport.dropSnapshots.v1';
+  var DR_BASE_KEY = 'crmReport.dropBase.v1';
+  var DR_SNAP_CAP = 12;
+
+  // 純函式：把一批列壓成可比較的摘要
+  function computeDropSnapshot(rows){
+    var an = computeDropReasonAnalysis(rows);
+    var byke = computeDropReasonByKe(rows);
+    var reasons = {}, kes = {};
+    for(var i = 0; i < an.items.length; i++) reasons[an.items[i].reason] = an.items[i].count;
+    for(var j = 0; j < byke.kes.length; j++){
+      var k = byke.kes[j];
+      var counts = {};
+      for(var r in k.counts) if(k.counts.hasOwnProperty(r)) counts[r] = k.counts[r];
+      kes[k.ke] = { total: k.total, counts: counts };
+    }
+    // ⚠ 不從資料推「資料日期」：這份檔的日期欄是「9/18」這種 M/D 字串，字串比大小會得到 9/18，
+    //    對每一份檔都一樣，當標籤會全部撞在一起。快照標籤改用載入時間（精度到分鐘）。
+    return { total: an.total, closedAll: an.closedAll, imported: an.imported,
+             reasons: reasons, kes: kes };
+  }
+
+  // 指紋：同樣的資料重複載入不會產生第二份快照
+  function dropSnapFp(s){
+    if(!s) return '';
+    var parts = [s.total, s.closedAll, s.imported];
+    var rs = Object.keys(s.reasons || {}).sort();
+    for(var i = 0; i < rs.length; i++) parts.push(rs[i] + ':' + s.reasons[rs[i]]);
+    var ks = Object.keys(s.kes || {}).sort();
+    for(var j = 0; j < ks.length; j++) parts.push(ks[j] + ':' + ((s.kes[ks[j]] || {}).total || 0));
+    var str = parts.join('|'), h = 5381;
+    for(var n = 0; n < str.length; n++) h = ((h * 33) ^ str.charCodeAt(n)) & 0x7fffffff;
+    return h.toString(36);
+  }
+
+  // 純函式：合併快照（同指紋視為同一份；只留最新 DR_SNAP_CAP 份）
+  function mergeDropSnapshots(list, snap, cap){
+    var out = [], src = list || [], limit = cap || DR_SNAP_CAP;
+    for(var i = 0; i < src.length; i++){
+      if(src[i] && src[i].fp !== snap.fp) out.push(src[i]);
+    }
+    out.push(snap);
+    out.sort(function(a, b){ return (a.at || '') < (b.at || '') ? -1 : 1; });
+    if(out.length > limit) out = out.slice(out.length - limit);
+    return out;
+  }
+
+  // 純函式：目前 vs 基準（含每課、每原因、全公司）
+  function computeDropDelta(cur, base){
+    if(!cur || !base) return null;
+    var d = function(a, b){ return (a || 0) - (b || 0); };
+    var reasons = {}, names = {};
+    for(var r in (cur.reasons || {})) names[r] = 1;
+    for(var r2 in (base.reasons || {})) names[r2] = 1;
+    for(var rn in names){
+      if(!names.hasOwnProperty(rn)) continue;
+      reasons[rn] = { cur: (cur.reasons || {})[rn] || 0, base: (base.reasons || {})[rn] || 0 };
+      reasons[rn].d = d(reasons[rn].cur, reasons[rn].base);
+    }
+    var kes = {}, kn = {};
+    for(var k in (cur.kes || {})) kn[k] = 1;
+    for(var k2 in (base.kes || {})) kn[k2] = 1;
+    for(var ke in kn){
+      if(!kn.hasOwnProperty(ke)) continue;
+      var c = (cur.kes || {})[ke] || { total: 0, counts: {} };
+      var b = (base.kes || {})[ke] || { total: 0, counts: {} };
+      var counts = {};
+      for(var rr in (c.counts || {})) counts[rr] = { cur: c.counts[rr], base: (b.counts || {})[rr] || 0 };
+      for(var rr2 in (b.counts || {})) if(!counts[rr2]) counts[rr2] = { cur: 0, base: b.counts[rr2] };
+      for(var rr3 in counts) counts[rr3].d = d(counts[rr3].cur, counts[rr3].base);
+      kes[ke] = { total: { cur: c.total || 0, base: b.total || 0, d: d(c.total, b.total) }, counts: counts };
+    }
+    return {
+      total: { cur: cur.total || 0, base: base.total || 0, d: d(cur.total, base.total) },
+      closedAll: { cur: cur.closedAll || 0, base: base.closedAll || 0, d: d(cur.closedAll, base.closedAll) },
+      imported: { cur: cur.imported || 0, base: base.imported || 0, d: d(cur.imported, base.imported) },
+      reasons: reasons, kes: kes
+    };
+  }
+
+  // 基準挑選：'prev'＝上一次（不含自己）、fp＝指定那一份、'none'＝不比較
+  function pickDropBase(snaps, cur, choice){
+    var others = [], src = snaps || [];
+    for(var i = 0; i < src.length; i++) if(!cur || src[i].fp !== cur.fp) others.push(src[i]);
+    if(!others.length || choice === 'none') return null;
+    if(choice && choice !== 'prev'){
+      for(var j = others.length - 1; j >= 0; j--) if(others[j].fp === choice) return others[j];
+      return others[others.length - 1];     // 選到已被裁掉的就退回上一次
+    }
+    return others[others.length - 1];
+  }
+
+  function dropNowLabel(){
+    var d = new Date(), p2 = function(x){ return (x < 10 ? '0' : '') + x; };
+    var p3 = function(x){ return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+      + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p3(d.getSeconds());
+  }
+
+  // 標籤＝載入時間（到分鐘）。同一份資料重複載入不會新增，所以實務上一週一個標籤。
+  function dropSnapLabel(s){
+    var at = (s && s.at) ? String(s.at) : '';
+    return at.length >= 16 ? at.slice(5, 16) : at;   // '2026-11-03 13:20' → '11-03 13:20'
+  }
+
+  // 載入／儲存（file:// 或隱私模式會失敗 → 靜默降級，只是沒有比較功能）
+  function loadDropSnapshots(){
+    try{
+      var raw = localStorage.getItem(DR_SNAP_KEY);
+      if(!raw) return [];
+      var o = JSON.parse(raw);
+      return (o && o.items && o.items.length) ? o.items : [];
+    }catch(_){ return []; }
+  }
+
+  function saveDropSnapshots(items){
+    try{ localStorage.setItem(DR_SNAP_KEY, JSON.stringify({ v: 1, items: items })); return true; }
+    catch(_){ return false; }
+  }
+
+  function loadDropBaseChoice(){
+    try{ return localStorage.getItem(DR_BASE_KEY) || 'prev'; }catch(_){ return 'prev'; }
+  }
+
+  function saveDropBaseChoice(v){
+    try{ localStorage.setItem(DR_BASE_KEY, v); }catch(_){}
+  }
+
   // 該課案件依原因分組（展開面板用；沿用原因固定順序）
   function groupDropReasonRowsByReason(rows, reasons){
     var order = reasons || DR_REASON_ORDER;
@@ -10093,7 +10253,8 @@ var state = {
 
   // 各課檢討矩陣：課別 × 五類原因（件數）＋「這一課先改什麼」＋可展開該課案件
   // 會議用法：由上而下（件數多的課先談），每一列就是一輪「這課為什麼沒成交、下週改什麼」。
-  function buildDropReasonKeTable(keData){
+  function buildDropReasonKeTable(keData, ctx){
+    ctx = ctx || {};
     var wrap = document.createElement('div');
     wrap.className = 'drk-wrap';
 
@@ -10101,6 +10262,14 @@ var state = {
     h3.className = 'drk-title';
     h3.textContent = '依課別檢討（每週業務會議用）';
     wrap.appendChild(h3);
+
+    // 婉拒追蹤＋基準選擇（v1.31.0）
+    if(ctx.snaps && ctx.snaps.length){
+      wrap.appendChild(buildDropReasonTrackBar(ctx, function(choice){
+        saveDropBaseChoice(choice);
+        if(typeof ctx.onChange === 'function') ctx.onChange();
+      }));
+    }
 
     var note = document.createElement('p');
     note.className = 'pg-note';
@@ -10130,15 +10299,112 @@ var state = {
     var thT = nsCell('drk-c-n drk-c-total', '合計');
     thT.title = '該課未合作件數／占全公司未合作件數';
     head.appendChild(thT);
+    if(ctx.delta){
+      var thD = nsCell('drk-c-n drk-c-delta', '較基準');
+      thD.title = '與「' + (ctx.baseLabel || '基準') + '」相比的增減（少＝好）';
+      head.appendChild(thD);
+    }
     head.appendChild(nsCell('drk-c-act', '先改什麼（這一課的檢討重點）'));
     table.appendChild(head);
 
     for(var i = 0; i < keData.kes.length; i++){
-      table.appendChild(buildDropReasonKeRow(keData.kes[i], keData));
+      table.appendChild(buildDropReasonKeRow(keData.kes[i], keData, ctx));
     }
-    table.appendChild(buildDropReasonKeTotalRow(keData));
+    table.appendChild(buildDropReasonKeTotalRow(keData, ctx));
     wrap.appendChild(table);
     return wrap;
+  }
+
+  // 「婉拒追蹤」＋基準下拉：把每週的婉拒件數排成一列，最後一段就是本週
+  function buildDropReasonTrackBar(ctx, onChange){
+    var bar = document.createElement('div');
+    bar.className = 'drk-track';
+
+    var lbl = document.createElement('span');
+    lbl.className = 'drk-track-label';
+    lbl.textContent = '婉拒追蹤';
+    bar.appendChild(lbl);
+
+    var chain = document.createElement('span');
+    chain.className = 'drk-track-chain';
+    var snaps = ctx.snaps.slice(-6);
+    // 同一分鐘內載入兩份不同檔（例如同一天補上傳）→ 標籤會撞，改用秒數區分
+    var labelCount = {};
+    for(var li = 0; li < snaps.length; li++){
+      var lk = dropSnapLabel(snaps[li]);
+      labelCount[lk] = (labelCount[lk] || 0) + 1;
+    }
+    for(var i = 0; i < snaps.length; i++){
+      var s = snaps[i];
+      var isCur = ctx.cur && s.fp === ctx.cur.fp;
+      var lb = dropSnapLabel(s);
+      if(labelCount[lb] > 1 && s.at && String(s.at).length >= 19) lb = String(s.at).slice(5, 19);
+      var seg = document.createElement('span');
+      seg.className = 'drk-track-seg' + (isCur ? ' is-cur' : '');
+      seg.textContent = lb.replace(' ', '　') + '  '
+        + ((s.reasons && s.reasons['客戶婉拒']) || 0) + ' 件';
+      seg.title = (s.name || '') + '｜未合作 ' + s.total + ' 件｜已導入 ' + s.imported;
+      chain.appendChild(seg);
+      if(i < snaps.length - 1){
+        var arr = document.createElement('span');
+        arr.className = 'drk-track-arrow';
+        arr.textContent = '→';
+        chain.appendChild(arr);
+      }
+    }
+    bar.appendChild(chain);
+
+    if(ctx.delta && ctx.delta.reasons['客戶婉拒']){
+      var w = ctx.delta.reasons['客戶婉拒'];
+      var badge = document.createElement('span');
+      badge.className = 'drk-track-delta ' + dropDeltaClass(w.d, true);
+      badge.textContent = '本週婉拒 ' + w.cur + ' 件（較基準 ' + dropDeltaText(w.d) + '）';
+      bar.appendChild(badge);
+    }
+
+    var sel = document.createElement('select');
+    sel.className = 'drk-track-sel';
+    sel.setAttribute('aria-label', '比較基準');
+    var optPrev = document.createElement('option');
+    optPrev.value = 'prev';
+    optPrev.textContent = '基準：上一次';
+    sel.appendChild(optPrev);
+    for(var j = 0; j < ctx.snaps.length; j++){
+      var sj = ctx.snaps[j];
+      if(ctx.cur && sj.fp === ctx.cur.fp) continue;
+      var o = document.createElement('option');
+      o.value = sj.fp;
+      var lj = dropSnapLabel(sj);
+      if(labelCount[lj] > 1 && sj.at && String(sj.at).length >= 19) lj = String(sj.at).slice(5, 19);
+      o.textContent = '基準：' + lj + '（未合作 ' + sj.total + '）';
+      sel.appendChild(o);
+    }
+    var optNone = document.createElement('option');
+    optNone.value = 'none';
+    optNone.textContent = '基準：不比較';
+    sel.appendChild(optNone);
+    sel.value = ctx.choice || 'prev';
+    sel.addEventListener('change', function(){ onChange(sel.value); });
+    bar.appendChild(sel);
+
+    var hint = document.createElement('span');
+    hint.className = 'drk-track-hint';
+    hint.textContent = '（快照存在這台瀏覽器，換電腦就看別台自己的紀錄）';
+    bar.appendChild(hint);
+
+    return bar;
+  }
+
+  function dropDeltaText(d){
+    if(!d) return '±0';
+    return d > 0 ? ('+' + d) : ('−' + Math.abs(d));
+  }
+
+  // 未合作件數「少＝好」：減少用 ok、增加用 warning、持平用 muted
+  function dropDeltaClass(d, lowerIsBetter){
+    if(!d) return 'is-flat';
+    var good = lowerIsBetter ? (d < 0) : (d > 0);
+    return good ? 'is-good' : 'is-bad';
   }
 
   function drKeDeltaText(ke, keData){
@@ -10152,7 +10418,7 @@ var state = {
     return '與全公司 ' + Math.round(coSh * 100) + '% 相當';
   }
 
-  function buildDropReasonKeRow(ke, keData){
+  function buildDropReasonKeRow(ke, keData, ctx){
     var wrap = document.createElement('div');
     wrap.className = 'ns-grp';
 
@@ -10181,6 +10447,15 @@ var state = {
     var totalCell = nsCell('drk-c-n drk-c-total', ke.total + ' 件');
     totalCell.title = '占全公司未合作 ' + (ke.ofCompany * 100).toFixed(1) + '%';
     row.appendChild(totalCell);
+
+    if(ctx && ctx.delta){
+      var kd = ctx.delta.kes[ke.ke];
+      var dcell = nsCell('drk-c-n drk-c-delta ' + (kd ? dropDeltaClass(kd.total.d, true) : 'is-flat'),
+                         kd ? dropDeltaText(kd.total.d) : '–');
+      dcell.title = '與「' + (ctx.baseLabel || '基準') + '」相比：'
+        + (kd ? (kd.total.base + ' → ' + kd.total.cur + ' 件') : '這次沒有基準資料');
+      row.appendChild(dcell);
+    }
 
     var actCell = nsCell('drk-c-act');
     if(ke.top){
@@ -10231,7 +10506,7 @@ var state = {
     return wrap;
   }
 
-  function buildDropReasonKeTotalRow(keData){
+  function buildDropReasonKeTotalRow(keData, ctx){
     var row = document.createElement('div');
     row.className = 'ns-trow drk-row drk-total-row';
     row.appendChild(nsCell('drk-c-ke', '全公司'));
@@ -10241,9 +10516,31 @@ var state = {
       var pc = Math.round((keData.company.share[rn] || 0) * 100);
       var cell = nsCell('drk-c-n drk-base' + (n ? '' : ' drk-zero'), n ? (n + '｜' + pc + '%') : '–');
       cell.title = rn + '：' + n + ' 件，占全公司 ' + pc + '%';
+      if(ctx && ctx.delta && ctx.delta.reasons[rn]){
+        var rd = ctx.delta.reasons[rn];
+        var dline = document.createElement('span');
+        dline.className = 'drk-base-d ' + dropDeltaClass(rd.d, true);
+        dline.textContent = dropDeltaText(rd.d);
+        dline.title = '較「' + (ctx.baseLabel || '基準') + '」：' + rd.base + ' → ' + rd.cur + ' 件';
+        cell.appendChild(document.createElement('br'));
+        cell.appendChild(dline);
+      }
       row.appendChild(cell);
     }
-    row.appendChild(nsCell('drk-c-n drk-c-total', keData.total + ' 件'));
+    var totCell = nsCell('drk-c-n drk-c-total', keData.total + ' 件');
+    if(ctx && ctx.delta){
+      var td = document.createElement('span');
+      td.className = 'drk-base-d ' + dropDeltaClass(ctx.delta.total.d, true);
+      td.textContent = dropDeltaText(ctx.delta.total.d);
+      td.title = '較「' + (ctx.baseLabel || '基準') + '」：' + ctx.delta.total.base + ' → ' + ctx.delta.total.cur + ' 件';
+      totCell.appendChild(document.createElement('br'));
+      totCell.appendChild(td);
+    }
+    row.appendChild(totCell);
+    if(ctx && ctx.delta){
+      row.appendChild(nsCell('drk-c-n drk-c-delta ' + dropDeltaClass(ctx.delta.total.d, true),
+                             dropDeltaText(ctx.delta.total.d)));
+    }
     row.appendChild(nsCell('drk-c-act drk-base-note',
       '全公司基準（件數｜占全公司比例）＝各課比較的對照，每一列的「高／低幾個百分點」都是跟這一列比'));
     return row;
@@ -10336,7 +10633,27 @@ var state = {
     // v1.30.0：各課 × 原因 檢討矩陣（每週業務會議逐課檢討用）
     var keData = computeDropReasonByKe(model.rows);
     if(keData.total && keData.kes.length){
-      box.appendChild(buildDropReasonKeTable(keData));
+      // v1.31.0：每週快照（只存彙總）＋婉拒追蹤
+      var cur = computeDropSnapshot(model.rows);
+      cur.fp = dropSnapFp(cur);
+      var prevSnaps = loadDropSnapshots();
+      var seen = null;
+      for(var pi = 0; pi < prevSnaps.length; pi++){
+        if(prevSnaps[pi].fp === cur.fp){ seen = prevSnaps[pi]; break; }
+      }
+      // 同一份資料再看一次不要改寫它的時間（否則舊檔會被排到最後，時序全錯）
+      cur.at = (seen && seen.at) ? seen.at : dropNowLabel();
+      cur.name = state.fileName || (seen && seen.name) || '（未命名檔）';
+      var snaps = mergeDropSnapshots(prevSnaps, cur);
+      saveDropSnapshots(snaps);
+      var choice = loadDropBaseChoice();
+      var base = pickDropBase(snaps, cur, choice);
+      var delta = base ? computeDropDelta(cur, base) : null;
+      box.appendChild(buildDropReasonKeTable(keData, {
+        cur: cur, snaps: snaps, delta: delta, choice: choice,
+        baseLabel: base ? (dropSnapLabel(base) + '｜未合作 ' + base.total + ' 件') : '',
+        onChange: function(){ renderDropReasonSection(model); }
+      }));
     }
 
     sec.hidden = false;
@@ -15515,6 +15832,15 @@ var state = {
       DR_REASON_ACTION: DR_REASON_ACTION,
       DR_REASON_MATCH: DR_REASON_MATCH,
       drReasonCanon: drReasonCanon,
+      computeDropSnapshot: computeDropSnapshot,
+      dropSnapFp: dropSnapFp,
+      mergeDropSnapshots: mergeDropSnapshots,
+      computeDropDelta: computeDropDelta,
+      pickDropBase: pickDropBase,
+      dropSnapLabel: dropSnapLabel,
+      dropDeltaText: dropDeltaText,
+      DR_SNAP_KEY: DR_SNAP_KEY,
+      DR_SNAP_CAP: DR_SNAP_CAP,
       groupByCategory: groupByCategory,
       catColorIndex: catColorIndex,
       state: state
