@@ -356,6 +356,37 @@
   .drk-wrap .is-bad{ color:var(--warning); }
   .drk-wrap .is-flat{ color:var(--muted); }
   .drk-base-d{ font-size:12px; font-weight:800; }   /* 投影時 11px 太小，放大一級 */
+  /* ── 展開區三層（v1.32.0）：課名標題帶 → 原因（可折疊）→ 類別小標 → 案件卡 ── */
+  .drk-cases{ border-left:3px solid var(--accent); background:var(--card-2); padding:0 12px 8px 14px; }
+  .drk-cases-head{ position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:baseline;
+    gap:4px 10px; padding:8px 2px 7px; background:var(--card-2); border-bottom:1px solid var(--border); }
+  .drk-ch-ke{ font-weight:800; font-size:14px; color:var(--text); }
+  .drk-ch-total{ font-weight:700; font-size:12.5px; color:var(--text); }
+  .drk-ch-split{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .drk-sub{ border-top:1px solid var(--border); }
+  .drk-sub:first-of-type{ border-top:0; }
+  .drk-sub-head{ display:flex; align-items:center; gap:8px; width:100%; padding:7px 2px;
+    background:none; border:0; font:inherit; font-size:13px; color:var(--text); cursor:pointer; text-align:left; }
+  .drk-sub-head:hover{ background:var(--row-hover); border-radius:6px; }
+  .drk-sub-n{ font-weight:700; }
+  .drk-sub-tag{ font-size:11.5px; font-weight:800; color:#fff; background:var(--accent);
+    border:1px solid var(--accent); border-radius:999px; padding:1px 9px; line-height:17px; margin-left:4px; }
+  .drk-sub-body{ padding:2px 0 8px 20px; }
+  .drk-cat-head{ margin:8px 0 3px; }
+  /* 案件卡的客戶類型膠囊：圓點沿用類別色票，文字才是主要訊號（投影色偏也不影響判讀） */
+  .dr-case{ align-items:flex-start; }
+  .dr-case .dr-cat{ display:inline-flex; align-items:center; gap:4px; flex:none; margin-top:1px;
+    font-size:11px; font-weight:700; color:var(--muted); border:1px solid var(--border);
+    border-radius:999px; padding:0 7px 0 5px; line-height:17px; }
+  .dr-case .dr-cat i{ width:7px; height:7px; border-radius:50%; flex:none; background:var(--muted); }
+  .dr-case .dr-cat.c0 i{ background:var(--accent); }
+  .dr-case .dr-cat.c1 i{ background:var(--ok); }
+  .dr-case .dr-cat.c2 i{ background:var(--warning); }
+  .dr-case .dr-cat.c3 i{ background:var(--muted); }
+  @media (max-width:720px){
+    .drk-cases-head{ position:static; }          /* 手機上方已有 sticky topbar，會互相遮住 */
+    .drk-sub-body{ padding-left:12px; }
+  }
   @media print{
     .drk-track-sel, .drk-track-hint{ display:none; }   /* 列印時下拉選單沒有意義 */
   }
@@ -1679,7 +1710,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.31.0';   // 1.31.0：每週快照＋婉拒追蹤（localStorage，只存彙總）
+  var APP_VERSION = '1.32.0';   // 1.32.0：矩陣展開區改三層（課名帶／原因可折疊／類別）＋客戶類型 chip
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10149,12 +10180,37 @@ var state = {
   }
 
   // 單一案件卡：公司名稱＋課別/類別/填單日期＋說明＋洽談內容
+  // 客戶類型（類別）短名＋小標籤。
+  // 為什麼要短名：「1P(SCM)」在 13px 卡片裡會把公司名稱擠掉，會議上要一眼掃過去。
+  var DR_CAT_SHORT = { '零擔': '零擔', '1P(SCM)': '1P', '3P(MO+)': '3P', '甲配': '甲配', '未填': '未填' };
+  function drCatShort(cat){
+    if(!cat) return '未填';
+    return DR_CAT_SHORT[cat] || cat;
+  }
+
+  // 圓點＋短名的小膠囊；顏色沿用類別色票（c0–c3），形狀與顏色都只是輔助，文字才是主要訊號
+  function drCatChip(cat){
+    var chip = document.createElement('span');
+    chip.className = 'dr-cat c' + catColorIndex(cat);
+    var dot = document.createElement('i');
+    chip.appendChild(dot);
+    var txt = document.createElement('span');
+    txt.textContent = drCatShort(cat);
+    chip.appendChild(txt);
+    chip.title = '客戶類型：' + (cat || '未填');
+    return chip;
+  }
+
   function buildDropReasonCase(r){
     var item = document.createElement('div');
     item.className = 'ns-item dr-case';
 
     var head = document.createElement('div');
     head.className = 'dr-case-head';
+
+    // 客戶類型（1P／3P／甲配／零擔）：分組小標已標一次，逐筆再標一次，
+    // 因為會議上常是「跳著看某幾家」，只看小標會搞不清那一列是哪一類。
+    head.appendChild(drCatChip(catBucketLabel(r)));
 
     var name = document.createElement('span');
     name.className = 'ns-name';
@@ -10164,7 +10220,7 @@ var state = {
 
     var meta = document.createElement('span');
     meta.className = 'ns-date';
-    // 類別不放這裡：展開清單已依類別分組，重複顯示反而干擾
+    // 類別改放在卡片最左邊的 chip（v1.32.0），這裡只留課別與填單日期
     var metaParts = [
       fieldStr(r, '課別') || blankLabel('課別'),
       drDate(fieldStr(r, '填單日期')) || blankLabel('填單日期')
@@ -10478,20 +10534,102 @@ var state = {
     }
     row.appendChild(actCell);
 
+    // ── 展開區（v1.32.0）：課名標題帶（sticky）→ 原因可折疊（預設只開主因）→ 類別小標 → 案件卡
+    // 為什麼要三層：南一課 54 件一次平鋪是五個畫面，會議上「想跳過考慮中、直接看婉拒」只能一直滑；
+    // 而且滑到一半沒有課名，會忘記自己在看哪一課。
     var cases = document.createElement('div');
     cases.className = 'ns-cases drk-cases';
     cases.hidden = true;
+
+    var ch = document.createElement('div');
+    ch.className = 'drk-cases-head';
+    var chKe = document.createElement('span');
+    chKe.className = 'drk-ch-ke';
+    chKe.textContent = ke.ke;
+    ch.appendChild(chKe);
+    var chTot = document.createElement('span');
+    chTot.className = 'drk-ch-total';
+    chTot.textContent = '未合作 ' + ke.total + ' 件';
+    ch.appendChild(chTot);
+    var splitParts = [];
+    for(var sp = 0; sp < keData.reasons.length; sp++){
+      var spName = keData.reasons[sp], spN = ke.counts[spName] || 0;
+      if(spN) splitParts.push(drReasonShort(spName) + ' ' + spN);
+    }
+    var chSplit = document.createElement('span');
+    chSplit.className = 'drk-ch-split';
+    chSplit.textContent = splitParts.join('｜');
+    ch.appendChild(chSplit);
+    cases.appendChild(ch);
+
     var groups = groupDropReasonRowsByReason(ke.rows, keData.reasons);
     for(var gi = 0; gi < groups.length; gi++){
       var grp = groups[gi];
-      var gh = document.createElement('div');
-      gh.className = 'ns-cat-head';
-      gh.textContent = drReasonShort(grp.reason) + '（' + grp.rows.length + '）';
-      cases.appendChild(gh);
-      var list = document.createElement('div');
-      list.className = 'ns-list';
-      for(var ci = 0; ci < grp.rows.length; ci++) list.appendChild(buildDropReasonCase(grp.rows[ci]));
-      cases.appendChild(list);
+      var isTopReason = !!(ke.top && ke.top.reason === grp.reason);
+
+      var sub = document.createElement('div');
+      sub.className = 'drk-sub';
+
+      var subHead = document.createElement('button');
+      subHead.type = 'button';
+      subHead.className = 'drk-sub-head';
+      subHead.setAttribute('aria-expanded', isTopReason ? 'true' : 'false');
+      var subCaret = document.createElement('span');
+      subCaret.className = 'ns-caret';
+      subCaret.textContent = isTopReason ? '▾' : '▸';
+      subHead.appendChild(subCaret);
+      var subName = document.createElement('span');
+      subName.className = 'drk-sub-n';
+      subName.textContent = drReasonShort(grp.reason);
+      subName.title = grp.reason;
+      subHead.appendChild(subName);
+      var subCount = document.createElement('span');
+      subCount.className = 'drk-ch-split';
+      subCount.textContent = grp.rows.length + ' 件';
+      subHead.appendChild(subCount);
+      if(isTopReason){
+        var subTag = document.createElement('span');
+        subTag.className = 'drk-sub-tag';
+        subTag.textContent = '本課主因';      // 「主因」兩個字太容易被當成一般標籤或篩選標記
+        subTag.title = '這一課件數最多的原因（占比 ' + Math.round(ke.share * 100) + '%）';
+        subHead.appendChild(subTag);
+      }
+      sub.appendChild(subHead);
+
+      var body = document.createElement('div');
+      body.className = 'drk-sub-body';
+      body.hidden = !isTopReason;             // 預設只開主因那一組
+      var catGroups = groupByCategory(grp.rows);
+      for(var cg2 = 0; cg2 < catGroups.length; cg2++){
+        var cgroup = catGroups[cg2];
+        var catHead = document.createElement('div');
+        catHead.className = 'ns-cat-head drk-cat-head';
+        var catDot = document.createElement('span');
+        catDot.className = 'ns-dot c' + catColorIndex(cgroup.cat);
+        catHead.appendChild(catDot);
+        var catTxt = document.createElement('span');
+        // 與卡片 chip 同一套短名（全名放 title），否則上面寫「3P(MO+)」、卡片寫「3P」會讓人以為是兩種
+        catTxt.textContent = drCatShort(cgroup.cat) + '（' + cgroup.count + '）';
+        catTxt.title = cgroup.cat;
+        catHead.appendChild(catTxt);
+        body.appendChild(catHead);
+        var catList = document.createElement('div');
+        catList.className = 'ns-list';
+        for(var ck = 0; ck < cgroup.rows.length; ck++) catList.appendChild(buildDropReasonCase(cgroup.rows[ck]));
+        body.appendChild(catList);
+      }
+      sub.appendChild(body);
+
+      (function(b, h, c){
+        h.addEventListener('click', function(){
+          var open = b.hidden;
+          b.hidden = !open;
+          h.setAttribute('aria-expanded', open ? 'true' : 'false');
+          c.textContent = open ? '▾' : '▸';
+        });
+      })(body, subHead, subCaret);
+
+      cases.appendChild(sub);
     }
 
     row.addEventListener('click', function(){
