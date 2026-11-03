@@ -692,6 +692,30 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 
 
 
+### 婉拒追蹤與每週快照（v1.31.0，2026-11-03）
+
+需求原話：「可以根據原因優化的項目…減少客戶婉拒的數量」。要「減少」就得先能逐週比較，所以做法是把每次看到的
+未合作統計留在**瀏覽器本機**，下次載入新檔自動比。
+
+- 位置：`#dropReasonSection` 內、各課檢討表**上方**（`buildDropReasonTrackBar`），不另開區塊。
+- 儲存：`localStorage` key `crmReport.dropSnapshots.v1`（{v:1, items:[]}）、基準選擇 `crmReport.dropBase.v1`。
+  **只存彙總**（未合作件數、已結案、已導入、各原因件數、各課 × 各原因件數），**不存任何客戶列**；
+  一份 <2KB，上限 12 份（`DR_SNAP_CAP`）。
+- 去重靠**指紋** `dropSnapFp`（件數組合的 djb2 雜湊）：同一份資料重看不會新增第二份，
+  且**不會改寫原本的 `at`**——否則回頭載入舊檔會被排到最後，時序全錯（踩過）。
+- 標籤**不可從資料推日期**：這份檔的日期欄是 `9/18` 這種 M/D 字串，字串比大小永遠得到 `9/18`，每份檔都一樣。
+  所以標籤用載入時間（`dropSnapLabel` → `MM-DD HH:MM`）。同一分鐘內載入兩份不同檔時，鏈條與下拉自動改成帶秒數。
+- 差異 `computeDropDelta(cur, base)`：回傳 `total/closedAll/imported` 與 `reasons[r]`、`kes[ke].total`、
+  `kes[ke].counts[r]`，每個都是 `{cur, base, d}`；基準沒有的原因／課別一律補 0 後給 `d`（新增＝+N）。
+- 顏色語義固定：**未合作件數少＝好** → 減少 `is-good`（綠）、增加 `is-bad`（黃）、持平 `is-flat`（灰）。
+  不要照「+ 就是正面」的直覺上色，會把婉拒變多畫成好消息。
+- 列印：`.drk-track-sel`（下拉）與提示字在 `@media print` 隱藏；「較基準」欄照印。
+- 純函式（可 node 測）：`computeDropSnapshot`／`dropSnapFp`／`mergeDropSnapshots`／`computeDropDelta`／
+  `pickDropBase`／`dropSnapLabel`／`dropDeltaText`，全部掛進 `module.exports`。
+- 驗證：`tools/test-drsnap.js`（34 項）＋`tools/probe-drksnap-e2e.py`（31 項：載入 10-27→11-03 兩份、
+  婉拒 35→34 須顯示 −1、重載去重、切基準、三種寬度、列印、重整後仍在）。E2E 需要
+  `clean-1027.xlsx`、`clean-1103.xlsx` 複製到 `crm-report/` 才跑得動。
+
 ## 空值標籤一律寫出維度（v1.9.1）
 
 任何「某欄沒有值」的顯示標籤都必須寫出**是哪一欄**：`(課別未填)`、`(類別未填)`、
@@ -1974,6 +1998,14 @@ highlight −79、progress −77、stat −72、dropReason −62、alerts −50�
 實測：commit `e84b8c5`、report.html **759,473 bytes**、sha256 `718f3dc0…`；
 預覽圖 `crm-report-v1292-preview.png`（340,571 bytes、sha256 `15592eb2…`）；兩件附件抓 CDN 回讀比對皆 MATCH。
 預覽圖用整頁截圖（含清單與右下角回跳膠囊）再縮到 1500px 寬，比只拍區塊更能讓收件者確認「檔案打得開」。
+
+### v1.31.0（2026-11-03）婉拒追蹤：把「有沒有減少」變成逐週可比的數字
+
+- 各課檢討表上方新增「婉拒追蹤」條（最後 6 份快照）＋「較基準 ±N」欄＋基準列每原因下方增減。
+- 快照存在 `localStorage`（只存彙總、上限 12 份、指紋去重）；基準可選上一次／任一快照／不比較。
+- 顏色語義：未合作件數**減少＝綠、增加＝黃、持平＝灰**（不要用「+ 就是好」的直覺）。
+- 實測：11-03 vs 10-27 → 婉拒 35→34（−1）、聯繫無果 44→24（−20）、考慮中 43→73（+30）、總 158→167（+9）。
+- 驗證：`test-drsnap` 34 項、`probe-drksnap-e2e` 31 項、`probe-drke-e2e` 26 項、verify 四支全過。commit `6619757`／tag `v1.31.0`。
 
 ### v1.30.1（2026-11-03）填充率改成當場量；檢討表說明對齊實際欄數
 
