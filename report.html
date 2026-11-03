@@ -314,15 +314,19 @@
   .dr-legend{ display:flex; flex-wrap:wrap; gap:5px 16px; margin:2px 0 8px;
               font-size:12.5px; color:var(--muted); }
   .dr-legend-item{ display:inline-flex; align-items:center; gap:6px; }
+  .dr-legend-cap{ color:var(--muted); font-size:12px; }
   /* ── 依課別檢討矩陣（v1.30.0）：沿用 ns-table 外框與列 hover，只補欄寬與文字層級 ──
      一個顏色只代表一件事：最高原因用 --warning（提醒），「0 件」用 --border（幾乎看不見但不空白） */
   .drk-wrap{ margin-top:16px; }
   .drk-title{ font-size:14.5px; margin:10px 0 4px; font-weight:700; letter-spacing:.2px; }
   .drk-row{ display:flex; align-items:center; gap:8px; width:100%; }
   .drk-c-ke{ width:118px; flex:none; font-weight:650; }
-  .drk-c-n{ width:58px; flex:none; text-align:right; font-variant-numeric:tabular-nums; }
-  .ns-thead .drk-c-n{ font-size:12px; line-height:1.25; white-space:normal; padding-top:2px; padding-bottom:2px; }
-  .drk-c-total{ font-weight:700; border-left:1px solid var(--border); padding-left:10px; }
+  /* 數值欄：表頭與數字都置中（同一條中心線），並用極淡垂直線分隔。
+     原本表頭靠右、數字也靠右，但 1 位數字的視覺中心偏右、表頭文字偏左，看起來像沒對齊。 */
+  .drk-c-n{ width:58px; flex:none; text-align:center; font-variant-numeric:tabular-nums;
+    border-left:1px solid var(--border); }
+  .ns-thead .drk-c-n{ font-size:12px; line-height:1.25; white-space:normal; padding-top:2px; padding-bottom:2px; text-align:center; }
+  .drk-c-total{ font-weight:700; border-left:1px solid var(--border); }
   .drk-c-act{ flex:1 1 auto; min-width:0; text-align:left; font-size:13px;
               color:var(--muted); white-space:normal; line-height:1.4; }
   /* 最高原因：顏色＋粗體＋底色三重標示（投影色偏時仍看得出，不只靠顏色） */
@@ -334,7 +338,8 @@
   .drk-act-do{ display:block; color:var(--accent); margin-top:1px; }
   .drk-total-row{ background:var(--card-2); border-top:2px solid var(--border); }
   .drk-total-row .drk-c-ke{ font-weight:800; }
-  .drk-base{ font-weight:700; font-size:12.5px; }
+  .drk-base-n{ display:block; font-weight:800; font-size:12.5px; line-height:1.15; }
+  .drk-base-p{ display:block; font-size:10.5px; color:var(--muted); line-height:1.15; }
   /* ── 婉拒追蹤條與「較基準」欄（v1.31.0）──
      形狀顏色規則：減少＝ok（綠）、增加＝warning（黃）、持平＝muted；只用既有色票，不新增顏色 */
   .drk-track{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:8px 0 6px;
@@ -365,7 +370,7 @@
   .drk-row .drk-c-n{ font-size:13.5px; }
   .drk-row .drk-hot{ font-size:15px; }
   .drk-tbar{ display:block; height:4px; border-radius:2px; background:var(--accent);
-    opacity:.8; margin:5px 0 0 auto; min-width:8px; }
+    opacity:.8; margin:5px auto 0; min-width:8px; }
   .drk-total-row .drk-c-n{ color:var(--muted); }
   .drk-total-row .drk-c-total{ color:var(--text); }
   .drk-act-do{ font-weight:650; }
@@ -1725,7 +1730,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.33.0';   // 1.33.0：暫停基準比較、說明收進規則說明、表格視覺優化
+  var APP_VERSION = '1.34.0';   // 1.34.0：數值欄置中對齊＋垂直分隔線、上方提示精簡為一行
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10345,7 +10350,7 @@ var state = {
       th.title = keData.reasons[hi] + '（表頭為短名）';
       head.appendChild(th);
     }
-    var thT = nsCell('drk-c-n drk-c-total', '合計');
+    var thT = nsCell('drk-c-n drk-c-total', '合計件數');
     thT.title = '該課未合作件數／占全公司未合作件數（長條＝占全公司的比例）';
     head.appendChild(thT);
     head.appendChild(nsCell('drk-c-act', '先改什麼（這一課的檢討重點）'));
@@ -10488,8 +10493,8 @@ var state = {
       row.appendChild(cell);
     }
 
-    var totalCell = nsCell('drk-c-n drk-c-total', ke.total + ' 件');
-    totalCell.title = '占全公司未合作 ' + (ke.ofCompany * 100).toFixed(1) + '%';
+    var totalCell = nsCell('drk-c-n drk-c-total', String(ke.total));
+    totalCell.title = '這課共 ' + ke.total + ' 件，占全公司未合作 ' + (ke.ofCompany * 100).toFixed(1) + '%';
     // 細長條＝該課占全公司未合作件數的比例：不必換算就看出「哪一課吃最多」
     var tbar = document.createElement('span');
     tbar.className = 'drk-tbar';
@@ -10645,8 +10650,23 @@ var state = {
       var rn = keData.reasons[ri];
       var n = keData.company.counts[rn] || 0;
       var pc = Math.round((keData.company.share[rn] || 0) * 100);
-      var cell = nsCell('drk-c-n drk-base' + (n ? '' : ' drk-zero'), n ? (n + '｜' + pc + '%') : '–');
+      var cell = nsCell('drk-c-n drk-base' + (n ? '' : ' drk-zero'));
       cell.title = rn + '：' + n + ' 件，占全公司 ' + pc + '%';
+      // data 屬性給測試與無障礙用：兩個 span 上下排列，textContent 會黏成「2414%」，不好解析
+      cell.dataset.n = n;
+      cell.dataset.pct = pc;
+      if(n){
+        var bn = document.createElement('span');
+        bn.className = 'drk-base-n';
+        bn.textContent = String(n);
+        cell.appendChild(bn);
+        var bp = document.createElement('span');
+        bp.className = 'drk-base-p';
+        bp.textContent = pc + '%';
+        cell.appendChild(bp);
+      } else {
+        cell.textContent = '–';
+      }
       if(ctx && ctx.delta && ctx.delta.reasons[rn]){
         var rd = ctx.delta.reasons[rn];
         var dline = document.createElement('span');
@@ -10658,7 +10678,8 @@ var state = {
       }
       row.appendChild(cell);
     }
-    var totCell = nsCell('drk-c-n drk-c-total', keData.total + ' 件');
+    var totCell = nsCell('drk-c-n drk-c-total', String(keData.total));
+    totCell.title = '全公司未合作 ' + keData.total + ' 件';
     if(ctx && ctx.delta){
       var td = document.createElement('span');
       td.className = 'drk-base-d ' + dropDeltaClass(ctx.delta.total.d, true);
@@ -10729,28 +10750,24 @@ var state = {
       if(fieldStr(sr, '洽談內容') !== '') nTalk++;
     }
     var pctOf = function(x){ return nScope ? Math.round(100 * x / nScope) : 0; };
-    note.textContent = '母體：已結案且未導入的案件。原因取自「結案」欄（本版 ' + nScope + ' 件皆有值）；'
-      + '「說明」欄本版有值 ' + nNote + ' 件（' + pctOf(nNote) + '%）、「洽談內容」' + nTalk + ' 件（' + pctOf(nTalk) + '%），逐筆附在案件卡。'
-      + (pctOf(nNote) < 60 ? '說明填充率偏低時，只靠說明會漏掉大半案件，所以原因仍以結案欄為準。' : '')
-      + '結案寫「導入完成」但導入欄空白者屬資料異常，不列入未合作。'
-      + '本區塊隨「分析期間」與篩選縮放。長條依「類別」分段，'
-      + '點任一列可展開該原因的案件清單（依類別分組）。';
-    box.appendChild(note);
-
-    var cap = document.createElement('p');
-    cap.className = 'list-summary';
+    // v1.34.0：三行提示（母體說明／統計摘要／類別圖例）壓成兩行。
+    // 只留「讀這張表一定要知道」的三件事：母體多大、占比多少、說明欄補齊程度；其餘進規則說明。
     var pct = data.closedAll ? (100 * data.total / data.closedAll) : 0;
-    cap.textContent = '共 ' + data.total + ' 件・' + data.items.length + ' 種原因'
-      + '（占本期已結案 ' + data.closedAll + ' 件的 ' + pct.toFixed(1) + '%）｜'
-      + '本期已結案 ' + data.closedAll + ' 件＝已導入 ' + data.imported
-      + ' ＋未導入且未合作 ' + data.total + ' ＋異常 ' + data.anomaly
-      + '（長條以最大值 ' + data.max + ' 為 100%）';
-    box.appendChild(cap);
+    // 提示只留「讀表必需的母體與占比」；填充率、長條基準、異常排除等細節都在底部規則說明。
+    // 說明填充率只在偏低（<60%）時才提，因為那時「只靠說明會漏案件」會影響判讀。
+    note.textContent = '本期已結案 ' + data.closedAll + ' 件，未合作 ' + data.total + ' 件（'
+      + pct.toFixed(0) + '%）；原因 ' + data.items.length + ' 類'
+      + (pctOf(nNote) < 60 ? '｜說明只有 ' + pctOf(nNote) + '% 有值，原因仍以結案欄為準。' : '');
+    box.appendChild(note);
 
     // 類別小計圖例（讓「類別」也是第一級維度，不必展開就看得到）
     if(data.total && data.cats.length){
       var legend = document.createElement('div');
       legend.className = 'dr-legend';
+      var lcap = document.createElement('span');
+      lcap.className = 'dr-legend-cap';
+      lcap.textContent = '類別（' + data.total + ' 件）：';
+      legend.appendChild(lcap);
       for(var ci2 = 0; ci2 < data.cats.length; ci2++){
         var cg3 = data.cats[ci2];
         var li = document.createElement('span');
@@ -12960,7 +12977,9 @@ var state = {
       '最後一列「全公司」是比較基準，每格是「件數｜占比」；各課的「高／低幾個百分點」都是跟這一列比。',
       '表頭用短名（考慮中／婉拒／需求無解／未啟動），滑過可看完整名稱；欄數跟著來源寫法走，出現五類以外的新寫法會自動多一欄（例如「決策因素」）。',
       '點課別那一列展開該課名單：最上面是課名標題帶（件數與各原因分布，往下滑會黏在頂端），中間原因可折疊（預設只開本課主因），最裡面再依客戶類型（零擔／1P／3P／甲配）分組；案件卡左邊的膠囊就是該筆的客戶類型。',
-      '該課未滿 10 件時標「樣本僅 N 件」，避免小樣本的百分比被當成結論；百分比取整數，與上面原因表的 1 位小數可能差 1%，基準列五格相加可能是 99%～101%。'
+      '該課未滿 10 件時標「樣本僅 N 件」，避免小樣本的百分比被當成結論；百分比取整數，與上面原因表的 1 位小數可能差 1%，基準列五格相加可能是 99%～101%。',
+      '本期已結案 ＝ 已導入 ＋ 未合作（已結案未導入） ＋ 異常；三者相加等於已結案件數，長條依類別分段、以件數最多的原因為 100%。'
+      + '結案欄寫「導入完成」但導入欄空白者列為資料異常，不算未合作；本區塊隨「分析期間」與篩選縮放，點任一原因列可展開該原因的完整名單（依類別分組）。'
     ],
     listSection: [
       '每頁 50 筆；可用關鍵字、課別、類別、狀態、開發者篩選。',
