@@ -327,9 +327,10 @@
               color:var(--muted); white-space:normal; line-height:1.4; }
   /* 最高原因：顏色＋粗體＋底色三重標示（投影色偏時仍看得出，不只靠顏色） */
   .drk-hot{ font-weight:800; background:var(--row-hover-strong);
-            box-shadow:inset 0 -2px 0 var(--warning); border-radius:3px; }
-  .drk-zero{ color:var(--border); }
+            box-shadow:inset 0 0 0 1px var(--warning), inset 0 -2px 0 var(--warning); border-radius:3px; }
+  .drk-zero{ color:var(--muted); font-weight:700; }   /* 原本用 --border 又細字，投影時看起來像空白 */
   .drk-act-main{ color:var(--text); font-weight:650; }
+  .drk-act-sub{ display:block; color:var(--muted); font-size:12px; margin-top:1px; }
   .drk-act-do{ display:block; color:var(--accent); margin-top:1px; }
   .drk-total-row{ background:var(--card-2); border-top:2px solid var(--border); }
   .drk-total-row .drk-c-ke{ font-weight:800; }
@@ -357,6 +358,20 @@
   .drk-wrap .is-flat{ color:var(--muted); }
   .drk-base-d{ font-size:12px; font-weight:800; }   /* 投影時 11px 太小，放大一級 */
   /* ── 展開區三層（v1.32.0）：課名標題帶 → 原因（可折疊）→ 類別小標 → 案件卡 ── */
+  /* 表格視覺（v1.33.0）：表頭黏頂、斑馬紋、數字放大、基準列降噪 */
+  .drk-table .ns-thead{ position:sticky; top:0; z-index:4; }
+  .drk-table > .ns-grp:nth-of-type(even) > .drk-row{ background:var(--card-2); }
+  .drk-table > .ns-grp > .drk-row:hover{ background:var(--row-hover-strong); }
+  .drk-row .drk-c-n{ font-size:13.5px; }
+  .drk-row .drk-hot{ font-size:15px; }
+  .drk-tbar{ display:block; height:4px; border-radius:2px; background:var(--accent);
+    opacity:.8; margin:5px 0 0 auto; min-width:8px; }
+  .drk-total-row .drk-c-n{ color:var(--muted); }
+  .drk-total-row .drk-c-total{ color:var(--text); }
+  .drk-act-do{ font-weight:650; }
+  @media print{
+    .drk-table .ns-thead{ position:static; }   /* 列印不能用 sticky，會每頁重複錯位 */
+  }
   .drk-cases{ border-left:3px solid var(--accent); background:var(--card-2); padding:0 12px 8px 14px; }
   .drk-cases-head{ position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:baseline;
     gap:4px 10px; padding:8px 2px 7px; background:var(--card-2); border-bottom:1px solid var(--border); }
@@ -1710,7 +1725,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.32.0';   // 1.32.0：矩陣展開區改三層（課名帶／原因可折疊／類別）＋客戶類型 chip
+  var APP_VERSION = '1.33.0';   // 1.33.0：暫停基準比較、說明收進規則說明、表格視覺優化
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10319,28 +10334,6 @@ var state = {
     h3.textContent = '依課別檢討（每週業務會議用）';
     wrap.appendChild(h3);
 
-    // 婉拒追蹤＋基準選擇（v1.31.0）
-    if(ctx.snaps && ctx.snaps.length){
-      wrap.appendChild(buildDropReasonTrackBar(ctx, function(choice){
-        saveDropBaseChoice(choice);
-        if(typeof ctx.onChange === 'function') ctx.onChange();
-      }));
-    }
-
-    var note = document.createElement('p');
-    note.className = 'pg-note';
-    note.textContent = '每一列是一個課：' + keData.reasons.length + ' 類原因的件數、合計，以及該課占比最高的原因、'
-      + '它占該課的比例與全公司平均的差距。'
-      + '「先改什麼」是對應那一類原因最該動的一件事；點課別那一列可展開該課的案件，'
-      + '依原因分組、附說明與洽談內容，會議上直接點名討論。'
-      + '件數為 0 顯示「–」，不是缺資料。'
-      + '結案欄寫法不一致的（例如「客戶需求無法滿足」「超過1個月未啟動，先行」）在這裡已合併為同一類；'
-      + '百分比取整數（四捨五入），與上方原因表的 1 位小數可能差 1%；基準列五格相加可能是 99%～101%。'
-      + '「高／低幾個百分點」是用未四捨五入的比例算的，所以可能與畫面上的整數相減差 1。'
-      + '粗體加底線的數字＝該課件數最多的原因；最後一列是全公司基準。'
-      + '欄數跟著來源寫法走：出現五類以外的新寫法（例如「決策因素」）會自動多一欄，不會被併掉或忽略。';
-    wrap.appendChild(note);
-
     var table = document.createElement('div');
     table.className = 'ns-table drk-table';
 
@@ -10353,13 +10346,8 @@ var state = {
       head.appendChild(th);
     }
     var thT = nsCell('drk-c-n drk-c-total', '合計');
-    thT.title = '該課未合作件數／占全公司未合作件數';
+    thT.title = '該課未合作件數／占全公司未合作件數（長條＝占全公司的比例）';
     head.appendChild(thT);
-    if(ctx.delta){
-      var thD = nsCell('drk-c-n drk-c-delta', '較基準');
-      thD.title = '與「' + (ctx.baseLabel || '基準') + '」相比的增減（少＝好）';
-      head.appendChild(thD);
-    }
     head.appendChild(nsCell('drk-c-act', '先改什麼（這一課的檢討重點）'));
     table.appendChild(head);
 
@@ -10502,6 +10490,11 @@ var state = {
 
     var totalCell = nsCell('drk-c-n drk-c-total', ke.total + ' 件');
     totalCell.title = '占全公司未合作 ' + (ke.ofCompany * 100).toFixed(1) + '%';
+    // 細長條＝該課占全公司未合作件數的比例：不必換算就看出「哪一課吃最多」
+    var tbar = document.createElement('span');
+    tbar.className = 'drk-tbar';
+    tbar.style.width = Math.max(6, Math.round(ke.ofCompany * 100)) + '%';
+    totalCell.appendChild(tbar);
     row.appendChild(totalCell);
 
     if(ctx && ctx.delta){
@@ -10523,7 +10516,7 @@ var state = {
       var sub = document.createElement('span');
       sub.className = 'drk-act-sub';
       // 小樣本（<10 件）時百分比很嚇人，先講清楚，避免會議上誤判
-      sub.textContent = '｜' + drKeDeltaText(ke, keData) + (ke.total < 10 ? '（樣本僅 ' + ke.total + ' 件）' : '');
+      sub.textContent = drKeDeltaText(ke, keData) + (ke.total < 10 ? '（樣本僅 ' + ke.total + ' 件）' : '');
       actCell.appendChild(sub);
       var act = document.createElement('span');
       act.className = 'drk-act-do';
@@ -10679,9 +10672,39 @@ var state = {
       row.appendChild(nsCell('drk-c-n drk-c-delta ' + dropDeltaClass(ctx.delta.total.d, true),
                              dropDeltaText(ctx.delta.total.d)));
     }
-    row.appendChild(nsCell('drk-c-act drk-base-note',
-      '全公司基準（件數｜占全公司比例）＝各課比較的對照，每一列的「高／低幾個百分點」都是跟這一列比'));
+    // 這句原本寫在「先改什麼」欄，跟各課的改善建議混在一起；改成不佔格，說明留在底部規則說明
+    row.appendChild(nsCell('drk-c-act drk-base-note', ''));
     return row;
+  }
+
+  // ── 逐週比較（基準比較／快照）目前停用 ──────────────────────────────────
+  // 使用者 2026-11-03：「依課別檢討的部分還不需要比較功能」。
+  // 做法是「關掉入口」而不是刪程式：純函式仍有 node 測試覆蓋，恢復時把旗標改 true 就回來，
+  // 也不必回頭重寫（旗標 false 時完全不寫 localStorage，不會留下沒人用的紀錄）。
+  var DR_SNAPSHOT_UI = false;
+
+  function dropReasonCtx(model){
+    if(!DR_SNAPSHOT_UI) return {};
+    var cur = computeDropSnapshot(model.rows);
+    cur.fp = dropSnapFp(cur);
+    var prevSnaps = loadDropSnapshots();
+    var seen = null;
+    for(var pi = 0; pi < prevSnaps.length; pi++){
+      if(prevSnaps[pi].fp === cur.fp){ seen = prevSnaps[pi]; break; }
+    }
+    // 同一份資料再看一次不要改寫它的時間（否則舊檔會被排到最後，時序全錯）
+    cur.at = (seen && seen.at) ? seen.at : dropNowLabel();
+    cur.name = state.fileName || (seen && seen.name) || '（未命名檔）';
+    var snaps = mergeDropSnapshots(prevSnaps, cur);
+    saveDropSnapshots(snaps);
+    var choice = loadDropBaseChoice();
+    var base = pickDropBase(snaps, cur, choice);
+    return {
+      cur: cur, snaps: snaps, choice: choice,
+      delta: base ? computeDropDelta(cur, base) : null,
+      baseLabel: base ? (dropSnapLabel(base) + '｜未合作 ' + base.total + ' 件') : '',
+      onChange: function(){ renderDropReasonSection(model); }
+    };
   }
 
   function renderDropReasonSection(model){
@@ -10771,27 +10794,7 @@ var state = {
     // v1.30.0：各課 × 原因 檢討矩陣（每週業務會議逐課檢討用）
     var keData = computeDropReasonByKe(model.rows);
     if(keData.total && keData.kes.length){
-      // v1.31.0：每週快照（只存彙總）＋婉拒追蹤
-      var cur = computeDropSnapshot(model.rows);
-      cur.fp = dropSnapFp(cur);
-      var prevSnaps = loadDropSnapshots();
-      var seen = null;
-      for(var pi = 0; pi < prevSnaps.length; pi++){
-        if(prevSnaps[pi].fp === cur.fp){ seen = prevSnaps[pi]; break; }
-      }
-      // 同一份資料再看一次不要改寫它的時間（否則舊檔會被排到最後，時序全錯）
-      cur.at = (seen && seen.at) ? seen.at : dropNowLabel();
-      cur.name = state.fileName || (seen && seen.name) || '（未命名檔）';
-      var snaps = mergeDropSnapshots(prevSnaps, cur);
-      saveDropSnapshots(snaps);
-      var choice = loadDropBaseChoice();
-      var base = pickDropBase(snaps, cur, choice);
-      var delta = base ? computeDropDelta(cur, base) : null;
-      box.appendChild(buildDropReasonKeTable(keData, {
-        cur: cur, snaps: snaps, delta: delta, choice: choice,
-        baseLabel: base ? (dropSnapLabel(base) + '｜未合作 ' + base.total + ' 件') : '',
-        onChange: function(){ renderDropReasonSection(model); }
-      }));
+      box.appendChild(buildDropReasonKeTable(keData, dropReasonCtx(model)));
     }
 
     sec.hidden = false;
@@ -12949,8 +12952,15 @@ var state = {
     ],
     dropReasonSection: [
       '母體＝已結案但沒有導入的案件（客戶婉拒、聯繫無果、考慮中、暫緩等都算）。',
-      '原因以「結案」欄的原文歸類，不另外改寫。',
-      '長條依類別分段，同一個原因可能同時有多個類別。'
+      '原因以「結案」欄的原文歸類，不另外改寫；同一類的不同寫法（例如「客戶需求無法滿足」「需求無法滿足」）會併成同一類，認不得的寫法原樣保留、自成新欄。',
+      '長條依類別分段，同一個原因可能同時有多個類別。',
+      '「依課別檢討」的母體與上面這張原因表完全相同，所以兩張表的件數一定對得起來。',
+      '依課別檢討：一列是一個課別，欄位是該課各原因的件數與合計；件數 0 顯示「–」，代表這一課沒有這種情況，不是缺資料。',
+      '粗體加底色的數字＝該課件數最多的原因（本課主因）；列尾那句是對應這一類原因最該做的一件事。',
+      '最後一列「全公司」是比較基準，每格是「件數｜占比」；各課的「高／低幾個百分點」都是跟這一列比。',
+      '表頭用短名（考慮中／婉拒／需求無解／未啟動），滑過可看完整名稱；欄數跟著來源寫法走，出現五類以外的新寫法會自動多一欄（例如「決策因素」）。',
+      '點課別那一列展開該課名單：最上面是課名標題帶（件數與各原因分布，往下滑會黏在頂端），中間原因可折疊（預設只開本課主因），最裡面再依客戶類型（零擔／1P／3P／甲配）分組；案件卡左邊的膠囊就是該筆的客戶類型。',
+      '該課未滿 10 件時標「樣本僅 N 件」，避免小樣本的百分比被當成結論；百分比取整數，與上面原因表的 1 位小數可能差 1%，基準列五格相加可能是 99%～101%。'
     ],
     listSection: [
       '每頁 50 筆；可用關鍵字、課別、類別、狀態、開發者篩選。',
