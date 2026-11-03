@@ -692,7 +692,7 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 
 
 
-### 婉拒追蹤與每週快照（v1.31.0，2026-11-03）
+### 婉拒追蹤與每週快照（v1.31.0，2026-11-03；**v1.33.0 起 UI 暫停**，程式保留見下節）
 
 需求原話：「可以根據原因優化的項目…減少客戶婉拒的數量」。要「減少」就得先能逐週比較，所以做法是把每次看到的
 未合作統計留在**瀏覽器本機**，下次載入新檔自動比。
@@ -715,6 +715,44 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
 - 驗證：`tools/test-drsnap.js`（34 項）＋`tools/probe-drksnap-e2e.py`（31 項：載入 10-27→11-03 兩份、
   婉拒 35→34 須顯示 −1、重載去重、切基準、三種寬度、列印、重整後仍在）。E2E 需要
   `clean-1027.xlsx`、`clean-1103.xlsx` 複製到 `crm-report/` 才跑得動。
+
+### 暫停基準比較、說明收進規則說明、表格視覺（v1.33.0，2026-11-03）
+
+使用者原話：「依課別檢討的部分還不需要比較功能，請將基準比較功能與快照說明暫時移除，也把說明妥善安排到底部的規則說明，並同時把表格視覺在優化。」
+
+**1. 比較功能是「關掉入口」而不是刪程式**
+
+- `DR_SNAPSHOT_UI = false`，由 `dropReasonCtx(model)` 集中判斷：false 時回傳 `{}`，
+  `buildDropReasonKeTable` 因此沒有 `ctx.delta`／`ctx.snaps`，「婉拒追蹤條」「較基準」欄、基準列的 ±N 小字全部不出現，
+  **而且不會寫 localStorage**。
+- 純函式（`computeDropSnapshot`／`dropSnapFp`／`mergeDropSnapshots`／`computeDropDelta`／`pickDropBase`）
+  與 `test-drsnap`（34 項）全部保留：恢復功能只要把旗標改 `true`，不必重寫、也不必回頭補測試。
+- ⚠ 停用時務必一起確認「不寫儲存」：只藏 UI、照樣寫 localStorage，等於在使用者機器上留下沒人看的紀錄，
+  下次啟用時會突然冒出「上週」基準——那些資料正是停用期間偷記的。
+- E2E：舊的 `probe-drksnap-e2e.py` 搬到 `tools/attic/`（檔頭寫明復原方式，不要刪）；
+  停用期間跑 `tools/probe-drksnap-off-e2e.py`（23 項），關鍵三項是：
+  沒有軌跡條／沒有較基準欄、**localStorage 沒有 `crmReport.dropSnapshots.v1` 與 `dropBase.v1`**、五個純函式仍在。
+
+**2. 說明全部收進底部規則說明**
+
+- 刪掉 `buildDropReasonKeTable` 內的長段 `pg-note`，改寫成 `BLOCK_RULES.dropReasonSection` 的 10 條
+  （母體一致、欄位定義、本課主因、全公司基準列、短名與動態欄數、展開三層、樣本門檻、四捨五入）。
+- 判斷原則：表格旁邊只留「看不懂數字就無法讀表」的最小提示，其餘慣例與口徑一律進規則說明
+  （預設收合、列印時展開）。
+- 功能不在時，不要在規則說明留「怎麼用比較功能」的段落——寫了就是騙人。
+
+**3. 表格視覺優化（都是截圖／量測後才改的）**
+
+| 問題（實測） | 改法 |
+|---|---|
+| 0 件用 `--border` 色又細字，投影與截圖看起來像空白，被誤認「漏填」 | 改 `--muted` + `font-weight:700` |
+| 斑馬紋用 `--row-hover`，與主因底色 `--row-hover-strong` 太接近，主因在灰列上失去強調 | 斑馬紋改 `--card-2`；主因加 `inset 0 0 0 1px var(--warning)` 內框 |
+| 合計欄占比細條 3px／淡，被看成格子下底線 | 4px、`opacity:.8`、`margin-top:5px` |
+| 「先改什麼」把診斷與行動擠成一行 | 診斷 `display:block` 12px muted 在上、行動（藍色）在下 |
+| 全公司列長註解塞在「先改什麼」格，和各課建議混在一起 | 該格清空，說明只留規則說明 |
+| 長表滾動時看不到表頭 | `.drk-table .ns-thead{position:sticky;top:0}`；⚠ 列印要 `position:static`，否則每頁重複錯位 |
+
+**4. 版本**：`1.33.0`／commit `590f495`（README 補述 `4b8d7f5`）／tag `v1.33.0`／線上 sha16 `1b5d2e7c91981e92`。
 
 ## 空值標籤一律寫出維度（v1.9.1）
 
