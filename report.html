@@ -315,6 +315,12 @@
               font-size:12.5px; color:var(--muted); }
   .dr-legend-item{ display:inline-flex; align-items:center; gap:6px; }
   .dr-legend-cap{ color:var(--muted); font-size:12px; }
+  .dr-c-sub-head{ display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;
+    padding:4px 2px 3px; border-bottom:1px dashed var(--border); }
+  .dr-c-sub-n{ font-weight:800; font-size:13.5px; }
+  .dr-c-sub-num{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .dr-c-sub-tag{ font-size:11px; font-weight:800; color:var(--warning);
+    border:1px solid var(--warning); border-radius:6px; padding:0 5px; }
   /* ── 依課別檢討矩陣（v1.30.0）：沿用 ns-table 外框與列 hover，只補欄寬與文字層級 ──
      一個顏色只代表一件事：最高原因用 --warning（提醒），「0 件」用 --border（幾乎看不見但不空白） */
   .drk-wrap{ margin-top:16px; }
@@ -383,6 +389,12 @@
   .drk-ch-ke{ font-weight:800; font-size:14px; color:var(--text); }
   .drk-ch-total{ font-weight:700; font-size:12.5px; color:var(--text); }
   .drk-ch-split{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .drk-gband{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0 0;
+    padding:7px 10px; border-radius:8px; background:var(--card-2); border-left:3px solid var(--border); }
+  .drk-gband.is-top{ border-left-color:var(--warning); }
+  .drk-gband-n{ font-weight:800; font-size:13px; }
+  .drk-gband-c{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .drk-sub-tag.is-sub{ background:var(--warning); color:#2b2b33; }
   .drk-sub{ border-top:1px solid var(--border); }
   .drk-sub:first-of-type{ border-top:0; }
   .drk-sub-head{ display:flex; align-items:center; gap:8px; width:100%; padding:7px 2px;
@@ -1730,7 +1742,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.34.0';   // 1.34.0：數值欄置中對齊＋垂直分隔線、上方提示精簡為一行
+  var APP_VERSION = '1.35.0';   // 1.35.0：結案原因改四大分類（商務跟進／機會對齊／政策邊界／非目標）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -9864,7 +9876,7 @@ var state = {
   function computeDropReasonAnalysis(rows){
     var list = rows || [];
     var total = 0, closedAll = 0, imported = 0, anomaly = 0;
-    var byReason = {}, order = [], scopeRows = [];
+    var byGroup = {}, order = [], scopeRows = [];
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       var jiean = fieldStr(r, '結案');
@@ -9874,25 +9886,40 @@ var state = {
         else if(jiean.indexOf('導入完成') !== -1) anomaly++;
       }
       if(!isDropReasonCase(r)) continue;
-      var label = dropReasonLabel(fieldStr(r, '結案')) || '(原因未填)';
-      if(!byReason[label]){
-        byReason[label] = { reason: label, count: 0, rows: [] };
-        order.push(label);
+      var cls = drClassifyReason(r);
+      if(!byGroup[cls.group]){
+        byGroup[cls.group] = { code: cls.group, reason: drGroupName(cls.group), count: 0, rows: [], subs: [], subMap: {} };
+        order.push(cls.group);
       }
-      byReason[label].count++;
-      byReason[label].rows.push(r);
+      var it = byGroup[cls.group];
+      it.count++;
+      it.rows.push(r);
+      if(!it.subMap[cls.sub]){
+        it.subMap[cls.sub] = { sub: cls.sub, count: 0, rows: [], via: cls.via };
+        it.subs.push(it.subMap[cls.sub]);
+      }
+      it.subMap[cls.sub].count++;
+      it.subMap[cls.sub].rows.push(r);
       scopeRows.push(r);
       total++;
     }
     var items = [];
-    for(var j = 0; j < order.length; j++) items.push(byReason[order[j]]);
+    for(var j = 0; j < order.length; j++) items.push(byGroup[order[j]]);
     items.sort(function(a, b){
       if(b.count !== a.count) return b.count - a.count;
-      return a.reason < b.reason ? -1 : (a.reason > b.reason ? 1 : 0);
+      return ['G1', 'G2', 'G3', 'G4', 'GX'].indexOf(a.code) - ['G1', 'G2', 'G3', 'G4', 'GX'].indexOf(b.code);
     });
     for(var k = 0; k < items.length; k++){
       items[k].share = total ? (items[k].count / total) : 0;
       items[k].cats = groupByCategory(items[k].rows);
+      items[k].subs.sort(function(a, b){
+        if(b.count !== a.count) return b.count - a.count;
+        return DR_SUB_ORDER.indexOf(a.sub) - DR_SUB_ORDER.indexOf(b.sub);
+      });
+      for(var si = 0; si < items[k].subs.length; si++){
+        items[k].subs[si].share = total ? (items[k].subs[si].count / total) : 0;
+        items[k].subs[si].cats = groupByCategory(items[k].subs[si].rows);
+      }
     }
     return { total: total, closedAll: closedAll, imported: imported, anomaly: anomaly,
              items: items, cats: groupByCategory(scopeRows),
@@ -9900,118 +9927,199 @@ var state = {
   }
 
   // ---------------------------------------------------------------------------
-  // 純函式：各課 × 結案原因 檢討矩陣（每週業務會議用，v1.30.0）
+  // 結案原因四大分類（v1.35.0，2026-11-03 使用者指定架構）
   // ---------------------------------------------------------------------------
-  // 目的：會議上「按課」逐課檢討未成交原因，並給一句可優化的動作。
-  //   每課一列 → 五類原因件數、合計、該課占比最高者與全公司平均的差距、對應動作。
-  //   與 computeDropReasonAnalysis 同一母體（isDropReasonCase），但維度換成課別。
-  // 標準五類。⚠ 來源資料的「結案」欄寫法不統一（實測：'客戶需求無法滿足'、'超過1個月未啟動，先行'），
-  // 所以用關鍵字歸類成固定五類；歸不進去的才另開欄，不會被吃掉。
-  var DR_REASON_ORDER = ['聯繫無果', '客戶考慮中', '客戶婉拒', '客戶需求無法滿足', '超過1個月未啟動'];
+  // 為什麼要改：舊版五類（聯繫無果／考慮中／婉拒／需求無解／未啟動）混了不同性質的東西——
+  //   有的是「業務再追一次就會動」、有的是「客戶在考慮」、有的是「政策或服務能力不允許」。
+  //   會議上檢討「需求無解 28 件」等於把大材、偏遠、委外、夜收、比價綁成一件事談，無從下手。
+  // 新架構依「下一步該誰動」分四類（使用者 2026-11-03 指定，對齊 2027 政策目標）：
+  //   G1 商務處理與跟進：業務多做一件事就會動（聯繫、評估、客情）
+  //   G2 業務機會與策略對齊：有機會，缺條件（價格／統倉／時段）或客戶已明確沒需求
+  //   G3 政策與服務邊界：不是業務不努力，是能力或政策不允許 → 要調資源或寫進政策
+  //   G4 非目標與排除：不符 2027 政策方向，不該再花業務時間
+  var DR_GROUPS = [
+    { code: 'G1', name: '商務處理與跟進', en: 'Follow-up & Lifecycle',
+      subs: ['聯繫無果', '客戶評估', '客情培養'],
+      action: '縮短等待：5 日 3 聯沒接就換管道，30 天回頭看一次' },
+    { code: 'G2', name: '業務機會與策略對齊', en: 'Opportunities & Strategy',
+      subs: ['價格因素', '統倉運輸', '指定時間', '客戶婉拒'],
+      action: '有機會就談條件：價格給方案，統倉與時段當服務延伸報價' },
+    { code: 'G3', name: '政策與服務邊界', en: 'Policy Constraints & Scope',
+      subs: ['大材商品', '偏遠地區', '委外區域', '特殊運輸', '貴重物品', '決策因素'],
+      action: '不是業務的錯：列管政策與資源，條件到位再回訪' },
+    { code: 'G4', name: '非目標與排除', en: 'Non-Target',
+      subs: ['非目標客戶'],
+      action: '停止投入：註記排除理由，不再排回訪' }
+  ];
+  var DR_UNCLASSIFIED = '未分類';
+  var DR_SUB_ORDER = [];
+  var DR_GROUP_OF = {};
+  (function(){
+    for(var dgi = 0; dgi < DR_GROUPS.length; dgi++){
+      var dg = DR_GROUPS[dgi];
+      for(var dsj = 0; dsj < dg.subs.length; dsj++){
+        DR_SUB_ORDER.push(dg.subs[dsj]);
+        DR_GROUP_OF[dg.subs[dsj]] = dg.code;
+      }
+    }
+    DR_SUB_ORDER.push(DR_UNCLASSIFIED);
+    DR_GROUP_OF[DR_UNCLASSIFIED] = 'GX';
+  })();
 
-  var DR_REASON_MATCH = [
-    ['聯繫', '聯繫無果'],
-    ['考慮', '客戶考慮中'],
-    ['婉拒', '客戶婉拒'],
-    ['需求', '客戶需求無法滿足'],
-    ['未啟動', '超過1個月未啟動']
+  // 表頭短名：四個大類名都太長（9～10 字），塞不進 4 欄的矩陣表頭
+  var DR_GROUP_SHORT = { 'G1': '商務跟進', 'G2': '機會對齊', 'G3': '政策邊界', 'G4': '非目標', 'GX': '未分類' };
+  var DR_SUB_SHORT = { '客戶評估': '評估中', '客情培養': '客情' };
+
+  function drGroupOf(sub){ return DR_GROUP_OF[sub] || 'GX'; }
+
+  function drGroupName(code){
+    if(code === 'GX') return DR_UNCLASSIFIED;
+    for(var i = 0; i < DR_GROUPS.length; i++) if(DR_GROUPS[i].code === code) return DR_GROUPS[i].name;
+    return String(code);
+  }
+
+  function drGroupShort(code){ return DR_GROUP_SHORT[code] || drGroupName(code); }
+
+  function drGroupAction(code){
+    for(var i = 0; i < DR_GROUPS.length; i++) if(DR_GROUPS[i].code === code) return DR_GROUPS[i].action;
+    return '先判定分類，再談動作';
+  }
+
+  function drSubShort(sub){ return DR_SUB_SHORT[sub] || sub; }
+
+  // 一類子原因 → 最該先做的一件事（會議上要盯的動作）
+  var DR_SUB_ACTION = {
+    '聯繫無果': '換管道：留 LINE、約定具體日期，同一支電話別重打',
+    '客戶評估': '給選項＋期限：兩個方案、一個回覆日',
+    '客情培養': '一通電話結案或重啟，不留模糊',
+    '價格因素': '給方案而不只是降價：分段量價、或先試跑一條路線',
+    '統倉運輸': '轉統倉／入庫評估：量體、對點成本先算清楚',
+    '指定時間': '談時段加價或改收貨點：夜間／指定時段另報價',
+    '客戶婉拒': '談一小塊：一條路線或一個區域先試',
+    '大材商品': '委外（新竹貨運／嘉里大榮）商簽完成後再次回訪',
+    '偏遠地區': '如外商可收貨則再次回訪，或轉委外夥伴',
+    '委外區域': '外商可收貨則回訪；否則評估調整營運資源',
+    '特殊運輸': '政策與可行性確認：溫控／專車／尾門逐項問',
+    '貴重物品': '政策確認：保值與賠償條款先談清楚',
+    '決策因素': '等高層決策：約定下一次確認日，不要空等',
+    '非目標客戶': '註記排除理由，不再排回訪（省下的時間給 G1／G2）',
+    '未分類': '課長補一句原因（5 分鐘），否則這件永遠檢討不到'
+  };
+  function drSubAction(sub){ return DR_SUB_ACTION[sub] || '先確認這類原因的寫法，再對應動作'; }
+
+  // 結案欄（課長寫的結論）優先：這幾種寫法本身就是結論，不必再猜
+  var DR_SUB_FROM_SOURCE = [
+    ['聯繫', '聯繫無果'], ['考慮', '客戶評估'], ['未啟動', '客情培養'],
+    ['婉拒', '客戶婉拒'], ['決策', '決策因素']
   ];
 
-  function drReasonCanon(label){
-    var t = (label === undefined || label === null) ? '' : String(label).trim();
-    if(!t) return '(原因未填)';
-    for(var i = 0; i < DR_REASON_MATCH.length; i++){
-      if(t.indexOf(DR_REASON_MATCH[i][0]) !== -1) return DR_REASON_MATCH[i][1];
+  // 結案欄寫「需求無法滿足」時，依「說明」→「洽談內容」的關鍵字細分。
+  // 取「最早出現」的關鍵字當主因：業務通常把主因寫在最前面（例：「大材積、離島」→ 大材商品）。
+  var DR_SUB_KEYWORDS = [
+    ['非目標客戶', ['嘉義', '雲林', '新營', '暫緩開發', '非目標']],
+    ['大材商品', ['大材', '超重', '超材', '材積', 'S90', 'S120', 'S150', '公斤', 'KG']],
+    ['偏遠地區', ['偏遠', '離島', '外島', '潮州', '東港', '屏東', '民雄', '虎尾', '頭份', '山區']],
+    ['委外區域', ['委外', '非富昇服務', '無開發區域', '非轄區', '服務範圍', '出貨點非']],
+    ['貴重物品', ['貴重', '保值', '賠償', '精品']],
+    ['指定時間', ['夜收', '晚間', '指定時間', '時段', '21點', '19點', '晚上']],
+    ['統倉運輸', ['統倉', '入庫', '寄倉', '板入倉', '對點', 'MOMO', '家樂福']],
+    ['特殊運輸', ['專車', '溫控', '冷藏', '冷凍', '尾門']],
+    ['價格因素', ['價格', '比價', '報價', '運費', '太貴', '費用']]
+  ];
+
+  function drMatchField(text){
+    var blob = String(text === undefined || text === null ? '' : text).toLowerCase().replace(/\n/g, ' ');
+    if(!blob.replace(/\s/g, '')) return null;
+    var best = null;
+    for(var i = 0; i < DR_SUB_KEYWORDS.length; i++){
+      var kws = DR_SUB_KEYWORDS[i][1];
+      for(var j = 0; j < kws.length; j++){
+        var at = blob.indexOf(String(kws[j]).toLowerCase());
+        if(at < 0) continue;
+        if(!best || at < best.at) best = { at: at, sub: DR_SUB_KEYWORDS[i][0] };
+      }
     }
-    return t;
+    return best ? best.sub : null;
   }
 
-  // 表頭短名（長標題會把五個數字欄撐爆；完整名稱放 title）
-  var DR_REASON_SHORT = {
-    '聯繫無果': '聯繫無果',
-    '客戶考慮中': '考慮中',
-    '客戶婉拒': '婉拒',
-    '客戶需求無法滿足': '需求無解',
-    '需求無法滿足': '需求無解',
-    '超過1個月未啟動': '未啟動',
-    '超過 1 個月未啟動': '未啟動',
-    '(原因未填)': '未填'
-  };
-
-  // 一類原因 → 最該先改的一件事（課長在會議上要盯的動作）
-  var DR_REASON_ACTION = {
-    '聯繫無果': '換管道：留 LINE、約定具體日期，同一支電話別重打',
-    '客戶考慮中': '給選項＋期限：兩個方案、一個回覆日',
-    '客戶婉拒': '談一小塊：一條路線或一個區域先試',
-    '客戶需求無法滿足': '條件註記：大材積／委外區／晚間收件，條件到位再回訪',
-    '需求無法滿足': '條件註記：大材積／委外區／晚間收件，條件到位再回訪',
-    '超過1個月未啟動': '一通電話結案或重啟，不留模糊',
-    '超過 1 個月未啟動': '一通電話結案或重啟，不留模糊',
-    '(原因未填)': '先補結案原因，否則無法檢討'
-  };
-
-  function drReasonShort(reason){
-    return DR_REASON_SHORT[reason] || reason;
+  // 回傳 { sub, group, via }：via 交代「憑什麼這樣判」（結案欄／說明／洽談／待判定）
+  function drClassifyReason(row){
+    var t = String(dropReasonLabel(fieldStr(row, '結案')) || '');
+    for(var i = 0; i < DR_SUB_FROM_SOURCE.length; i++){
+      if(t.indexOf(DR_SUB_FROM_SOURCE[i][0]) !== -1){
+        var s0 = DR_SUB_FROM_SOURCE[i][1];
+        return { sub: s0, group: drGroupOf(s0), via: '結案欄' };
+      }
+    }
+    var hit = drMatchField(fieldStr(row, '說明'));
+    if(hit) return { sub: hit, group: drGroupOf(hit), via: '說明' };
+    hit = drMatchField(fieldStr(row, '洽談內容'));
+    if(hit) return { sub: hit, group: drGroupOf(hit), via: '洽談' };
+    return { sub: DR_UNCLASSIFIED, group: 'GX', via: '待判定' };
   }
 
-  function drReasonAction(reason){
-    return DR_REASON_ACTION[reason] || '先確認這類原因的寫法，再對應動作';
-  }
-
-  // 回傳 { total, reasons:[label], kes:[{ke,total,share,counts,top,delta,pp,rows}],
-  //        company:{total,counts,share}, maxCell }
-  //   share    = 該課此原因 ÷ 該課總件數
-  //   delta/pp = 該課 top 占比 − 全公司同原因占比（百分點，正＝這一課特別集中）
-  function computeDropReasonByKe(rows, reasonOrder){
+  // 回傳 { total, groups:[code], kes:[{ke,total,ofCompany,counts,subCounts,top,topSub,share,delta,pp,rows,action}],
+  //        company:{total,counts,share,subCounts}, subTotals:{sub:count}, maxCell }
+  //   counts  = 四大類件數（矩陣的欄）
+  //   subCounts = 子原因件數（「先改什麼」與展開區用）
+  //   share   = top 大類 ÷ 該課總件數；delta/pp = 與全公司同一大類占比的差（百分點）
+  function computeDropReasonByKe(rows, groupOrder){
     var list = rows || [];
-    var fixed = (reasonOrder && reasonOrder.length) ? reasonOrder : DR_REASON_ORDER;
-    var companyCounts = {}, extra = [], keMap = {}, keSeq = [];
+    var fixed = (groupOrder && groupOrder.length) ? groupOrder : ['G1', 'G2', 'G3', 'G4', 'GX'];
+    var companyCounts = {}, subTotals = {}, extra = [], keMap = {}, keSeq = [];
     var total = 0;
     for(var i = 0; i < list.length; i++){
       var r = list[i];
       if(!isDropReasonCase(r)) continue;
+      var cls = drClassifyReason(r);
       var ke = fieldStr(r, '課別') || blankLabel('課別');
-      var reason = drReasonCanon(dropReasonLabel(fieldStr(r, '結案')));
-      if(fixed.indexOf(reason) === -1 && extra.indexOf(reason) === -1) extra.push(reason);
-      if(!keMap[ke]){ keMap[ke] = { ke: ke, total: 0, counts: {}, rows: [] }; keSeq.push(keMap[ke]); }
+      if(fixed.indexOf(cls.group) === -1 && extra.indexOf(cls.group) === -1) extra.push(cls.group);
+      if(!keMap[ke]){
+        keMap[ke] = { ke: ke, total: 0, counts: {}, subCounts: {}, rows: [] };
+        keSeq.push(keMap[ke]);
+      }
       var g = keMap[ke];
       g.total++;
-      g.counts[reason] = (g.counts[reason] || 0) + 1;
+      g.counts[cls.group] = (g.counts[cls.group] || 0) + 1;
+      g.subCounts[cls.sub] = (g.subCounts[cls.sub] || 0) + 1;
       g.rows.push(r);
-      companyCounts[reason] = (companyCounts[reason] || 0) + 1;
+      companyCounts[cls.group] = (companyCounts[cls.group] || 0) + 1;
+      subTotals[cls.sub] = (subTotals[cls.sub] || 0) + 1;
       total++;
     }
 
-    var reasons = fixed.filter(function(x){ return companyCounts[x]; }).concat(extra);
-
+    var groups = fixed.filter(function(x){ return companyCounts[x]; }).concat(extra);
     var companyShare = {};
-    for(var ci = 0; ci < reasons.length; ci++){
-      var rn = reasons[ci];
-      companyShare[rn] = total ? (companyCounts[rn] || 0) / total : 0;
+    for(var ci = 0; ci < groups.length; ci++){
+      companyShare[groups[ci]] = total ? (companyCounts[groups[ci]] || 0) / total : 0;
     }
 
-    var maxCell = 0;
-    var kes = [];
+    var maxCell = 0, kes = [];
     for(var ki = 0; ki < keSeq.length; ki++){
       var g2 = keSeq[ki];
       var counts = {}, top = null;
-      for(var ri = 0; ri < reasons.length; ri++){
-        var rn2 = reasons[ri];
-        var n = g2.counts[rn2] || 0;
-        counts[rn2] = n;
+      for(var ri = 0; ri < groups.length; ri++){
+        var gc = groups[ri];
+        var n = g2.counts[gc] || 0;
+        counts[gc] = n;
         if(n > maxCell) maxCell = n;
-        // 並列時取順序在前的原因（固定順序＝會議上討論的優先序）
-        if(n > 0 && (!top || n > top.count)) top = { reason: rn2, count: n };
+        if(n > 0 && (!top || n > top.count)) top = { code: gc, count: n };
       }
-      var share = g2.total ? top.count / g2.total : 0;
-      var coSh = top ? companyShare[top.reason] : 0;
-      // ⚠ 兩個比例不可混用：share＝top 占「該課」；ofCompany＝該課占「全公司」
+      // 子原因最多者：會議上要看的是「這一課卡在哪個具體原因」，不是大類名
+      var topSub = null;
+      for(var si = 0; si < DR_SUB_ORDER.length; si++){
+        var ss = DR_SUB_ORDER[si];
+        var sn = g2.subCounts[ss] || 0;
+        if(sn > 0 && (!topSub || sn > topSub.count)) topSub = { sub: ss, count: sn, group: drGroupOf(ss) };
+      }
+      var share = (top && g2.total) ? top.count / g2.total : 0;
+      var coSh = top ? companyShare[top.code] : 0;
       kes.push({
         ke: g2.ke, total: g2.total, ofCompany: total ? g2.total / total : 0,
-        counts: counts, top: top, share: share,
-        delta: share - coSh, pp: Math.round((share - coSh) * 100),
+        counts: counts, subCounts: g2.subCounts, top: top, topSub: topSub,
+        share: share, delta: share - coSh, pp: Math.round((share - coSh) * 100),
         rows: g2.rows,
-        action: top ? drReasonAction(top.reason) : ''
+        action: topSub ? drSubAction(topSub.sub) : ''
       });
     }
     kes.sort(function(a, b){
@@ -10022,12 +10130,12 @@ var state = {
     });
 
     return {
-      total: total, reasons: reasons, kes: kes, maxCell: maxCell,
-      company: { total: total, counts: companyCounts, share: companyShare }
+      total: total, groups: groups, kes: kes, maxCell: maxCell,
+      subTotals: subTotals,
+      company: { total: total, counts: companyCounts, share: companyShare, subCounts: subTotals }
     };
   }
 
-  // ---------------------------------------------------------------------------
   // 每週快照與婉拒追蹤（v1.31.0）
   // ---------------------------------------------------------------------------
   // 目的：讓「婉拒件數有沒有下降」變成可追的數字，而不是每週重新感覺。
@@ -10042,8 +10150,10 @@ var state = {
   function computeDropSnapshot(rows){
     var an = computeDropReasonAnalysis(rows);
     var byke = computeDropReasonByKe(rows);
-    var reasons = {}, kes = {};
-    for(var i = 0; i < an.items.length; i++) reasons[an.items[i].reason] = an.items[i].count;
+    // v1.35.0：快照改存「子原因」件數（比大類細，未來要追「聯繫無果有沒有降」才有意義）
+    var reasons = {}, groups = {}, kes = {};
+    for(var i = 0; i < an.items.length; i++) groups[an.items[i].code] = an.items[i].count;
+    for(var sub in byke.subTotals) if(byke.subTotals.hasOwnProperty(sub)) reasons[sub] = byke.subTotals[sub];
     for(var j = 0; j < byke.kes.length; j++){
       var k = byke.kes[j];
       var counts = {};
@@ -10053,7 +10163,7 @@ var state = {
     // ⚠ 不從資料推「資料日期」：這份檔的日期欄是「9/18」這種 M/D 字串，字串比大小會得到 9/18，
     //    對每一份檔都一樣，當標籤會全部撞在一起。快照標籤改用載入時間（精度到分鐘）。
     return { total: an.total, closedAll: an.closedAll, imported: an.imported,
-             reasons: reasons, kes: kes };
+             reasons: reasons, groups: groups, kes: kes };
   }
 
   // 指紋：同樣的資料重複載入不會產生第二份快照
@@ -10162,20 +10272,39 @@ var state = {
     try{ localStorage.setItem(DR_BASE_KEY, v); }catch(_){}
   }
 
-  // 該課案件依原因分組（展開面板用；沿用原因固定順序）
-  function groupDropReasonRowsByReason(rows, reasons){
-    var order = reasons || DR_REASON_ORDER;
-    var map = {}, out = [];
+  // 該課案件先依「大類 → 子原因」分組（展開面板用；順序固定＝會議討論順序）
+  function drSubsOfGroup(code){
+    for(var i = 0; i < DR_GROUPS.length; i++) if(DR_GROUPS[i].code === code) return DR_GROUPS[i].subs.slice();
+    return [DR_UNCLASSIFIED];
+  }
+
+  function drGroupEn(code){
+    for(var i = 0; i < DR_GROUPS.length; i++) if(DR_GROUPS[i].code === code) return DR_GROUPS[i].en;
+    return '';
+  }
+
+  function groupDropReasonRows(rows){
+    var order = ['G1', 'G2', 'G3', 'G4', 'GX'];
+    var gmap = {}, out = [];
     for(var i = 0; i < rows.length; i++){
-      var label = drReasonCanon(dropReasonLabel(fieldStr(rows[i], '結案')));
-      if(!map[label]){ map[label] = { reason: label, rows: [] }; out.push(map[label]); }
-      map[label].rows.push(rows[i]);
+      var cls = drClassifyReason(rows[i]);
+      if(!gmap[cls.group]){
+        gmap[cls.group] = { code: cls.group, name: drGroupName(cls.group), en: drGroupEn(cls.group),
+                            rows: [], subs: [], subMap: {} };
+        out.push(gmap[cls.group]);
+      }
+      var g = gmap[cls.group];
+      g.rows.push(rows[i]);
+      if(!g.subMap[cls.sub]){
+        g.subMap[cls.sub] = { sub: cls.sub, rows: [], via: cls.via };
+        g.subs.push(g.subMap[cls.sub]);
+      }
+      g.subMap[cls.sub].rows.push(rows[i]);
     }
-    out.sort(function(a, b){
-      var oa = order.indexOf(a.reason), ob = order.indexOf(b.reason);
-      if(oa !== ob) return (oa === -1 ? 999 : oa) - (ob === -1 ? 999 : ob);
-      return 0;
-    });
+    out.sort(function(a, b){ return order.indexOf(a.code) - order.indexOf(b.code); });
+    for(var j = 0; j < out.length; j++){
+      out[j].subs.sort(function(a, b){ return DR_SUB_ORDER.indexOf(a.sub) - DR_SUB_ORDER.indexOf(b.sub); });
+    }
     return out;
   }
 
@@ -10275,7 +10404,10 @@ var state = {
     row.appendChild(caretCell);
 
     var reasonCell = nsCell('dr-c-reason', item.reason);
-    reasonCell.title = item.reason + '（' + item.count + ' 件）';
+    // title 交代這個大類包含哪些子原因——表上只寫大類，細節在展開區
+    var subNames = [];
+    for(var sn = 0; sn < item.subs.length; sn++) subNames.push(item.subs[sn].sub + ' ' + item.subs[sn].count);
+    reasonCell.title = item.reason + '（' + item.count + ' 件）｜' + subNames.join('、');
     row.appendChild(reasonCell);
 
     var barCell = nsCell('ns-c-bar');
@@ -10298,21 +10430,44 @@ var state = {
     var cases = document.createElement('div');
     cases.className = 'ns-cases';
     cases.hidden = true;
-    for(var c = 0; c < item.cats.length; c++){
-      var cg2 = item.cats[c];
-      var catHead = document.createElement('div');
-      catHead.className = 'ns-cat-head';
-      var dot = document.createElement('span');
-      dot.className = 'ns-dot c' + catColorIndex(cg2.cat);
-      catHead.appendChild(dot);
-      catHead.appendChild(document.createTextNode(cg2.cat + '（' + cg2.count + '）'));
-      cases.appendChild(catHead);
-      var caseList = document.createElement('div');
-      caseList.className = 'ns-list';
-      for(var c2 = 0; c2 < cg2.rows.length; c2++){
-        caseList.appendChild(buildDropReasonCase(cg2.rows[c2]));
+    // v1.35.0：展開後先給「子原因」小標（例：大材商品 7 件），底下才是類別與案件卡。
+    // 大類名（政策與服務邊界）本身不能拿來檢討，能檢討的是「大材商品」這種具體原因。
+    for(var c = 0; c < item.subs.length; c++){
+      var sb = item.subs[c];
+      var subHead = document.createElement('div');
+      subHead.className = 'dr-c-sub-head';
+      var subTxt = document.createElement('span');
+      subTxt.className = 'dr-c-sub-n';
+      subTxt.textContent = sb.sub;
+      subHead.appendChild(subTxt);
+      var subNum = document.createElement('span');
+      subNum.className = 'dr-c-sub-num';
+      subNum.textContent = sb.count + ' 件・' + (sb.share * 100).toFixed(1) + '%';
+      subNum.title = '判定依據：' + (sb.via || '') + '｜占全部未合作件數';
+      subHead.appendChild(subNum);
+      if(sb.sub === DR_UNCLASSIFIED){
+        var warn = document.createElement('span');
+        warn.className = 'dr-c-sub-tag';
+        warn.textContent = '待課長判定';
+        subHead.appendChild(warn);
       }
-      cases.appendChild(caseList);
+      cases.appendChild(subHead);
+      for(var c2 = 0; c2 < sb.cats.length; c2++){
+        var cg2 = sb.cats[c2];
+        var catHead = document.createElement('div');
+        catHead.className = 'ns-cat-head';
+        var dot = document.createElement('span');
+        dot.className = 'ns-dot c' + catColorIndex(cg2.cat);
+        catHead.appendChild(dot);
+        catHead.appendChild(document.createTextNode(cg2.cat + '（' + cg2.count + '）'));
+        cases.appendChild(catHead);
+        var caseList = document.createElement('div');
+        caseList.className = 'ns-list';
+        for(var c3 = 0; c3 < cg2.rows.length; c3++){
+          caseList.appendChild(buildDropReasonCase(cg2.rows[c3]));
+        }
+        cases.appendChild(caseList);
+      }
     }
 
     row.addEventListener('click', function(){
@@ -10345,9 +10500,11 @@ var state = {
     var head = document.createElement('div');
     head.className = 'ns-trow ns-thead drk-row';
     head.appendChild(nsCell('drk-c-ke', '課別'));
-    for(var hi = 0; hi < keData.reasons.length; hi++){
-      var th = nsCell('drk-c-n', drReasonShort(keData.reasons[hi]));
-      th.title = keData.reasons[hi] + '（表頭為短名）';
+    for(var hi = 0; hi < keData.groups.length; hi++){
+      var gcode = keData.groups[hi];
+      var th = nsCell('drk-c-n', drGroupShort(gcode));
+      th.title = drGroupName(gcode) + '（表頭為短名）：'
+        + (gcode === 'GX' ? '判定不出來的案件' : drSubsOfGroup(gcode).join('、'));
       head.appendChild(th);
     }
     var thT = nsCell('drk-c-n drk-c-total', '合計件數');
@@ -10456,12 +10613,14 @@ var state = {
     return good ? 'is-good' : 'is-bad';
   }
 
+  // 比較基準用「子原因」而不是大類：大類占比一定很高（商務跟進全公司就 62%），
+  // 拿大類比只會得到「差不多」，比不出這一課到底哪裡異常。子原因才比得出來。
   function drKeDeltaText(ke, keData){
-    var top = ke.top;
-    if(!top) return '';
-    var coSh = (keData.company.share && keData.company.share[top.reason]) || 0;
-    // ⚠ 用 ke.share（top 占該課），不是 top.share（top 物件沒有 share）
-    var pp = Math.round((ke.share - coSh) * 100);
+    var ts = ke.topSub;
+    if(!ts) return '';
+    var mine = ke.total ? ts.count / ke.total : 0;
+    var coSh = keData.total ? ((keData.subTotals[ts.sub] || 0) / keData.total) : 0;
+    var pp = Math.round((mine - coSh) * 100);
     if(pp >= 5) return '較全公司 ' + Math.round(coSh * 100) + '% 高 ' + pp + ' 個百分點';
     if(pp <= -5) return '較全公司 ' + Math.round(coSh * 100) + '% 低 ' + Math.abs(pp) + ' 個百分點';
     return '與全公司 ' + Math.round(coSh * 100) + '% 相當';
@@ -10484,12 +10643,12 @@ var state = {
     keCell.appendChild(document.createTextNode(ke.ke));
     row.appendChild(keCell);
 
-    for(var ri = 0; ri < keData.reasons.length; ri++){
-      var rn = keData.reasons[ri];
-      var n = ke.counts[rn] || 0;
-      var isTop = !!(ke.top && ke.top.reason === rn);
+    for(var ri = 0; ri < keData.groups.length; ri++){
+      var gcode2 = keData.groups[ri];
+      var n = ke.counts[gcode2] || 0;
+      var isTop = !!(ke.top && ke.top.code === gcode2);
       var cell = nsCell('drk-c-n' + (isTop ? ' drk-hot' : '') + (n ? '' : ' drk-zero'), n ? String(n) : '–');
-      cell.title = rn + '：' + n + ' 件';
+      cell.title = drGroupName(gcode2) + '：' + n + ' 件' + (isTop ? '（本課主因）' : '');
       row.appendChild(cell);
     }
 
@@ -10515,8 +10674,12 @@ var state = {
     if(ke.top){
       var main = document.createElement('span');
       main.className = 'drk-act-main';
-      // 件數左邊那格已顯示，這裡只留占比（避免同一件事講兩次）
-      main.textContent = drReasonShort(ke.top.reason) + ' ' + Math.round(ke.share * 100) + '%';
+      // 會議要盯的是「最具體的原因」：大類名（政策與服務邊界）不能拿來檢討，
+      // 所以第一行寫子原因與它占該課的比例，第二行才交代所屬大類與全公司差距。
+      var ts = ke.topSub;
+      main.textContent = (ts ? ts.sub : drGroupShort(ke.top.code)) + ' '
+        + (ts ? Math.round(ts.count / ke.total * 100) : Math.round(ke.share * 100)) + '%';
+      if(ts) main.title = '本課主因（子原因）：' + ts.sub + ' ' + ts.count + ' 件，屬「' + drGroupName(ts.group) + '」';
       actCell.appendChild(main);
       var sub = document.createElement('span');
       sub.className = 'drk-act-sub';
@@ -10550,9 +10713,9 @@ var state = {
     chTot.textContent = '未合作 ' + ke.total + ' 件';
     ch.appendChild(chTot);
     var splitParts = [];
-    for(var sp = 0; sp < keData.reasons.length; sp++){
-      var spName = keData.reasons[sp], spN = ke.counts[spName] || 0;
-      if(spN) splitParts.push(drReasonShort(spName) + ' ' + spN);
+    for(var sp = 0; sp < keData.groups.length; sp++){
+      var spCode = keData.groups[sp], spN = ke.counts[spCode] || 0;
+      if(spN) splitParts.push(drGroupShort(spCode) + ' ' + spN);
     }
     var chSplit = document.createElement('span');
     chSplit.className = 'drk-ch-split';
@@ -10560,74 +10723,101 @@ var state = {
     ch.appendChild(chSplit);
     cases.appendChild(ch);
 
-    var groups = groupDropReasonRowsByReason(ke.rows, keData.reasons);
-    for(var gi = 0; gi < groups.length; gi++){
-      var grp = groups[gi];
-      var isTopReason = !!(ke.top && ke.top.reason === grp.reason);
+    var gps = groupDropReasonRows(ke.rows);
+    for(var gi = 0; gi < gps.length; gi++){
+      var gp = gps[gi];
+      var isTopGroup = !!(ke.top && ke.top.code === gp.code);
 
-      var sub = document.createElement('div');
-      sub.className = 'drk-sub';
-
-      var subHead = document.createElement('button');
-      subHead.type = 'button';
-      subHead.className = 'drk-sub-head';
-      subHead.setAttribute('aria-expanded', isTopReason ? 'true' : 'false');
-      var subCaret = document.createElement('span');
-      subCaret.className = 'ns-caret';
-      subCaret.textContent = isTopReason ? '▾' : '▸';
-      subHead.appendChild(subCaret);
-      var subName = document.createElement('span');
-      subName.className = 'drk-sub-n';
-      subName.textContent = drReasonShort(grp.reason);
-      subName.title = grp.reason;
-      subHead.appendChild(subName);
-      var subCount = document.createElement('span');
-      subCount.className = 'drk-ch-split';
-      subCount.textContent = grp.rows.length + ' 件';
-      subHead.appendChild(subCount);
-      if(isTopReason){
-        var subTag = document.createElement('span');
-        subTag.className = 'drk-sub-tag';
-        subTag.textContent = '本課主因';      // 「主因」兩個字太容易被當成一般標籤或篩選標記
-        subTag.title = '這一課件數最多的原因（占比 ' + Math.round(ke.share * 100) + '%）';
-        subHead.appendChild(subTag);
+      // 第 2 層：大類帶（例：商務處理與跟進 29 件）——先讓看的人知道「這一課卡在哪一類」
+      var gband = document.createElement('div');
+      gband.className = 'drk-gband' + (isTopGroup ? ' is-top' : '');
+      var gbName = document.createElement('span');
+      gbName.className = 'drk-gband-n';
+      gbName.textContent = gp.name;
+      gbName.title = gp.name + '（' + (gp.en || '') + '）：' + drSubsOfGroup(gp.code).join('、');
+      gband.appendChild(gbName);
+      var gbCount = document.createElement('span');
+      gbCount.className = 'drk-gband-c';
+      gbCount.textContent = gp.rows.length + ' 件・' + Math.round(gp.rows.length / ke.total * 100) + '%';
+      gband.appendChild(gbCount);
+      if(isTopGroup){
+        var gbTag = document.createElement('span');
+        gbTag.className = 'drk-sub-tag';
+        gbTag.textContent = '本課主因';
+        gbTag.title = '這一課件數最多的大類（' + Math.round(ke.share * 100) + '%）';
+        gband.appendChild(gbTag);
       }
-      sub.appendChild(subHead);
+      cases.appendChild(gband);
 
-      var body = document.createElement('div');
-      body.className = 'drk-sub-body';
-      body.hidden = !isTopReason;             // 預設只開主因那一組
-      var catGroups = groupByCategory(grp.rows);
-      for(var cg2 = 0; cg2 < catGroups.length; cg2++){
-        var cgroup = catGroups[cg2];
-        var catHead = document.createElement('div');
-        catHead.className = 'ns-cat-head drk-cat-head';
-        var catDot = document.createElement('span');
-        catDot.className = 'ns-dot c' + catColorIndex(cgroup.cat);
-        catHead.appendChild(catDot);
-        var catTxt = document.createElement('span');
-        // 與卡片 chip 同一套短名（全名放 title），否則上面寫「3P(MO+)」、卡片寫「3P」會讓人以為是兩種
-        catTxt.textContent = drCatShort(cgroup.cat) + '（' + cgroup.count + '）';
-        catTxt.title = cgroup.cat;
-        catHead.appendChild(catTxt);
-        body.appendChild(catHead);
-        var catList = document.createElement('div');
-        catList.className = 'ns-list';
-        for(var ck = 0; ck < cgroup.rows.length; ck++) catList.appendChild(buildDropReasonCase(cgroup.rows[ck]));
-        body.appendChild(catList);
+      // 第 3 層：子原因（可折疊；預設只開「這一課最多的那個子原因」）
+      for(var si2 = 0; si2 < gp.subs.length; si2++){
+        var sb = gp.subs[si2];
+        var isTopSub = !!(ke.topSub && ke.topSub.sub === sb.sub);
+        var sub = document.createElement('div');
+        sub.className = 'drk-sub';
+
+        var subHead = document.createElement('button');
+        subHead.type = 'button';
+        subHead.className = 'drk-sub-head';
+        subHead.setAttribute('aria-expanded', isTopSub ? 'true' : 'false');
+        var subCaret = document.createElement('span');
+        subCaret.className = 'ns-caret';
+        subCaret.textContent = isTopSub ? '▾' : '▸';
+        subHead.appendChild(subCaret);
+        var subName = document.createElement('span');
+        subName.className = 'drk-sub-n';
+        subName.textContent = sb.sub;
+        subName.title = sb.sub + '｜判定依據：' + (sb.via || '');
+        subHead.appendChild(subName);
+        var subCount = document.createElement('span');
+        subCount.className = 'drk-ch-split';
+        subCount.textContent = sb.rows.length + ' 件';
+        subHead.appendChild(subCount);
+        if(isTopSub){
+          var subTag = document.createElement('span');
+          subTag.className = 'drk-sub-tag is-sub';
+          subTag.textContent = '最該先處理';   // 大類「本課主因」之外，再指出具體那一個子原因
+          subTag.title = '這一課最多的具體原因，占該課 ' + Math.round(sb.rows.length / ke.total * 100) + '%';
+          subHead.appendChild(subTag);
+        }
+        sub.appendChild(subHead);
+
+        var body = document.createElement('div');
+        body.className = 'drk-sub-body';
+        body.hidden = !isTopSub;
+        var catGroups = groupByCategory(sb.rows);
+        for(var cg2 = 0; cg2 < catGroups.length; cg2++){
+          var cgroup = catGroups[cg2];
+          var catHead = document.createElement('div');
+          catHead.className = 'ns-cat-head drk-cat-head';
+          var catDot = document.createElement('span');
+          catDot.className = 'ns-dot c' + catColorIndex(cgroup.cat);
+          catHead.appendChild(catDot);
+          var catTxt = document.createElement('span');
+          // 與卡片 chip 同一套短名（全名放 title），否則上面寫「3P(MO+)」、卡片寫「3P」會讓人以為是兩種
+          catTxt.textContent = drCatShort(cgroup.cat) + '（' + cgroup.count + '）';
+          catTxt.title = cgroup.cat;
+          catHead.appendChild(catTxt);
+          body.appendChild(catHead);
+          var catList = document.createElement('div');
+          catList.className = 'ns-list';
+          for(var ck = 0; ck < cgroup.rows.length; ck++) catList.appendChild(buildDropReasonCase(cgroup.rows[ck]));
+          body.appendChild(catList);
+        }
+        sub.appendChild(body);
+
+        (function(bd, hd, cr){
+          hd.addEventListener('click', function(ev){
+            ev.stopPropagation();
+            var open = bd.hidden;
+            bd.hidden = !open;
+            hd.setAttribute('aria-expanded', open ? 'true' : 'false');
+            cr.textContent = open ? '▾' : '▸';
+          });
+        })(body, subHead, subCaret);
+
+        cases.appendChild(sub);
       }
-      sub.appendChild(body);
-
-      (function(b, h, c){
-        h.addEventListener('click', function(){
-          var open = b.hidden;
-          b.hidden = !open;
-          h.setAttribute('aria-expanded', open ? 'true' : 'false');
-          c.textContent = open ? '▾' : '▸';
-        });
-      })(body, subHead, subCaret);
-
-      cases.appendChild(sub);
     }
 
     row.addEventListener('click', function(){
@@ -10646,12 +10836,12 @@ var state = {
     var row = document.createElement('div');
     row.className = 'ns-trow drk-row drk-total-row';
     row.appendChild(nsCell('drk-c-ke', '全公司'));
-    for(var ri = 0; ri < keData.reasons.length; ri++){
-      var rn = keData.reasons[ri];
+    for(var ri = 0; ri < keData.groups.length; ri++){
+      var rn = keData.groups[ri];
       var n = keData.company.counts[rn] || 0;
       var pc = Math.round((keData.company.share[rn] || 0) * 100);
       var cell = nsCell('drk-c-n drk-base' + (n ? '' : ' drk-zero'));
-      cell.title = rn + '：' + n + ' 件，占全公司 ' + pc + '%';
+      cell.title = drGroupName(rn) + '：' + n + ' 件，占全公司 ' + pc + '%';
       // data 屬性給測試與無障礙用：兩個 span 上下排列，textContent 會黏成「2414%」，不好解析
       cell.dataset.n = n;
       cell.dataset.pct = pc;
@@ -10667,7 +10857,7 @@ var state = {
       } else {
         cell.textContent = '–';
       }
-      if(ctx && ctx.delta && ctx.delta.reasons[rn]){
+      if(ctx && ctx.delta && ctx.delta.reasons && ctx.delta.reasons[rn]){
         var rd = ctx.delta.reasons[rn];
         var dline = document.createElement('span');
         dline.className = 'drk-base-d ' + dropDeltaClass(rd.d, true);
@@ -10755,8 +10945,14 @@ var state = {
     var pct = data.closedAll ? (100 * data.total / data.closedAll) : 0;
     // 提示只留「讀表必需的母體與占比」；填充率、長條基準、異常排除等細節都在底部規則說明。
     // 說明填充率只在偏低（<60%）時才提，因為那時「只靠說明會漏案件」會影響判讀。
+    var nSubUsed = 0, nUnclassified = 0;
+    for(var ui = 0; ui < data.items.length; ui++){
+      nSubUsed += data.items[ui].subs.length;
+      if(data.items[ui].code === 'GX') nUnclassified += data.items[ui].count;
+    }
     note.textContent = '本期已結案 ' + data.closedAll + ' 件，未合作 ' + data.total + ' 件（'
-      + pct.toFixed(0) + '%）；原因 ' + data.items.length + ' 類'
+      + pct.toFixed(0) + '%）；4 大類、子原因用到 ' + nSubUsed + ' 個'
+      + (nUnclassified ? '｜其中 ' + nUnclassified + ' 件判定不出，標「未分類」待課長補原因' : '')
       + (pctOf(nNote) < 60 ? '｜說明只有 ' + pctOf(nNote) + '% 有值，原因仍以結案欄為準。' : '');
     box.appendChild(note);
 
@@ -10798,7 +10994,7 @@ var state = {
     var head = document.createElement('div');
     head.className = 'ns-trow ns-thead';
     head.appendChild(nsCell('ns-c-caret', ''));
-    head.appendChild(nsCell('dr-c-reason', '結案原因'));
+    head.appendChild(nsCell('dr-c-reason', '四大分類'));
     head.appendChild(nsCell('ns-c-bar', '類別組成'));
     head.appendChild(nsCell('dr-c-num', '件數／占比'));
     table.appendChild(head);
@@ -12968,18 +13164,20 @@ var state = {
       '類別內長條以該類別最多的節點為滿格，點節點可看結案原因與洽談內容。'
     ],
     dropReasonSection: [
-      '母體＝已結案但沒有導入的案件（客戶婉拒、聯繫無果、考慮中、暫緩等都算）。',
-      '原因以「結案」欄的原文歸類，不另外改寫；同一類的不同寫法（例如「客戶需求無法滿足」「需求無法滿足」）會併成同一類，認不得的寫法原樣保留、自成新欄。',
-      '長條依類別分段，同一個原因可能同時有多個類別。',
-      '「依課別檢討」的母體與上面這張原因表完全相同，所以兩張表的件數一定對得起來。',
-      '依課別檢討：一列是一個課別，欄位是該課各原因的件數與合計；件數 0 顯示「–」，代表這一課沒有這種情況，不是缺資料。',
-      '粗體加底色的數字＝該課件數最多的原因（本課主因）；列尾那句是對應這一類原因最該做的一件事。',
-      '最後一列「全公司」是比較基準，每格是「件數｜占比」；各課的「高／低幾個百分點」都是跟這一列比。',
-      '表頭用短名（考慮中／婉拒／需求無解／未啟動），滑過可看完整名稱；欄數跟著來源寫法走，出現五類以外的新寫法會自動多一欄（例如「決策因素」）。',
-      '點課別那一列展開該課名單：最上面是課名標題帶（件數與各原因分布，往下滑會黏在頂端），中間原因可折疊（預設只開本課主因），最裡面再依客戶類型（零擔／1P／3P／甲配）分組；案件卡左邊的膠囊就是該筆的客戶類型。',
-      '該課未滿 10 件時標「樣本僅 N 件」，避免小樣本的百分比被當成結論；百分比取整數，與上面原因表的 1 位小數可能差 1%，基準列五格相加可能是 99%～101%。',
-      '本期已結案 ＝ 已導入 ＋ 未合作（已結案未導入） ＋ 異常；三者相加等於已結案件數，長條依類別分段、以件數最多的原因為 100%。'
-      + '結案欄寫「導入完成」但導入欄空白者列為資料異常，不算未合作；本區塊隨「分析期間」與篩選縮放，點任一原因列可展開該原因的完整名單（依類別分組）。'
+      '母體＝已結案但沒有導入的案件（客戶婉拒、聯繫無果、評估中、政策排除等都算）。「未合作」與「未導入」在本報表是同義詞。',
+      '原因分四大類，依「下一步該誰動」分：①商務處理與跟進（業務多做一件事就會動）；②業務機會與策略對齊（有機會，缺價格／統倉／時段等條件，或客戶已明確沒需求）；③政策與服務邊界（不是業務不努力，是能力或政策不允許，要調資源或寫進政策）；④非目標與排除（不符 2027 政策方向，不該再投業務時間）。',
+      '子原因共 14 個：商務跟進＝聯繫無果、客戶評估、客情培養；機會對齊＝價格因素、統倉運輸、指定時間、客戶婉拒；政策邊界＝大材商品、偏遠地區、委外區域、特殊運輸、貴重物品、決策因素；非目標＝非目標客戶。兩張表用同一套分類，件數一定對得起來。',
+      '判定順序：先看「結案」欄。寫聯繫無果／客戶考慮中／超過1個月未啟動／客戶婉拒／決策因素的，直接歸到對應子原因；寫「客戶需求無法滿足」的，再依「說明」欄關鍵字細分，說明沒寫才看「洽談內容」；同一欄出現多個關鍵字時，以最早出現的那個為主因（業務通常把主因寫在最前面，例如「大材積、離島」判為大材商品）。',
+      '判定不出來的（例如只寫「想要同時設定兩個配送商」）列為「未分類・待課長判定」，不猜、不硬塞，會議上用 5 分鐘補一句原因即可。',
+      '嘉義、雲林、新營等暫緩開發區域，以及 2027 政策外需求，一律歸「非目標客戶」（第④類），不再排回訪；大材與超重歸「大材商品」，偏遠與離島歸「偏遠地區」，兩者同時出現時看哪個寫在前面。',
+      '長條依客戶類別分段（零擔／1P／3P／甲配），同一個大類可能同時有多個類別；展開後先看到子原因（例：大材商品 7 件），再往下才是類別與案件卡。',
+      '依課別檢討：一列是一個課別，欄位是四大類件數與合計；件數 0 顯示「–」，代表這一課沒有這種情況，不是缺資料。',
+      '粗體加黃框的數字＝該課件數最多的大類（本課主因）；「先改什麼」第一行寫的是該課最多的「子原因」與它占該課的比例，第二行才是所屬大類與跟全公司的差距——大類名不能拿來檢討，能檢討的是子原因。',
+      '最後一列「全公司」是比較基準，每格上為件數、下為占比；各課的「高／低幾個百分點」都是跟這一列比。',
+      '表頭用短名（商務跟進／機會對齊／政策邊界／非目標），滑過可看完整名稱與它包含的子原因。',
+      '點課別那一列展開該課名單，共四層：課名標題帶（往下滑會黏在頂端）→ 大類帶 → 子原因（可折疊，預設只開「最該先處理」那一個）→ 客戶類別 → 案件卡。',
+      '該課未滿 10 件時標「樣本僅 N 件」，避免小樣本的百分比被當成結論；百分比取整數，與上面原因表的 1 位小數可能差 1%，基準列四格相加可能是 99%～101%。',
+      '本期已結案 ＝ 已導入 ＋ 未合作 ＋ 異常；結案欄寫「導入完成」但導入欄空白者列為資料異常，不算未合作。本區塊隨「分析期間」與篩選縮放，點任一原因列可展開該類的完整名單。'
     ],
     listSection: [
       '每頁 50 筆；可用關鍵字、課別、類別、狀態、開發者篩選。',
@@ -15991,14 +16189,21 @@ var state = {
       isDropReasonCase: isDropReasonCase,
       computeDropReasonAnalysis: computeDropReasonAnalysis,
       computeDropReasonByKe: computeDropReasonByKe,
-      groupDropReasonRowsByReason: groupDropReasonRowsByReason,
-      drReasonShort: drReasonShort,
-      drReasonAction: drReasonAction,
-      DR_REASON_ORDER: DR_REASON_ORDER,
-      DR_REASON_SHORT: DR_REASON_SHORT,
-      DR_REASON_ACTION: DR_REASON_ACTION,
-      DR_REASON_MATCH: DR_REASON_MATCH,
-      drReasonCanon: drReasonCanon,
+      groupDropReasonRows: groupDropReasonRows,
+      drClassifyReason: drClassifyReason,
+      drGroupOf: drGroupOf,
+      drGroupName: drGroupName,
+      drGroupShort: drGroupShort,
+      drGroupAction: drGroupAction,
+      drSubAction: drSubAction,
+      drSubShort: drSubShort,
+      drSubsOfGroup: drSubsOfGroup,
+      DR_GROUPS: DR_GROUPS,
+      DR_SUB_ORDER: DR_SUB_ORDER,
+      DR_GROUP_OF: DR_GROUP_OF,
+      DR_GROUP_SHORT: DR_GROUP_SHORT,
+      DR_SUB_ACTION: DR_SUB_ACTION,
+      DR_UNCLASSIFIED: DR_UNCLASSIFIED,
       computeDropSnapshot: computeDropSnapshot,
       dropSnapFp: dropSnapFp,
       mergeDropSnapshots: mergeDropSnapshots,
