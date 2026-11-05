@@ -315,8 +315,14 @@
               font-size:12.5px; color:var(--muted); }
   .dr-legend-item{ display:inline-flex; align-items:center; gap:6px; }
   .dr-legend-cap{ color:var(--muted); font-size:12px; }
-  .dr-c-sub-head{ display:flex; align-items:baseline; gap:8px; margin:10px 0 2px;
-    padding:4px 2px 3px; border-bottom:1px dashed var(--border); }
+  /* 子原因標題＝可點擊的收合列（v1.36.0）：button 要先歸零，否則會有預設底線與置中 */
+  .dr-c-sub{ margin:2px 0 0; }
+  .dr-c-sub-head{ display:flex; align-items:center; gap:8px; width:100%;
+    margin:8px 0 2px; padding:5px 2px 4px; border:0; border-bottom:1px dashed var(--border);
+    background:none; font:inherit; text-align:left; cursor:pointer; color:inherit; }
+  .dr-c-sub-head:hover{ background:var(--row-hover); border-radius:6px; }
+  .dr-c-sub-caret{ flex:none; }
+  .dr-c-sub-body{ padding:2px 0 4px 14px; }
   .dr-c-sub-n{ font-weight:800; font-size:13.5px; }
   .dr-c-sub-num{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
   .dr-c-sub-tag{ font-size:11px; font-weight:800; color:var(--warning);
@@ -1619,19 +1625,19 @@
     <h2>預估月運費分析 <span class="muted">類別 × 開發階段 · 單位：萬元／月（同一筆只算一次）</span></h2>
     <div id="valueFunnel" class="pending">待產生</div>
   </section>
-  <section class="card" id="funnelSection" hidden>
+  <section class="card collapsible collapsed" id="funnelSection" hidden>
     <h2>漏斗分析</h2>
     <div id="funnel" class="pending">待產生</div>
   </section>
-  <section class="card" id="rankSection" hidden>
+  <section class="card collapsible collapsed" id="rankSection" hidden>
     <h2>排行分析 <span class="muted">開發者・課別・站所</span></h2>
     <div id="rank" class="pending">待產生</div>
   </section>
-  <section class="card" id="timingSection" hidden>
+  <section class="card collapsible collapsed" id="timingSection" hidden>
     <h2>開發時間分析</h2>
     <div id="timing" class="pending">待產生</div>
   </section>
-  <section class="card" id="dropoffSection" hidden>
+  <section class="card collapsible collapsed" id="dropoffSection" hidden>
     <h2>轉換流失分析</h2>
     <div id="dropoff" class="pending">待產生</div>
   </section>
@@ -1742,7 +1748,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.35.0';   // 1.35.0：結案原因改四大分類（商務跟進／機會對齊／政策邊界／非目標）
+  var APP_VERSION = '1.36.0';   // 1.36.0：第一區加次標題＋子原因可收合；漏斗/排行/開發時間/轉換流失改為預設收合
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10434,8 +10440,20 @@ var state = {
     // 大類名（政策與服務邊界）本身不能拿來檢討，能檢討的是「大材商品」這種具體原因。
     for(var c = 0; c < item.subs.length; c++){
       var sb = item.subs[c];
-      var subHead = document.createElement('div');
+      // v1.36.0：子原因可各自收合。預設全部收合——最大那一類動輒 70 幾張卡，
+      // 一次全開等於把「大類」當成「一坨」，反而看不出子原因的分布。
+      var isTopSub2 = false;
+      var subWrap = document.createElement('div');
+      subWrap.className = 'dr-c-sub';
+
+      var subHead = document.createElement('button');
+      subHead.type = 'button';
       subHead.className = 'dr-c-sub-head';
+      subHead.setAttribute('aria-expanded', isTopSub2 ? 'true' : 'false');
+      var subCaret = document.createElement('span');
+      subCaret.className = 'ns-caret dr-c-sub-caret';
+      subCaret.textContent = isTopSub2 ? '▾' : '▸';
+      subHead.appendChild(subCaret);
       var subTxt = document.createElement('span');
       subTxt.className = 'dr-c-sub-n';
       subTxt.textContent = sb.sub;
@@ -10451,7 +10469,11 @@ var state = {
         warn.textContent = '待課長判定';
         subHead.appendChild(warn);
       }
-      cases.appendChild(subHead);
+      subWrap.appendChild(subHead);
+
+      var subBody = document.createElement('div');
+      subBody.className = 'dr-c-sub-body';
+      subBody.hidden = !isTopSub2;
       for(var c2 = 0; c2 < sb.cats.length; c2++){
         var cg2 = sb.cats[c2];
         var catHead = document.createElement('div');
@@ -10460,14 +10482,26 @@ var state = {
         dot.className = 'ns-dot c' + catColorIndex(cg2.cat);
         catHead.appendChild(dot);
         catHead.appendChild(document.createTextNode(cg2.cat + '（' + cg2.count + '）'));
-        cases.appendChild(catHead);
+        subBody.appendChild(catHead);
         var caseList = document.createElement('div');
         caseList.className = 'ns-list';
         for(var c3 = 0; c3 < cg2.rows.length; c3++){
           caseList.appendChild(buildDropReasonCase(cg2.rows[c3]));
         }
-        cases.appendChild(caseList);
+        subBody.appendChild(caseList);
       }
+      subWrap.appendChild(subBody);
+      cases.appendChild(subWrap);
+
+      (function(bd, hd, cr){
+        hd.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var open = bd.hidden;
+          bd.hidden = !open;
+          hd.setAttribute('aria-expanded', open ? 'true' : 'false');
+          cr.textContent = open ? '▾' : '▸';
+        });
+      })(subBody, subHead, subCaret);
     }
 
     row.addEventListener('click', function(){
@@ -10987,6 +11021,12 @@ var state = {
       sec.hidden = false;
       return;
     }
+
+    var h3a = document.createElement('h3');
+    h3a.className = 'drk-title';
+    h3a.textContent = '依原因分類檢討（四大分類）';
+    h3a.title = '滑過大類名可看它包含哪些子原因；點一列展開，展開後每個子原因可各自收合';
+    box.appendChild(h3a);
 
     var table = document.createElement('div');
     table.className = 'ns-table';
