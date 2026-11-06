@@ -429,6 +429,18 @@
   .dr-c-cat-body{ padding:1px 0 6px 34px; }
   .drk-cat-body{ padding:1px 0 6px 20px; }
   .dr-c-cat-caret, .drk-cat-caret{ font-size:11px; color:var(--muted); }
+  /* 第五層：具體原因 */
+  button.ns-micro-head{
+    display:flex; align-items:center; gap:6px; width:100%;
+    background:none; border:0; padding:3px 2px 3px 14px; margin:1px 0;
+    font:inherit; color:var(--fg); text-align:left; cursor:pointer; border-radius:5px; }
+  button.ns-micro-head:hover{ background:var(--row-hover); }
+  .ns-micro-n{ font-size:13px; font-weight:600; }
+  .ns-micro-num{ font-size:11.5px; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
+  .ns-micro-caret{ font-size:10px; color:var(--muted); }
+  .dr-c-micro-body, .ns-micro-body{ padding:1px 0 5px 16px; }
+  .dr-c-cat-body .ns-micro{ margin-left:8px; }
+  .drk-cat-body .ns-micro{ margin-left:6px; }
   /* 案件卡的客戶類型膠囊：圓點沿用類別色票，文字才是主要訊號（投影色偏也不影響判讀） */
   .dr-case{ align-items:flex-start; }
   .dr-case .dr-cat{ display:inline-flex; align-items:center; gap:4px; flex:none; margin-top:1px;
@@ -1768,7 +1780,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.39.0';   // 1.39.0：兩張表都加入「客戶類型」層（可收合、預設收合）；課別表預設展開到原因
+  var APP_VERSION = '1.40.0';   // 1.40.0：客戶類型底下再加「具體原因」層（從洽談內容歸納，可收合、預設收合）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10054,6 +10066,145 @@ var state = {
   };
   function drSubAction(sub){ return DR_SUB_ACTION[sub] || '先確認這類原因的寫法，再對應動作'; }
 
+  // ── 第五層：具體原因（v1.40.0）──────────────────────────────────────
+  // 客戶類型（零擔／1P／3P）只說明「走哪個通路」，不說明「卡在哪一句」。
+  // 這一層從「洽談內容」的自由文字歸納出具體卡點，會議上才能派到動作。
+  // 兩段掃描：先掃洽談（業務自己打的細節）→ 掃不到才掃說明（下拉選的標準語）。
+  // 同一句提到兩件事時，陣列順序＝優先序（前面的才是真正的卡點）。
+  var DR_MICRO = {
+    '聯繫無果': [
+      ['電話未接', ['電敗', '未接', '無人接聽', '連不上', '轉傳真', '打不通', '電話無人']],
+      ['訊息未回', ['mail未回', 'mail 未回', '未讀', 'mail無回覆', '訊息未回', '已讀', '留賴']],
+      ['完全無回應', ['無回應', '聯繫不上', '皆失敗', '未回覆']],
+      ['窗口異動', ['搬遷', '出國', '離職', '窗口不在', '空號']]
+    ],
+    // 順序＝優先序：越具體的越前面。曾把「已報價・等回覆」放第一，
+    // 結果「mail 待廠商回覆請款單後報價」被判成已報價（根本還沒報價）→ 改成先認「等客戶提供資料」。
+    '客戶評估': [
+      ['等客戶提供資料', ['請款單', '基本資訊', '提供資料', '確認一些基本資料']],
+      ['報價／牌價確認中', ['確認報價', '處級報價', '牌價', '議價', '重新報價', '報價是否更改', '價格相同', '比價']],
+      ['已報價・等回覆', ['待回覆', '未回覆', '待廠商回覆', '待客戶回覆', '待回信', '未回',
+                       '已提供報價', '已mail報價', '已報價', '報價單', '已寄出報價', '待確認是否合作']],
+      ['待面談／拜訪', ['面談', '拜訪', '約時間', '現場']],
+      ['競業既有・待轉換', ['新竹', '黑貓', '大榮', '宅配通', '竹運', '目前配合', '現有', '既有']],
+      ['電聯不上', ['電敗', '未接', '連不上']]
+    ],
+    '客情培養': [
+      ['客戶時程延後', ['出國', '明年', '年後', '預計10月', '中秋', '下月']],
+      ['待重啟追蹤', ['重啟', '再聯繫', '待追蹤', '持續追蹤']],
+      // 客情培養多半是「放著沒動」，標「長期未啟動」比留一個「其他」誠實
+      ['長期未啟動', ['未啟動', '超過1個月', '1個月']]
+    ],
+    '價格因素': [
+      ['競業價格更低', ['低很多', '較低', '便宜', '比價', '價格差', '一半']],
+      ['詢問運費／比價', ['運費', '費用', '報價', '價格']],
+      ['要求調價', ['降價', '調整', '優惠', '折扣']]
+    ],
+    '統倉運輸': [['統倉／入庫作業', ['統倉', '入庫', 'MOMO', 'momo', '蝦皮', '富邦']]],
+    '指定時間': [['夜間收件', ['晚上', '夜收', '19:', '20:']], ['指定時段', ['時段', '指定時間']]],
+    '客戶婉拒': [
+      ['已有固定物流商', ['固定廠商', '已有配合', '目前配合', '新竹', '黑貓', '大榮', '宅配通', '竹運', '現行', '自家物流']],
+      ['競業價格更低', ['低很多', '便宜', '比價']],
+      ['作業方式不便', ['上傳', '繁瑣', '串接', '系統']],
+      ['無配送需求', ['無配送服務需求', '無需求', '無需']],
+      ['未說明原因', ['婉拒', '不考慮', '無意願', '無轉換', '不願更改']]
+    ],
+    '大材商品': [['超材積', ['S90', 'S120', 'S150', '材積', '大材']], ['超重', ['超重', '重貨', '公斤', 'kg']]],
+    '偏遠地區': [['偏遠／外島', ['偏遠', '外島', '離島']]],
+    '委外區域': [['非服務區', ['委外', '非服務區', '無開發區域', '非富昇服務區域']]],
+    '特殊運輸': [['溫控／專車／尾門', ['溫控', '專車', '尾門', '冷藏']]],
+    '貴重物品': [['保值／賠償條款', ['保值', '賠償', '貴重']]],
+    '甲指限制': [['平台僅允許一家甲指', ['甲指', '新增物流', '兩家', '配送商']]],
+    '決策因素': [['客戶長官未同意', ['長官', '主管', '簽核', '總經理']], ['政策待確認', ['政策', '確認']]],
+    '非目標客戶': [['暫緩開發區域', ['嘉義', '雲林', '新營']], ['2027 政策外', ['政策', '非目標']]]
+  };
+
+  function drMicroCause(sub, row){
+    var talk = String((row && (row['洽談內容'] || row.talk)) || '');
+    var note = String((row && (row['說明'] || row.note)) || '');
+    if(!talk && !note) return { label: '無洽談紀錄', via: '—' };
+    var rules = DR_MICRO[sub] || [];
+    var srcs = [[talk, '洽談'], [note, '說明']];
+    for(var si = 0; si < srcs.length; si++){
+      var src = srcs[si][0];
+      if(!src) continue;
+      for(var ri = 0; ri < rules.length; ri++){
+        var kws = rules[ri][1];
+        for(var ki = 0; ki < kws.length; ki++){
+          if(src.indexOf(kws[ki]) >= 0) return { label: rules[ri][0], via: srcs[si][1] };
+        }
+      }
+    }
+    return { label: '其他（未歸納）', via: '—' };
+  }
+
+  // 把一組案件依「具體原因」分堆，做成可收合的第五層（預設收合）
+  function appendMicroGroups(host, rows, sub){
+    // 只有 1 件就不再分堆：會出現「無洽談紀錄 1 件・100%」這種沒有資訊量的標籤
+    if(rows.length === 1){
+      var solo = document.createElement('div');
+      solo.className = 'ns-list';
+      solo.appendChild(buildDropReasonCase(rows[0]));
+      host.appendChild(solo);
+      return;
+    }
+    var order = [], map = {};
+    for(var i = 0; i < rows.length; i++){
+      var m = drMicroCause(sub, rows[i]);
+      if(!map[m.label]){ map[m.label] = { n: 0, rows: [], via: m.via }; order.push(m.label); }
+      map[m.label].n++;
+      map[m.label].rows.push(rows[i]);
+    }
+    // 件數多的排前面；件數相同時，把「無洽談紀錄／其他（未歸納）」壓到最後
+    function loose(l){ return (l === '無洽談紀錄' || l === '其他（未歸納）') ? 1 : 0; }
+    order.sort(function(a, b){
+      if(loose(a) !== loose(b)) return loose(a) - loose(b);
+      if(map[b].n !== map[a].n) return map[b].n - map[a].n;
+      return a < b ? -1 : 1;
+    });
+    for(var oi = 0; oi < order.length; oi++){
+      var label = order[oi], bucket = map[label];
+      var wrap = document.createElement('div');
+      wrap.className = 'ns-micro';
+      var head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'ns-micro-head';
+      head.setAttribute('aria-expanded', 'false');
+      if(bucket.via !== '—') head.title = '依' + bucket.via + '歸納';
+      var caret = document.createElement('span');
+      caret.className = 'ns-caret ns-micro-caret';
+      caret.textContent = '▸';
+      head.appendChild(caret);
+      var nm = document.createElement('span');
+      nm.className = 'ns-micro-n';
+      nm.textContent = label;
+      head.appendChild(nm);
+      var num = document.createElement('span');
+      num.className = 'ns-micro-num';
+      num.textContent = bucket.n + ' 件' + (rows.length > 1 ? '・' + Math.round(bucket.n / rows.length * 100) + '%' : '');
+      head.appendChild(num);
+      wrap.appendChild(head);
+      var body2 = document.createElement('div');
+      body2.className = 'ns-micro-body';
+      body2.hidden = true;
+      var list = document.createElement('div');
+      list.className = 'ns-list';
+      for(var ci2 = 0; ci2 < bucket.rows.length; ci2++) list.appendChild(buildDropReasonCase(bucket.rows[ci2]));
+      body2.appendChild(list);
+      wrap.appendChild(body2);
+      host.appendChild(wrap);
+      (function(bd, hd, cr){
+        hd.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var open = bd.hidden;
+          bd.hidden = !open;
+          hd.setAttribute('aria-expanded', open ? 'true' : 'false');
+          cr.textContent = open ? '▾' : '▸';
+        });
+      })(body2, head, caret);
+    }
+  }
+
   // 結案欄（課長寫的結論）優先：這幾種寫法本身就是結論，不必再猜
   var DR_SUB_FROM_SOURCE = [
     ['聯繫', '聯繫無果'], ['考慮', '客戶評估'], ['未啟動', '客情培養'],
@@ -10564,12 +10715,7 @@ var state = {
         var catBody = document.createElement('div');
         catBody.className = 'dr-c-cat-body';
         catBody.hidden = true;
-        var caseList = document.createElement('div');
-        caseList.className = 'ns-list';
-        for(var c3 = 0; c3 < cg2.rows.length; c3++){
-          caseList.appendChild(buildDropReasonCase(cg2.rows[c3]));
-        }
-        catBody.appendChild(caseList);
+        appendMicroGroups(catBody, cg2.rows, sb.sub);   // 第五層：具體原因（可收合）
         catWrap.appendChild(catBody);
         subBody.appendChild(catWrap);
 
@@ -10949,10 +11095,7 @@ var state = {
           var catBody = document.createElement('div');
           catBody.className = 'drk-cat-body';
           catBody.hidden = true;
-          var catList = document.createElement('div');
-          catList.className = 'ns-list';
-          for(var ck = 0; ck < cgroup.rows.length; ck++) catList.appendChild(buildDropReasonCase(cgroup.rows[ck]));
-          catBody.appendChild(catList);
+          appendMicroGroups(catBody, cgroup.rows, sb.sub);   // 第五層：具體原因（可收合）
           catWrap.appendChild(catBody);
           body.appendChild(catWrap);
 
@@ -16362,6 +16505,8 @@ var state = {
       computeDropReasonByKe: computeDropReasonByKe,
       groupDropReasonRows: groupDropReasonRows,
       drClassifyReason: drClassifyReason,
+      drMicroCause: drMicroCause,
+      DR_MICRO: DR_MICRO,
       drGroupOf: drGroupOf,
       drGroupName: drGroupName,
       drGroupShort: drGroupShort,
