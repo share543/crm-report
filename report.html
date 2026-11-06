@@ -437,6 +437,12 @@
   button.ns-micro-head:hover{ background:var(--row-hover); }
   .ns-micro-n{ font-size:13px; font-weight:600; }
   .ns-micro-num{ font-size:11.5px; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
+  .ns-micro-act{ font-size:11.5px; color:var(--muted); margin-left:2px; }
+  .ns-micro-act::before{ content:''; }
+  .ns-micro-csv{ font-size:11px; font-weight:700; color:var(--accent); border:1px solid var(--border);
+                 border-radius:999px; padding:1px 8px; margin-left:6px; cursor:pointer; white-space:nowrap; }
+  .ns-micro-csv:hover{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .ns-micro-bar{ padding:4px 0 2px 14px; }
   .ns-micro-caret{ font-size:10px; color:var(--muted); }
   .dr-c-micro-body, .ns-micro-body{ padding:1px 0 5px 16px; }
   .dr-c-cat-body .ns-micro{ margin-left:8px; }
@@ -465,6 +471,7 @@
     .dr-c-reason{ width:auto; flex:1 1 auto; min-width:0;
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .dr-c-desc{ display:none; }        /* 手機把定位短句收起來，標題 hover 仍看得到原文 */
+    .ns-micro-act{ display:none; }     /* 手機藏動作文字，避免擠成一團 */
     .drk-gband-d{ display:none; }
     .dr-c-num{ width:84px; font-size:11.5px; }
     #dropReason .ns-c-bar{ flex:0 1 52px; min-width:44px; }
@@ -1780,7 +1787,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.40.0';   // 1.40.0：客戶類型底下再加「具體原因」層（從洽談內容歸納，可收合、預設收合）
+  var APP_VERSION = '1.41.0';   // 1.41.0：具體原因加「動作」；待補類可匯出 CSV；客情培養可匯出 30 天回顧清單
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10089,11 +10096,14 @@ var state = {
       ['競業既有・待轉換', ['新竹', '黑貓', '大榮', '宅配通', '竹運', '目前配合', '現有', '既有']],
       ['電聯不上', ['電敗', '未接', '連不上']]
     ],
+    // 客情培養＝結案寫「超過1個月未啟動」，但洽談裡常已有進度（報價、留聯繫方式）。
+    // 只寫「未啟動」會讓 4 件全掉進「其他」，等於白分一層。
     '客情培養': [
       ['客戶時程延後', ['出國', '明年', '年後', '預計10月', '中秋', '下月']],
+      ['已報價・等回覆', ['報價單', '已報價', '待回覆', '待窗口回覆', '已重新報價', '評估中']],
+      ['已留聯繫方式・待回', ['發信', '留聯繫', '加賴', '留賴', '已加line', '已加 LINE']],
       ['待重啟追蹤', ['重啟', '再聯繫', '待追蹤', '持續追蹤']],
-      // 客情培養多半是「放著沒動」，標「長期未啟動」比留一個「其他」誠實
-      ['長期未啟動', ['未啟動', '超過1個月', '1個月']]
+      ['長期未啟動', ['未啟動', '超過1個月']]
     ],
     '價格因素': [
       ['競業價格更低', ['低很多', '較低', '便宜', '比價', '價格差', '一半']],
@@ -10118,6 +10128,89 @@ var state = {
     '決策因素': [['客戶長官未同意', ['長官', '主管', '簽核', '總經理']], ['政策待確認', ['政策', '確認']]],
     '非目標客戶': [['暫緩開發區域', ['嘉義', '雲林', '新營']], ['2027 政策外', ['政策', '非目標']]]
   };
+
+  // 每個具體原因配一句「下一步做什麼」。標籤只回答「卡在哪」，動作才回答「誰去做什麼」。
+  var DR_MICRO_ACTION = {
+    '電話未接': '換時段、換窗口再打，同時留 LINE',
+    '訊息未回': '改用電話或直接約拜訪',
+    '完全無回應': '寄掛號信＋找第二個窗口',
+    '窗口異動': '重新找決策者，別再打舊分機',
+    '等客戶提供資料': '今天催一次，催不到就排下週',
+    '報價／牌價確認中': '約定確認日，別等對方主動',
+    '已報價・等回覆': '第 3 個工作日沒回就打第二通',
+    '待面談／拜訪': '面談後 48 小時內給結論',
+    '競業既有・待轉換': '先談一條線或一個區，降低轉換成本',
+    '電聯不上': '換管道（LINE／窗口手機）',
+    '客戶時程延後': '記下回國／開工日，前一天提醒',
+    '待重啟追蹤': '約定一個具體的重啟日',
+    '長期未啟動': '排入 30 天回顧名單',
+    '競業價格更低': '拆段報價，找出可讓的區間',
+    '詢問運費／比價': '給兩個方案，不要只給單價',
+    '要求調價': '用服務差異換價格，不要直接降',
+    '統倉／入庫作業': '量體與對點成本先算，再轉統倉評估',
+    '夜間收件': '夜間時段另報價，或改收貨點',
+    '指定時段': '指定時段加價，寫進報價單',
+    '已有固定物流商': '先談一小塊：一條線或一個區',
+    '作業方式不便': '先解決流程痛點，再談量',
+    '無配送需求': '註記需求時點，3 個月後再看',
+    '未說明原因': '課長補一句原因',
+    '超材積': '轉新竹貨運／嘉里大榮商簽後回訪',
+    '超重': '先確認可收重量與加價方式',
+    '偏遠／外島': '轉委外夥伴，或確認可收貨',
+    '非服務區': '外商可收貨則回訪，否則列營運評估',
+    '溫控／專車／尾門': '逐項問政策可行性，不要一次全問',
+    '保值／賠償條款': '賠償條款先談清楚再談量',
+    '平台僅允許一家甲指': '列政策待決，未開放前不排回訪',
+    '客戶長官未同意': '約定下一次確認日，不要空等',
+    '政策待確認': '寫進政策待決清單，指定負責人',
+    '暫緩開發區域': '標記暫緩，不排回訪',
+    '2027 政策外': '2027 再評估，先不投入',
+    '無洽談紀錄': '補一筆洽談紀錄',
+    '其他（未歸納）': '課長看一眼，補關鍵字'
+  };
+  var DR_MICRO_TODO = { '未說明原因': 1, '無洽談紀錄': 1, '其他（未歸納）': 1 };
+  // 客情培養類排 30 天回顧（使用者定的機制），匯出時直接算到期日
+  var DR_MICRO_REVIEW = { '長期未啟動': 30, '待重啟追蹤': 30 };
+
+  function drMicroAction(label){ return DR_MICRO_ACTION[label] || ''; }
+
+  // 待補清單匯出：離線單檔也要能交給業務填，所以用 Blob 直接下載 CSV（Excel 開得起來，含 BOM）
+  function csvCell(v){
+    var t = (v === null || v === undefined) ? '' : String(v);
+    return '"' + t.replace(/"/g, '""').replace(/\r?\n/g, ' ／ ') + '"';
+  }
+
+  // days > 0 時多一欄「回顧到期日」（今天 + days），給 30 天回顧機制直接用
+  function exportMicroCsv(rows, sub, label, days){
+    var d0 = new Date();
+    var head = ['課別', '公司名稱', '結案', '說明', '洽談內容', '原因', '具體原因',
+                days ? '回顧到期日' : '待補什麼'];
+    if(days) head.push('回訪備註（現場填）');
+    var due = '';
+    if(days){
+      var dd = new Date(d0.getTime() + days * 86400000);
+      due = dd.getFullYear() + '/' + ('0' + (dd.getMonth() + 1)).slice(-2) + '/' + ('0' + dd.getDate()).slice(-2);
+    }
+    var lines = [head.map(csvCell).join(',')];
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var cells = [r['課別'], r['公司名稱'], r['結案'], r['說明'], r['洽談內容'], sub, label,
+                   days ? due : drMicroAction(label)];
+      if(days) cells.push('');
+      lines.push(cells.map(csvCell).join(','));
+    }
+    var d = d0;
+    var stamp = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+    var name = (days ? '回顧清單_' : '待補原因清單_') + label.replace(/[（）／・]/g, '') + '_' + stamp + '.csv';
+    var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return rows.length;
+  }
 
   function drMicroCause(sub, row){
     var talk = String((row && (row['洽談內容'] || row.talk)) || '');
@@ -10162,6 +10255,29 @@ var state = {
       if(map[b].n !== map[a].n) return map[b].n - map[a].n;
       return a < b ? -1 : 1;
     });
+    // 客情培養整類都要排 30 天回顧（使用者定的機制），所以在客戶類型層放一顆按鈕，
+    // 不綁在某個具體原因上——否則換個標籤按鈕就不見了
+    if(sub === '客情培養'){
+      var bar = document.createElement('div');
+      bar.className = 'ns-micro-bar';
+      var rbtn = document.createElement('span');
+      rbtn.className = 'ns-micro-csv';
+      rbtn.setAttribute('role', 'button');
+      rbtn.setAttribute('tabindex', '0');
+      rbtn.textContent = '⤓ 匯出 30 天回顧清單（' + rows.length + ' 件）';
+      rbtn.title = '回顧到期日＝今天＋30 天，欄位含公司、課別、洽談內容與備註欄';
+      (function(b3, rows3, sub3){
+        function go3(ev){
+          ev.stopPropagation();
+          ev.preventDefault();
+          exportMicroCsv(rows3, sub3, '客情培養', 30);
+        }
+        b3.addEventListener('click', go3);
+        b3.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' || ev.key === ' ') go3(ev); });
+      })(rbtn, rows, sub);
+      bar.appendChild(rbtn);
+      host.appendChild(bar);
+    }
     for(var oi = 0; oi < order.length; oi++){
       var label = order[oi], bucket = map[label];
       var wrap = document.createElement('div');
@@ -10183,6 +10299,37 @@ var state = {
       num.className = 'ns-micro-num';
       num.textContent = bucket.n + ' 件' + (rows.length > 1 ? '・' + Math.round(bucket.n / rows.length * 100) + '%' : '');
       head.appendChild(num);
+      // 動作：標籤說「卡在哪」，這一句說「下一步誰做什麼」
+      var act = drMicroAction(label);
+      if(act){
+        var actSpan = document.createElement('span');
+        actSpan.className = 'ns-micro-act';
+        actSpan.textContent = '→ ' + act;
+        head.appendChild(actSpan);
+      }
+      // 待補類（未說明原因／無洽談紀錄／其他）可匯出清單交給業務填；
+      // 客情培養類可匯出「回顧清單」，多一欄到期日，直接接 30 天回顧機制
+      var csvDays = DR_MICRO_REVIEW[label] || 0;
+      if(DR_MICRO_TODO[label] || csvDays){
+        var btn = document.createElement('span');
+        btn.className = 'ns-micro-csv';
+        btn.setAttribute('role', 'button');
+        btn.setAttribute('tabindex', '0');
+        btn.textContent = csvDays ? '⤓ 回顧清單' : '⤓ 匯出清單';
+        btn.title = csvDays
+          ? '匯出這 ' + bucket.n + ' 筆，回顧到期日＝今天＋' + csvDays + ' 天（CSV，Excel 可開）'
+          : '匯出這 ' + bucket.n + ' 筆（CSV，Excel 可開）';
+        (function(b2, rows2, sub2, lb2, dy){
+          function go(ev){
+            ev.stopPropagation();
+            ev.preventDefault();
+            exportMicroCsv(rows2, sub2, lb2, dy);
+          }
+          b2.addEventListener('click', go);
+          b2.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' || ev.key === ' ') go(ev); });
+        })(btn, bucket.rows, sub, label, csvDays);
+        head.appendChild(btn);
+      }
       wrap.appendChild(head);
       var body2 = document.createElement('div');
       body2.className = 'ns-micro-body';
@@ -16506,6 +16653,8 @@ var state = {
       groupDropReasonRows: groupDropReasonRows,
       drClassifyReason: drClassifyReason,
       drMicroCause: drMicroCause,
+      drMicroAction: drMicroAction,
+      DR_MICRO_ACTION: DR_MICRO_ACTION,
       DR_MICRO: DR_MICRO,
       drGroupOf: drGroupOf,
       drGroupName: drGroupName,
