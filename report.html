@@ -443,6 +443,9 @@
                  border-radius:999px; padding:1px 8px; margin-left:6px; cursor:pointer; white-space:nowrap; }
   .ns-micro-csv:hover{ background:var(--accent); color:#fff; border-color:var(--accent); }
   .ns-micro-bar{ padding:4px 0 2px 14px; }
+  .drk-exp-bar{ float:right; font-weight:400; }
+  .drk-exp-btn{ font-size:11.5px; margin-left:6px; }
+  @media print{ .drk-exp-bar, .drk-exp-btn{ display:none !important; } }
   .ns-micro-caret{ font-size:10px; color:var(--muted); }
   .dr-c-micro-body, .ns-micro-body{ padding:1px 0 5px 16px; }
   .dr-c-cat-body .ns-micro{ margin-left:8px; }
@@ -472,6 +475,8 @@
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .dr-c-desc{ display:none; }        /* 手機把定位短句收起來，標題 hover 仍看得到原文 */
     .ns-micro-act{ display:none; }     /* 手機藏動作文字，避免擠成一團 */
+    .drk-exp-bar{ float:none; display:block; margin-top:6px; }
+    .drk-exp-btn{ display:inline-block; margin:4px 6px 0 0; }
     .drk-gband-d{ display:none; }
     .dr-c-num{ width:84px; font-size:11.5px; }
     #dropReason .ns-c-bar{ flex:0 1 52px; min-width:44px; }
@@ -1787,7 +1792,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.41.0';   // 1.41.0：具體原因加「動作」；待補類可匯出 CSV；客情培養可匯出 30 天回顧清單
+  var APP_VERSION = '1.42.0';   // 1.42.0：依課別檢討可匯出「各課業代進度表」（A4 列印版 HTML）＋ CSV
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10902,16 +10907,276 @@ var state = {
     return wrap;
   }
 
+  // ── 匯出：各課業代進度表（v1.42.0）───────────────────────────────────
+  // 為什麼選「列印版 HTML」而不是 xlsx：
+  //   ① 單檔離線可開（雙擊就看到排版好的表，不必先有 Excel）
+  //   ② 可 Ctrl+P 直接印或另存 PDF，每課自動分頁（@page A4、page-break-after）
+  //   ③ 表格欄寬、欄位順序、表頭重複都由 CSS 控制，xlsx 要另外裝函式庫（~900KB）才能產生
+  //   CSV 仍然保留：主管要自己樞紐、篩選、排序時比 HTML 好用。
+  var DR_KE_LAST = null;
+
+  function escHtml(v){
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // 把多行洽談壓成一行：印在紙上換行會把表格撐爆
+  function flatText(v, max){
+    var t = String(v === null || v === undefined ? '' : v)
+      .replace(/\s*[\r\n]+\s*/g, ' ／ ').replace(/\s{2,}/g, ' ').trim();
+    if(max && t.length > max) t = t.slice(0, max) + '…';
+    return t;
+  }
+
+  function expDate(sep){
+    var d = new Date();
+    var y = d.getFullYear();
+    var m = ('0' + (d.getMonth() + 1)).slice(-2);
+    var dd = ('0' + d.getDate()).slice(-2);
+    var hh = ('0' + d.getHours()).slice(-2);
+    var mi = ('0' + d.getMinutes()).slice(-2);
+    return sep === false ? (y + m + dd) : (y + '/' + m + '/' + dd + ' ' + hh + ':' + mi);
+  }
+
+  // 把某一課（或全部）的未合作案件攤平成匯出用的紀錄
+  function keRecords(keFilter){
+    var out = [];
+    if(!DR_KE_LAST) return out;
+    for(var i = 0; i < DR_KE_LAST.kes.length; i++){
+      var ke = DR_KE_LAST.kes[i];
+      if(keFilter && ke.ke !== keFilter) continue;
+      for(var j = 0; j < ke.rows.length; j++){
+        var r = ke.rows[j];
+        var cls = drClassifyReason(r);
+        var mic = drMicroCause(cls.sub, r);
+        out.push({
+          ke: ke.ke,
+          dev: fieldStr(r, '開發者') || '（未填開發者）',
+          name: fieldStr(r, '公司名稱') || '（未填公司）',
+          cat: catBucketLabel(r),
+          group: drGroupShort(cls.group),
+          sub: cls.sub,
+          micro: mic.label,
+          action: drMicroAction(mic.label),
+          talk: fieldStr(r, '洽談內容'),
+          note: fieldStr(r, '說明'),
+          win: fieldStr(r, '聯絡窗口'),
+          tel: fieldStr(r, '聯絡電話')
+        });
+      }
+    }
+    return out;
+  }
+
+  // 依業代分組（件數多的在前）；同一業代內先按原因、再按公司名
+  function keGroupByDev(recs){
+    var map = {}, order = [];
+    for(var i = 0; i < recs.length; i++){
+      var d = recs[i].dev;
+      if(!map[d]){ map[d] = []; order.push(d); }
+      map[d].push(recs[i]);
+    }
+    order.sort(function(a, b){
+      if(map[b].length !== map[a].length) return map[b].length - map[a].length;
+      return a < b ? -1 : (a > b ? 1 : 0);
+    });
+    for(var k = 0; k < order.length; k++){
+      map[order[k]].sort(function(x, y){
+        var ix = DR_SUB_ORDER.indexOf(x.sub), iy = DR_SUB_ORDER.indexOf(y.sub);
+        if(ix !== iy) return ix - iy;
+        return x.name < y.name ? -1 : (x.name > y.name ? 1 : 0);
+      });
+    }
+    return { order: order, map: map };
+  }
+
+  var KE_EXPORT_CSS = ''
+    + '@page{size:A4 portrait;margin:10mm 8mm}'
+    + '*{box-sizing:border-box}'
+    + 'body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#1b1b1f;'
+    + 'font-size:9pt;line-height:1.35;margin:0;padding:8mm}'
+    + '.ke{page-break-after:always}'
+    + '.ke:last-child{page-break-after:auto}'
+    + '.kehd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.6pt solid #2b2b33;padding-bottom:1.5mm;margin-bottom:2.5mm}'
+    + '.kehd h1{font-size:16pt;margin:0;letter-spacing:.5px}'
+    + '.kehd .sub{font-size:8pt;color:#666;text-align:right;line-height:1.5}'
+    + '.sum{display:flex;gap:4mm;font-size:8.5pt;background:#f4f6f9;border:.5pt solid #c9d2dc;'
+    + 'border-radius:1.5mm;padding:1.8mm 2.5mm;margin-bottom:2.5mm}'
+    + '.sum b{font-weight:800}'
+    + '.sum .n{font-size:11pt;font-weight:800;margin-right:1mm}'
+    + 'table{width:100%;border-collapse:collapse;table-layout:fixed}'
+    + 'thead{display:table-header-group}'
+    + 'th{background:#e9eef4;border:.5pt solid #98a3ae;padding:1.2mm 1mm;font-size:7.8pt;'
+    + 'font-weight:800;text-align:left;white-space:nowrap}'
+    + 'td{border:.5pt solid #98a3ae;padding:1.2mm 1mm;vertical-align:top;font-size:8pt;'
+    + 'word-break:break-all}'
+    + 'tr{page-break-inside:avoid}'
+    + '.dev td{background:#dfe7ef;font-weight:800;font-size:8.5pt}'
+    + '.dev .cnt{float:right;font-weight:600;color:#555}'
+    + '.no{text-align:center;color:#666}'
+    + '.cm{color:#333}'
+    + '.act{color:#0b5f8a;font-weight:600}'
+    + '.tk{font-size:7.2pt;color:#333;line-height:1.9;white-space:nowrap}'
+    + '.tel{font-size:7.6pt;line-height:1.45}'
+    + '.tel br+br{display:none}'
+    + 'tfoot td{border:.5pt solid #98a3ae;background:#f7f9fb;font-size:8pt;font-weight:700;'
+    + 'padding:1.6mm 1mm}'
+    + '.ft{margin-top:2mm;font-size:7.2pt;color:#777;display:flex;justify-content:space-between}'
+    + 'ul.hint{margin:0;padding-left:4mm;font-size:8pt;color:#444}';
+
+  function buildKeExportHtml(keFilter){
+    var recs = keRecords(keFilter);
+    if(!recs.length) return '';
+    var byKe = {}, keOrder = [];
+    for(var i = 0; i < recs.length; i++){
+      if(!byKe[recs[i].ke]){ byKe[recs[i].ke] = []; keOrder.push(recs[i].ke); }
+      byKe[recs[i].ke].push(recs[i]);
+    }
+    var keCounts = {};
+    for(var k2 = 0; k2 < DR_KE_LAST.kes.length; k2++){
+      var kk = DR_KE_LAST.kes[k2];
+      keCounts[kk.ke] = kk;
+    }
+
+    var H = [];
+    H.push('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">');
+    H.push('<title>富昇物流｜各課未合作案件進度表 ' + escHtml(expDate(false)) + '</title>');
+    H.push('<style>' + KE_EXPORT_CSS + '</style></head><body>');
+
+    for(var oi2 = 0; oi2 < keOrder.length; oi2++){
+      var keName = keOrder[oi2];
+      var list = byKe[keName];
+      var kd = keCounts[keName] || { counts: {}, total: list.length };
+      var grp = keGroupByDev(list);
+      H.push('<section class="ke">');
+      H.push('<div class="kehd"><div><h1>' + escHtml(keName) + '　未合作案件進度表</h1>'
+        + '<div style="font-size:8pt;color:#666;margin-top:1mm">富昇物流 CRM｜供課主管逐筆盯進度，空白欄位現場手寫　'
+        + '<span style="color:#999">（列印：A4 直式、縮放 100%、關閉頁首頁尾）</span></div></div>'
+        + '<div class="sub">產出：' + escHtml(expDate()) + '<br>資料來源：業務開發進度追蹤</div></div>');
+      H.push('<div class="sum">'
+        + '<span><span class="n">' + list.length + '</span>件未合作</span>'
+        + '<span>商務跟進 <b>' + (kd.counts && kd.counts['G1'] || 0) + '</b></span>'
+        + '<span>機會對齊 <b>' + (kd.counts && kd.counts['G2'] || 0) + '</b></span>'
+        + '<span>政策邊界 <b>' + (kd.counts && kd.counts['G3'] || 0) + '</b></span>'
+        + '<span>非目標 <b>' + (kd.counts && kd.counts['G4'] || 0) + '</b></span>'
+        + '<span>業代 <b>' + grp.order.length + '</b> 人</span>'
+        + '</div>');
+      H.push('<table><colgroup>'
+        + '<col style="width:6mm"><col style="width:33mm"><col style="width:11mm"><col style="width:24mm">'
+        + '<col style="width:38mm"><col style="width:29mm"><col style="width:26mm"><col style="width:23mm">'
+        + '</colgroup><thead><tr>'
+        + '<th>#</th><th>公司名稱</th><th>類型</th><th>原因／具體原因</th>'
+        + '<th>卡在哪（最近洽談）</th><th>下一步</th><th>窗口／電話</th><th>追蹤紀錄</th>'
+        + '</tr></thead><tbody>');
+      var seq = 0;
+      for(var di = 0; di < grp.order.length; di++){
+        var dev = grp.order[di];
+        var arr = grp.map[dev];
+        H.push('<tr class="dev"><td colspan="8">' + escHtml(dev)
+          + '<span class="cnt">' + arr.length + ' 件</span></td></tr>');
+        for(var ri2 = 0; ri2 < arr.length; ri2++){
+          var rec = arr[ri2];
+          seq++;
+          var talk = flatText(rec.talk, 78) || flatText(rec.note, 78) || '（無洽談紀錄）';
+          H.push('<tr>'
+            + '<td class="no">' + seq + '</td>'
+            + '<td>' + escHtml(rec.name) + '</td>'
+            + '<td>' + escHtml(rec.cat) + '</td>'
+            + '<td>' + escHtml(rec.sub) + '<br><span style="color:#666">' + escHtml(rec.micro) + '</span></td>'
+            + '<td class="cm">' + escHtml(talk) + '</td>'
+            + '<td class="act">' + escHtml(rec.action) + '</td>'
+            + '<td class="tel">' + escHtml(rec.win)
+            + (rec.tel ? '<br>' + escHtml(rec.tel).replace(/\s+/g, '<br>') : '') + '</td>'
+            + '<td class="tk">□ 已聯繫<br>□ 待回覆<br>回訪 ___/___</td>'
+            + '</tr>');
+        }
+      }
+      H.push('</tbody>');
+      H.push('<tfoot><tr><td colspan="8">本課合計 <b>' + list.length + '</b> 件　｜　'
+        + '已聯繫 ______ 件　待回覆 ______ 件　本週應追 ______ 件　'
+        + '<span style="font-weight:400;color:#666">（課長填寫）</span></td></tr></tfoot>');
+      H.push('</table>');
+      H.push('<div class="ft"><span>第 ' + (oi2 + 1) + ' 課／共 ' + keOrder.length + ' 課</span>'
+        + '<span>CRM 報表工具 v' + escHtml(typeof APP_VERSION === 'string' ? APP_VERSION : '') + '　' + escHtml(expDate()) + '</span></div>');
+      H.push('</section>');
+    }
+    H.push('</body></html>');
+    return H.join('');
+  }
+
+  function keCsvText(keFilter){
+    var recs = keRecords(keFilter);
+    var head = ['課別', '開發者', '公司名稱', '客戶類型', '大類', '原因', '具體原因', '下一步',
+                '聯絡窗口', '聯絡電話', '追蹤狀態（現場填）', '下次回訪（現場填）', '備註（現場填）',
+                '說明', '洽談內容'];
+    var lines = [head.map(csvCell).join(',')];
+    for(var i = 0; i < recs.length; i++){
+      var r = recs[i];
+      lines.push([r.ke, r.dev, r.name, r.cat, r.group, r.sub, r.micro, r.action,
+                  r.win, r.tel, '', '', '', r.note, r.talk].map(csvCell).join(','));
+    }
+    return '\ufeff' + lines.join('\r\n');
+  }
+
+  function downloadBlob(content, mime, filename){
+    var blob = new Blob([content], { type: mime });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function exportKeProgress(kind, keFilter){
+    if(!DR_KE_LAST) return 0;
+    var tag = keFilter ? ('_' + keFilter) : '_全公司';
+    if(kind === 'csv'){
+      var csv = keCsvText(keFilter);
+      downloadBlob(csv, 'text/csv;charset=utf-8',
+        '各課業代進度表' + tag + '_' + expDate(false) + '.csv');
+      return keRecords(keFilter).length;
+    }
+    var html = buildKeExportHtml(keFilter);
+    if(!html) return 0;
+    downloadBlob(html, 'text/html;charset=utf-8',
+      '各課業代進度表' + tag + '_' + expDate(false) + '.html');
+    return keRecords(keFilter).length;
+  }
+
+  function makeExportBtn(text, title, kind, keFilter){
+    var b = document.createElement('span');
+    b.className = 'ns-micro-csv drk-exp-btn';
+    b.setAttribute('role', 'button');
+    b.setAttribute('tabindex', '0');
+    b.textContent = text;
+    b.title = title;
+    function go(ev){ ev.stopPropagation(); ev.preventDefault(); exportKeProgress(kind, keFilter); }
+    b.addEventListener('click', go);
+    b.addEventListener('keydown', function(ev){ if(ev.key === 'Enter' || ev.key === ' ') go(ev); });
+    return b;
+  }
+
   // 各課檢討矩陣：課別 × 五類原因（件數）＋「這一課先改什麼」＋可展開該課案件
   // 會議用法：由上而下（件數多的課先談），每一列就是一輪「這課為什麼沒成交、下週改什麼」。
   function buildDropReasonKeTable(keData, ctx){
     ctx = ctx || {};
+    DR_KE_LAST = keData;          // 匯出（各課業代進度表）要用同一份分析結果
     var wrap = document.createElement('div');
     wrap.className = 'drk-wrap';
 
     var h3 = document.createElement('h3');
     h3.className = 'drk-title';
     h3.textContent = '依課別檢討（每週業務會議用）';
+    // 匯出：主管要「印出來逐筆盯」，所以給列印版 HTML（每課一頁）＋ CSV（自己樞紐）
+    var expBar = document.createElement('span');
+    expBar.className = 'drk-exp-bar';
+    expBar.appendChild(makeExportBtn('⤓ 各課進度表（列印版）',
+      '匯出所有課的 A4 列印版 HTML：每課一頁、依業代分組、含空白追蹤欄', 'html', null));
+    expBar.appendChild(makeExportBtn('⤓ CSV',
+      '匯出所有課的 CSV（含窗口、電話、空白追蹤欄），適合自己篩選或樞紐', 'csv', null));
+    h3.appendChild(expBar);
     wrap.appendChild(h3);
 
     var table = document.createElement('div');
@@ -11128,6 +11393,9 @@ var state = {
     chKe.className = 'drk-ch-ke';
     chKe.textContent = ke.ke;
     ch.appendChild(chKe);
+    // 各課主管只要自己那張：展開後第一眼就能匯出本課
+    ch.appendChild(makeExportBtn('⤓ 本課進度表',
+      '只匯出 ' + ke.ke + ' 的列印版（A4，含業代分組與空白追蹤欄）', 'html', ke.ke));
     var chTot = document.createElement('span');
     chTot.className = 'drk-ch-total';
     chTot.textContent = '未合作 ' + ke.total + ' 件';
