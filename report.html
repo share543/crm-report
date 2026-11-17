@@ -1792,7 +1792,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.43.0';   // 1.43.0：G1 改名「洽談處理與跟進」（原商務處理與跟進），短名洽談跟進
+  var APP_VERSION = '1.44.0';   // 1.44.0：資料缺漏不再檢查「聯絡窗口」（非業務填寫責任，實測誤報 14 筆）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -2905,7 +2905,10 @@ var state = {
       if(s==='進行中' || s==='未啟動') active.push(list[i]);
       if(s==='進行中') progressed.push(list[i]);
     }
-    var missing={ '公司名稱':0, '填單日期':0, '類別':0, '開發者':0, '課別':0, '收貨站所':0, '聯絡窗口':0, '洽談內容':0 };
+    // v1.44.0：不再檢查「聯絡窗口」。
+    //   原因：這一欄是客戶主檔自動帶的參考資訊，不是業務的填寫責任；
+    //   拿它算資料缺漏會把「已建檔但沒填窗口」的正常案件算成缺失（實測誤報 14 筆）。
+    var missing={ '公司名稱':0, '填單日期':0, '類別':0, '開發者':0, '課別':0, '收貨站所':0, '洽談內容':0 };
     var issueRows={};
     function mark(row,field){ missing[field]++; issueRows[String(list.indexOf(row))]=1; }
     for(var a=0;a<active.length;a++){
@@ -2920,7 +2923,6 @@ var state = {
     for(var p=0;p<progressed.length;p++){
       var row=progressed[p], stage=lastMilestone(row);
       if(stage>=1){
-        if(!String(row['聯絡窗口']||'').trim()) mark(row,'聯絡窗口');
         if(!String(row['洽談內容']||'').trim()) mark(row,'洽談內容');
       }
     }
@@ -6302,12 +6304,12 @@ var state = {
 
   // 純函式：資料 → 警報結構（可於 Node 測試；不碰 DOM）
   // 回傳 { items:[{ sev, kind, title, sections:[{ lead, entries:[{ row, label, note }] }] }],
-  //        stamps:{ mismatch|slow|stale|missingDev|missingCont|missingSta: [row, …] } }
+  //        stamps:{ mismatch|slow|stale|missingDev|missingSta: [row, …] } }
   // 每個 entry 都帶 row 參照（＝ state.model.rows 裡同一個物件），供「跳到案件清單」定位。
   function collectAlerts(rows){
     var items = [];
     var stamps = { mismatch: [], slow: [], stale: [], contradict: [],
-                   missingDev: [], missingCont: [], missingSta: [] };
+                   missingDev: [], missingSta: [] };
     if(!rows || !rows.length) return { items: items, stamps: stamps };
 
     function nameOf(r){
@@ -6426,9 +6428,10 @@ var state = {
 
     var missSecs = [];
     var missTotal = 0;
+    // v1.44.0：移除「聯絡窗口未填」這一項（同 weeklyQualityReview 的理由）。
+    //   這一欄不是業務填寫責任，列成缺漏只會在課別旁掛一堆 ⚠。
     var missDefs = [
       { key: '開發者', stamp: 'missingDev', label: '開發者未填' },
-      { key: '聯絡窗口', stamp: 'missingCont', label: '聯絡窗口未填' },
       { key: '收貨站所', stamp: 'missingSta', label: '收貨站所未填' }
     ];
     for(var md = 0; md < missDefs.length; md++){
@@ -6465,7 +6468,7 @@ var state = {
 
   var ALERT_KIND_LABEL = {
     mismatch: '類別規則不一致', slow: '時程過長', stale: '停滯',
-    missingDev: '開發者未填', missingCont: '聯絡窗口未填', missingSta: '收貨站所未填'
+    missingDev: '開發者未填', missingSta: '收貨站所未填'
   };
 
   // 嚴重程度文字標籤（畫面上靠色條，列印時才顯示文字，讓紙本可分辨輕重）
@@ -7699,11 +7702,11 @@ var state = {
     }
     var missN = 0;
     var st = alerts.stamps || {};
-    missN = (st.missingDev || []).length + (st.missingCont || []).length + (st.missingSta || []).length;
+    missN = (st.missingDev || []).length + (st.missingSta || []).length;
     if(missN > 0){
       items.push({ kind:'watch', key:'missing', prio:4, impact:missN, urgency:1, act:false, dirV:null,
         segs:[['t','資料缺漏 '],['n', String(missN)],['t',' 筆'],
-              ['m','（開發者／聯絡窗口／收貨站所未填，影響統計與派工）']],
+              ['m','（開發者／收貨站所未填，影響統計與派工）']],
         speak:'另外有 ' + missN + ' 筆的欄位沒填齊，會影響統計跟派工，要請大家補一下。' });
     }
     // W5 類別結構位移（只有真的位移 >= 5 個百分點才講）
@@ -13815,7 +13818,7 @@ var state = {
       '類別規則：導入有日期但簽約空白 → 類別應為 1P／3P；簽約與導入都有日期 → 類別應為 零擔／甲配。',
       '導入與結案矛盾：導入有日期但結案不是「導入完成」，或結案寫導入完成但導入日期空白。',
       '時程過長：從填單日期到最後一個里程碑超過 60 天。',
-      '資料缺漏：進行中案件缺 開發者／聯絡窗口／收貨站所（未啟動與已結案不列入）。'
+      '資料缺漏：進行中案件缺 開發者／收貨站所（未啟動與已結案不列入；聯絡窗口不列入檢查）。'
     ],
     highlightSection: [
       // ⚠ v1.27.0：本段曾寫「五張統計卡」與「排行榜固定用全部資料」，兩者都與程式不符
