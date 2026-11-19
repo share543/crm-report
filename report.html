@@ -1792,7 +1792,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.44.0';   // 1.44.0：資料缺漏不再檢查「聯絡窗口」（非業務填寫責任，實測誤報 14 筆）
+  var APP_VERSION = '1.45.0';   // 1.45.0：來源無窗口／電話時，匯出表自動省略該欄（寬度還給公司名稱與洽談）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -11028,9 +11028,20 @@ var state = {
     + '.ft{margin-top:2mm;font-size:7.2pt;color:#777;display:flex;justify-content:space-between}'
     + 'ul.hint{margin:0;padding-left:4mm;font-size:8pt;color:#444}';
 
+  // v1.45.0：來源 Excel 有沒有聯絡窗口／電話。
+  //   個資已從來源移除時，硬留一個 26mm 的空白欄只是浪費 A4 寬度；
+  //   改成自動不畫那一欄，把寬度還給「公司名稱」與「卡在哪」。
+  function keHasContact(recs){
+    for(var i = 0; i < recs.length; i++){
+      if(String(recs[i].win || '').trim() !== '' || String(recs[i].tel || '').trim() !== '') return true;
+    }
+    return false;
+  }
+
   function buildKeExportHtml(keFilter){
     var recs = keRecords(keFilter);
     if(!recs.length) return '';
+    var hasContact = keHasContact(recs);   // false → 不畫「窗口／電話」欄
     var byKe = {}, keOrder = [];
     for(var i = 0; i < recs.length; i++){
       if(!byKe[recs[i].ke]){ byKe[recs[i].ke] = []; keOrder.push(recs[i].ke); }
@@ -11065,18 +11076,28 @@ var state = {
         + '<span>非目標 <b>' + (kd.counts && kd.counts['G4'] || 0) + '</b></span>'
         + '<span>業代 <b>' + grp.order.length + '</b> 人</span>'
         + '</div>');
+      // 沒有聯絡資料時，把窗口欄的 26mm 分給「公司名稱 +7」「卡在哪 +14」「下一步 +4」
+      //（A4 直式可用 194mm：有窗口 190mm、沒窗口 189mm，兩者都不溢出）
+      var w = hasContact
+        ? { no:'6mm', name:'33mm', cat:'11mm', reason:'24mm', talk:'38mm', act:'29mm', tel:'26mm', tk:'23mm' }
+        : { no:'6mm', name:'40mm', cat:'11mm', reason:'24mm', talk:'52mm', act:'33mm', tel:'0',     tk:'23mm' };
       H.push('<table><colgroup>'
-        + '<col style="width:6mm"><col style="width:33mm"><col style="width:11mm"><col style="width:24mm">'
-        + '<col style="width:38mm"><col style="width:29mm"><col style="width:26mm"><col style="width:23mm">'
+        + '<col style="width:' + w.no + '"><col style="width:' + w.name + '">'
+        + '<col style="width:' + w.cat + '"><col style="width:' + w.reason + '">'
+        + '<col style="width:' + w.talk + '"><col style="width:' + w.act + '">'
+        + (hasContact ? '<col style="width:' + w.tel + '">' : '')
+        + '<col style="width:' + w.tk + '">'
         + '</colgroup><thead><tr>'
         + '<th>#</th><th>公司名稱</th><th>類型</th><th>原因／具體原因</th>'
-        + '<th>卡在哪（最近洽談）</th><th>下一步</th><th>窗口／電話</th><th>追蹤紀錄</th>'
+        + '<th>卡在哪（最近洽談）</th><th>下一步</th>'
+        + (hasContact ? '<th>窗口／電話</th>' : '')
+        + '<th>追蹤紀錄</th>'
         + '</tr></thead><tbody>');
       var seq = 0;
       for(var di = 0; di < grp.order.length; di++){
         var dev = grp.order[di];
         var arr = grp.map[dev];
-        H.push('<tr class="dev"><td colspan="8">' + escHtml(dev)
+        H.push('<tr class="dev"><td colspan="' + (hasContact ? 8 : 7) + '">' + escHtml(dev)
           + '<span class="cnt">' + arr.length + ' 件</span></td></tr>');
         for(var ri2 = 0; ri2 < arr.length; ri2++){
           var rec = arr[ri2];
@@ -11089,14 +11110,14 @@ var state = {
             + '<td>' + escHtml(rec.sub) + '<br><span style="color:#666">' + escHtml(rec.micro) + '</span></td>'
             + '<td class="cm">' + escHtml(talk) + '</td>'
             + '<td class="act">' + escHtml(rec.action) + '</td>'
-            + '<td class="tel">' + escHtml(rec.win)
-            + (rec.tel ? '<br>' + escHtml(rec.tel).replace(/\s+/g, '<br>') : '') + '</td>'
+            + (hasContact ? ('<td class="tel">' + escHtml(rec.win)
+            + (rec.tel ? '<br>' + escHtml(rec.tel).replace(/\s+/g, '<br>') : '') + '</td>') : '')
             + '<td class="tk">□ 已聯繫<br>□ 待回覆<br>回訪 ___/___</td>'
             + '</tr>');
         }
       }
       H.push('</tbody>');
-      H.push('<tfoot><tr><td colspan="8">本課合計 <b>' + list.length + '</b> 件　｜　'
+      H.push('<tfoot><tr><td colspan="' + (hasContact ? 8 : 7) + '">本課合計 <b>' + list.length + '</b> 件　｜　'
         + '已聯繫 ______ 件　待回覆 ______ 件　本週應追 ______ 件　'
         + '<span style="font-weight:400;color:#666">（課長填寫）</span></td></tr></tfoot>');
       H.push('</table>');
@@ -11110,14 +11131,19 @@ var state = {
 
   function keCsvText(keFilter){
     var recs = keRecords(keFilter);
-    var head = ['課別', '開發者', '公司名稱', '客戶類型', '大類', '原因', '具體原因', '下一步',
-                '聯絡窗口', '聯絡電話', '追蹤狀態（現場填）', '下次回訪（現場填）', '備註（現場填）',
-                '說明', '洽談內容'];
+    // v1.45.0：與列印版同一條規則——整份都沒有窗口／電話就不輸出這兩欄，
+    //   避免匯出檔帶兩個永遠空白的欄位（樞紐時還要手動刪）。
+    var hasContact = keHasContact(recs);
+    var head = ['課別', '開發者', '公司名稱', '客戶類型', '大類', '原因', '具體原因', '下一步'];
+    if(hasContact) head = head.concat(['聯絡窗口', '聯絡電話']);
+    head = head.concat(['追蹤狀態（現場填）', '下次回訪（現場填）', '備註（現場填）', '說明', '洽談內容']);
     var lines = [head.map(csvCell).join(',')];
     for(var i = 0; i < recs.length; i++){
       var r = recs[i];
-      lines.push([r.ke, r.dev, r.name, r.cat, r.group, r.sub, r.micro, r.action,
-                  r.win, r.tel, '', '', '', r.note, r.talk].map(csvCell).join(','));
+      var row = [r.ke, r.dev, r.name, r.cat, r.group, r.sub, r.micro, r.action];
+      if(hasContact) row = row.concat([r.win, r.tel]);
+      row = row.concat(['', '', '', r.note, r.talk]);
+      lines.push(row.map(csvCell).join(','));
     }
     return '\ufeff' + lines.join('\r\n');
   }
@@ -11178,7 +11204,7 @@ var state = {
     expBar.appendChild(makeExportBtn('⤓ 各課進度表（列印版）',
       '匯出所有課的 A4 列印版 HTML：每課一頁、依業代分組、含空白追蹤欄', 'html', null));
     expBar.appendChild(makeExportBtn('⤓ CSV',
-      '匯出所有課的 CSV（含窗口、電話、空白追蹤欄），適合自己篩選或樞紐', 'csv', null));
+      '匯出所有課的 CSV（含空白追蹤欄），適合自己篩選或樞紐；來源沒有窗口／電話時自動省略那兩欄', 'csv', null));
     h3.appendChild(expBar);
     wrap.appendChild(h3);
 
