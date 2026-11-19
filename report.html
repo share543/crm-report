@@ -1792,7 +1792,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.45.0';   // 1.45.0：來源無窗口／電話時，匯出表自動省略該欄（寬度還給公司名稱與洽談）
+  var APP_VERSION = '1.46.0';   // 1.46.0：業代追蹤表移除窗口電話與下一步、洽談全文＋里程碑鏈、加篩選與可勾選追蹤、手機卡片版
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10964,6 +10964,22 @@ var state = {
           action: drMicroAction(mic.label),
           talk: fieldStr(r, '洽談內容'),
           note: fieldStr(r, '說明'),
+          // v1.46.0：匯出要「完整揭露洽談歷史」，補 填單日期 與 結案原文
+          date: fieldStr(r, '填單日期'),
+          end:  fieldStr(r, '結案'),
+          // 里程碑鏈（初步接洽→需求確認→報價→簽約→導入）：這是「洽談歷史」的骨架，
+          //   只寫日期不寫階段名會看不出節奏，所以匯出成一條線。實測 167 筆有 56 筆三個以上。
+          miles: (function(){
+            var MAP = [['初步接洽','洽'],['需求確認','需'],['報價','報'],['簽約','簽'],['導入','導']];
+            var out = [];
+            for(var mi = 0; mi < MAP.length; mi++){
+              var v = fieldStr(r, MAP[mi][0]);
+              if(!v) continue;
+              var d = v.replace(/^\d{4}[-\/]/, '').replace(/\s.*$/, '');   // 2026-08-28 → 08-28
+              out.push({ label: MAP[mi][1], full: MAP[mi][0], date: d });
+            }
+            return out;
+          })(),
           win: fieldStr(r, '聯絡窗口'),
           tel: fieldStr(r, '聯絡電話')
         });
@@ -10994,43 +11010,265 @@ var state = {
     return { order: order, map: map };
   }
 
+  // ── v1.46.0：匯出表改成「可篩選的自我追蹤表」 ─────────────────────────────
+  //   使用者指示：①移除「窗口／電話」與「下一步」兩欄 ②查核洽談歷史是否完整揭露
+  //              ③加入篩選、可在筆電或手機瀏覽。這份檔案是給各部課管理者自我追蹤用。
+  //   設計判斷：
+  //     ① 紙本與螢幕是兩個用途：紙本要能寫字（追蹤欄留白）、螢幕要能篩選（sticky 篩選列）。
+  //        同一個檔案用 @media print / @media screen 分流，不維護兩份。
+  //     ② 洽談紀錄不截斷。實測 167 筆中位 31 字、平均 36、最大 129；
+  //        超過舊上限 78 字的只有 12 筆（7%），但那 12 筆正是多次拜訪的演進、追蹤價值最高。
+  //        移除兩欄省下的寬度全部給這一欄（38mm → 82mm）。
+  //     ③ 說明（下拉樣板，如「已提供報價，廠商有意願會回覆」）與結案原文都是判讀依據，
+  //        用小字附在主要欄位下方，不另佔欄位。洽談與說明都有時先列說明再列洽談。
+  //     ④ 追蹤欄在螢幕上是真 checkbox（存 localStorage、可跨次開啟累積），
+  //        列印時自動退回紙上的空白方格（□）與 ___/___，不必另外做一份。
   var KE_EXPORT_CSS = ''
     + '@page{size:A4 portrait;margin:10mm 8mm}'
     + '*{box-sizing:border-box}'
+    + '[hidden]{display:none !important}'
+    + 'html{-webkit-text-size-adjust:100%}'
     + 'body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#1b1b1f;'
-    + 'font-size:9pt;line-height:1.35;margin:0;padding:8mm}'
+    + 'font-size:9pt;line-height:1.42;margin:0;padding:0 8mm 8mm;background:#fff}'
+    // ── 篩選列（螢幕限定，列印隱藏）
+    + '.bar{position:sticky;top:0;z-index:9;background:#fff;border-bottom:1.5pt solid #2b2b33;'
+    + 'padding:4mm 0 2.5mm;margin-bottom:3.5mm;box-shadow:0 2px 6px rgba(0,0,0,.06)}'
+    + '.bar-t{font-size:14pt;font-weight:800;letter-spacing:.4px;margin:0 0 2.4mm;line-height:1.3}'
+    + '.bar-t small{display:block;font-size:8.5pt;font-weight:400;color:#666;margin-top:1mm;letter-spacing:0}'
+    + '.filters{display:flex;flex-wrap:wrap;gap:2mm;align-items:center}'
+    + '.filters select,.filters input{font:inherit;font-size:8.5pt;padding:1.4mm 1.8mm;'
+    + 'border:.5pt solid #98a3ae;border-radius:1.2mm;background:#fff;color:#1b1b1f;max-width:46mm}'
+    + '.filters input[type=search]{min-width:38mm;flex:1 1 38mm;max-width:none}'
+    + '.filters button{font:inherit;font-size:8.5pt;padding:1.4mm 3mm;border:.5pt solid #98a3ae;'
+    + 'border-radius:1.2mm;background:#eef2f7;color:#1b1b1f;cursor:pointer}'
+    + '.filters button:hover{background:#dfe7ef}'
+    + '.fChk{display:inline-flex;align-items:center;gap:1.4mm;font-size:8.5pt;color:#333;cursor:pointer}'
+    + '.fChk input{width:3.2mm;height:3.2mm;margin:0}'
+    + '.fN{font-size:9pt;color:#333;white-space:nowrap;margin-left:auto}'
+    + '.fN b{font-size:12.5pt;font-weight:800}'
+    // ── 每課一頁
     + '.ke{page-break-after:always}'
     + '.ke:last-child{page-break-after:auto}'
-    + '.kehd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.6pt solid #2b2b33;padding-bottom:1.5mm;margin-bottom:2.5mm}'
+    + '.kehd{display:flex;justify-content:space-between;align-items:flex-end;'
+    + 'border-bottom:1.6pt solid #2b2b33;padding-bottom:1.5mm;margin-bottom:2.5mm}'
     + '.kehd h1{font-size:16pt;margin:0;letter-spacing:.5px}'
     + '.kehd .sub{font-size:8pt;color:#666;text-align:right;line-height:1.5}'
-    + '.sum{display:flex;gap:4mm;font-size:8.5pt;background:#f4f6f9;border:.5pt solid #c9d2dc;'
-    + 'border-radius:1.5mm;padding:1.8mm 2.5mm;margin-bottom:2.5mm}'
+    + '.sum{display:flex;gap:4mm;flex-wrap:wrap;font-size:8.5pt;background:#f4f6f9;'
+    + 'border:.5pt solid #c9d2dc;border-radius:1.5mm;padding:1.8mm 2.5mm;margin-bottom:2.5mm}'
     + '.sum b{font-weight:800}'
     + '.sum .n{font-size:11pt;font-weight:800;margin-right:1mm}'
+    // ── 表格
     + 'table{width:100%;border-collapse:collapse;table-layout:fixed}'
     + 'thead{display:table-header-group}'
     + 'th{background:#e9eef4;border:.5pt solid #98a3ae;padding:1.2mm 1mm;font-size:7.8pt;'
     + 'font-weight:800;text-align:left;white-space:nowrap}'
-    + 'td{border:.5pt solid #98a3ae;padding:1.2mm 1mm;vertical-align:top;font-size:8pt;'
-    + 'word-break:break-all}'
+    + 'td{border:.5pt solid #98a3ae;padding:1.3mm 1.2mm;vertical-align:top;font-size:8pt;'
+    + 'word-break:break-word}'
     + 'tr{page-break-inside:avoid}'
     + '.dev td{background:#dfe7ef;font-weight:800;font-size:8.5pt}'
     + '.dev .cnt{float:right;font-weight:600;color:#555}'
-    + '.no{text-align:center;color:#666}'
-    + '.cm{color:#333}'
-    + '.act{color:#0b5f8a;font-weight:600}'
-    + '.tk{font-size:7.2pt;color:#333;line-height:1.9;white-space:nowrap}'
-    + '.tel{font-size:7.6pt;line-height:1.45}'
-    + '.tel br+br{display:none}'
+    + '.no{text-align:center;color:#888;font-size:7.5pt}'
+    + '.nm{font-weight:700;font-size:8.4pt;line-height:1.35}'
+    + '.nm .meta{display:block;font-weight:400;color:#8a8a92;font-size:6.9pt;margin-top:.6mm}'
+    + '.rs{line-height:1.4}'
+    + '.rs b{font-weight:800;font-size:8pt}'
+    + '.rs .mg{display:block;color:#0b5f8a;font-size:7.2pt;font-weight:700;margin-top:.5mm}'
+    + '.rs .end{display:block;color:#8a8a92;font-size:6.9pt;line-height:1.35;margin-top:.8mm;'
+    + 'padding-top:.8mm;border-top:.4pt dashed #d5dae0}'
+    + '.cm{white-space:pre-wrap;line-height:1.55;font-size:7.9pt}'
+    // 洽談欄的三層視覺：①里程碑鏈（灰底帶）②說明（淡黃底，樣板文字）③洽談內文（主體）
+    + '.cm .mile{display:block;font-size:6.9pt;color:#2c3a47;background:#e9eef4;'
+    + 'border-left:1.4pt solid #7d8fa3;border-radius:.6mm;padding:.8mm 1.2mm;margin-bottom:1.2mm;line-height:1.6}'
+    + '.cm .mile .ms{font-weight:800}'
+    + '.cm .mile i{font-style:normal;color:#93a1b0;margin:0 .8mm;font-weight:700}'
+    + '.cm .note{display:block;color:#6b5a22;background:#fdf7e3;font-size:6.9pt;line-height:1.45;'
+    + 'border-radius:.6mm;padding:.8mm 1.2mm;margin-bottom:1.2mm}'
+    + '.cm .note b{font-weight:800;color:#8a6d1f}'
+    + '.cm .body{display:block;line-height:1.5}'
+    + '.cm .empty{color:#9a9aa2}'
+    + '.tk{font-size:7.2pt;color:#333;line-height:1.8}'
+    + '.tk label{display:block;white-space:nowrap;cursor:pointer}'
+    + '.tk input[type=checkbox]{width:2.9mm;height:2.9mm;margin:0 1mm 0 0;vertical-align:-.4mm;'
+    + 'accent-color:#1f6feb;cursor:pointer}'
+    + '.tk input[type=date]{font:inherit;font-size:6.9pt;width:15mm;padding:.2mm .5mm;'
+    + 'border:.4pt solid #98a3ae;border-radius:.8mm;color:#333}'
+    + '.pk,.pd{display:none}'
+    + 'tr.done .nm{color:#7a7a82}'
+    + 'tr.done .cm{color:#5a5a62}'
     + 'tfoot td{border:.5pt solid #98a3ae;background:#f7f9fb;font-size:8pt;font-weight:700;'
     + 'padding:1.6mm 1mm}'
     + '.ft{margin-top:2mm;font-size:7.2pt;color:#777;display:flex;justify-content:space-between}'
-    + 'ul.hint{margin:0;padding-left:4mm;font-size:8pt;color:#444}';
+    // ── 列印：篩選列消失、勾選框回到紙上的空白方格
+    + '@media print{'
+    + '.bar{display:none !important}'
+    + 'body{padding:0}'
+    + '.tk input{display:none !important}'
+    + '.pk,.pd{display:inline !important}'
+    + '.tk label{cursor:auto}'
+    + 'tr.done .nm,tr.done .cm{color:#1b1b1f}'
+    + 'tfoot{display:table-row-group}}'
+    // ── 手機／窄螢幕：一筆一張卡片
+    + '@media screen and (max-width:780px){'
+    + 'body{padding:0 3mm 6mm;font-size:10pt}'
+    + '.bar{padding:3mm 0 2mm}'
+    + '.bar-t{font-size:14.5pt}'
+    + '.filters{gap:2.5mm}'
+    + '.filters select,.filters input{font-size:10pt;padding:2.2mm;flex:1 1 45%;max-width:none}'
+    + '.filters input[type=search]{flex-basis:100%}'
+    + '.filters button{font-size:10pt;padding:2.2mm 4mm}'
+    + '.fChk{font-size:10pt;padding:1mm 0}'
+    + '.fN{margin-left:0;flex-basis:100%;text-align:right;padding-top:1mm}'
+    + '.ke{page-break-after:auto;margin-bottom:8mm}'
+    + '.kehd{display:block}'
+    + '.kehd h1{font-size:15pt}'
+    + '.kehd .sub{text-align:left;margin-top:1mm}'
+    + '.sum{display:grid;grid-template-columns:1fr 1fr;gap:1.2mm 3mm;font-size:10pt;padding:2.5mm}'
+    + 'table,tbody,tfoot,tr,td{display:block}'
+    + 'thead{display:none}'
+    + 'table{border:0;width:auto}'
+    + 'tr.dev{background:#dfe7ef;font-weight:800;padding:2.2mm 2.8mm;border-radius:1.5mm;'
+    + 'margin:5mm 0 2.5mm}'
+    + 'tr.dev td{border:0;background:none;padding:0;font-size:11pt}'
+    + 'tr.case{border:.6pt solid #c6ced8;border-radius:2mm;margin-bottom:3.5mm;padding:3mm;'
+    + 'background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05)}'
+    + 'tr.case td{border:0;padding:.8mm 0;font-size:10pt;word-break:normal}'
+    + 'tr.case td::before{content:attr(data-l);display:inline-block;min-width:5.4em;'
+    + 'color:#8a8a92;font-size:8.8pt;vertical-align:top}'
+    + 'tr.case td.no{display:none}'
+    + 'tr.case td.nm{font-size:12.5pt;font-weight:800;padding:0 0 1.5mm;line-height:1.35}'
+    + 'tr.case td.nm::before{display:none !important}'
+    + 'tr.case td.nm .meta{font-size:8.8pt;margin-top:1mm}'
+    + 'tr.case td.rs b{font-size:10pt}'
+    + 'tr.case td.rs .mg{font-size:9.5pt;margin-top:1mm}'
+    + 'tr.case td.rs .end{font-size:9pt;margin-top:1.5mm;padding-top:1.5mm}'
+    + 'tr.case td.cm{white-space:pre-wrap;font-size:10.5pt;line-height:1.6;background:#f7f9fb;'
+    + 'border-radius:1.5mm;padding:2.5mm !important;margin:1.5mm 0}'
+    + 'tr.case td.cm::before{display:block !important;min-width:0 !important;margin-bottom:1mm;'
+    + 'font-weight:700;color:#555;font-size:9pt}'
+    + 'tr.case td.cm .mile{font-size:9.5pt;margin-bottom:2.5mm;line-height:1.8;padding:1.6mm 2.2mm;'
+    + 'border-left-width:2.5pt;border-radius:1.2mm}'
+    + 'tr.case td.cm .note{font-size:9.5pt;margin-bottom:2.5mm;padding:1.6mm 2.2mm;border-radius:1.2mm}'
+    + 'tr.case td.cm .body{line-height:1.62}'
+    + 'tr.case td.tk{margin-top:2mm;padding-top:2.5mm !important;border-top:.5pt dashed #c9d2dc !important;'
+    + 'font-size:10pt}'
+    + 'tr.case td.tk::before{display:none !important}'
+    + 'tr.case td.tk label{display:inline-flex;align-items:center;margin-right:6mm;padding:2mm 0}'
+    + 'tr.case td.tk input[type=checkbox]{width:5mm;height:5mm;margin-right:1.8mm}'
+    + 'tr.case td.tk input[type=date]{font-size:10pt;width:auto;padding:1.5mm 2.5mm}'
+    + 'tfoot td{border:0;padding-top:5mm}}';
 
-  // v1.45.0：來源 Excel 有沒有聯絡窗口／電話。
-  //   個資已從來源移除時，硬留一個 26mm 的空白欄只是浪費 A4 寬度；
-  //   改成自動不畫那一欄，把寬度還給「公司名稱」與「卡在哪」。
+  // 匯出檔的互動腳本（純 DOM、無相依）。逐行組字串，避免跨行模板在舊瀏覽器出錯。
+  var KE_EXPORT_JS = [
+    '(function(){',
+    'var KEY="crm-ke-track-v1";',
+    'var fKe=document.getElementById("fKe"),fDev=document.getElementById("fDev"),',
+    'fGrp=document.getElementById("fGrp"),fSub=document.getElementById("fSub"),',
+    'fQ=document.getElementById("fQ"),fUn=document.getElementById("fUn"),',
+    'fN=document.getElementById("fN"),fClear=document.getElementById("fClear"),',
+    'fPr=document.getElementById("fPr"),fAll=document.getElementById("fAll");',
+    'if(!fKe)return;',
+    'var rows=[].slice.call(document.querySelectorAll("tr.case"));',
+    'var secs=[].slice.call(document.querySelectorAll("section.ke"));',
+    'var devs=[].slice.call(document.querySelectorAll("tr.dev"));',
+    'var store={};',
+    'try{store=JSON.parse(localStorage.getItem(KEY)||"{}")||{};}catch(e){store={};}',
+    'function save(){try{localStorage.setItem(KEY,JSON.stringify(store));}catch(e){}}',
+    'function syncDone(r){',
+    'var cks=r.querySelectorAll("input.tkc"),dt=r.querySelector("input.tkd"),any=false;',
+    'for(var c=0;c<cks.length;c++){if(cks[c].checked){any=true;}}',
+    'if(dt&&dt.value){any=true;}',
+    'r.setAttribute("data-done",any?"1":"0");',
+    'if(any){r.classList.add("done");}else{r.classList.remove("done");}',
+    '}',
+    'function bind(r){',
+    'var cks=r.querySelectorAll("input.tkc");',
+    'for(var c=0;c<cks.length;c++){',
+    'cks[c].addEventListener("change",function(){',
+    'var row=this.closest("tr.case"),id=row.getAttribute("data-id");',
+    'var o=store[id]||{};o[this.getAttribute("data-k")]=this.checked;store[id]=o;',
+    'save();syncDone(row);apply();',
+    '});}',
+    'var dt=r.querySelector("input.tkd");',
+    'if(dt){dt.addEventListener("change",function(){',
+    'var row=this.closest("tr.case"),id=row.getAttribute("data-id");',
+    'var o=store[id]||{};o.d=this.value;store[id]=o;',
+    'save();syncDone(row);apply();',
+    '});}}',
+    'function fillDev(){',
+    'var ke=fKe.value,seen={},out=[];',
+    'for(var i=0;i<rows.length;i++){',
+    'if(ke&&rows[i].getAttribute("data-ke")!==ke)continue;',
+    'var d=rows[i].getAttribute("data-dev");',
+    'if(d&&!seen[d]){seen[d]=1;out.push(d);}',
+    '}',
+    'var keep=fDev.value;',
+    'fDev.innerHTML="<option value=\\"\\">全部業代</option>";',
+    'for(var j=0;j<out.length;j++){',
+    'var o=document.createElement("option");o.value=out[j];o.textContent=out[j];',
+    'fDev.appendChild(o);}',
+    'if(out.indexOf(keep)>=0){fDev.value=keep;}',
+    '}',
+    'function apply(){',
+    'var ke=fKe.value,dev=fDev.value,grp=fGrp.value,sub=fSub.value,',
+    'q=(fQ.value||"").replace(/^\\s+|\\s+$/g,"").toLowerCase(),un=fUn.checked,shown=0;',
+    'for(var i=0;i<rows.length;i++){',
+    'var r=rows[i],ok=true;',
+    'if(ke&&r.getAttribute("data-ke")!==ke){ok=false;}',
+    'if(dev&&r.getAttribute("data-dev")!==dev){ok=false;}',
+    'if(grp&&r.getAttribute("data-grp")!==grp){ok=false;}',
+    'if(sub&&r.getAttribute("data-sub")!==sub){ok=false;}',
+    'if(ok&&q&&(r.getAttribute("data-q")||"").toLowerCase().indexOf(q)<0){ok=false;}',
+    'if(ok&&un&&r.getAttribute("data-done")==="1"){ok=false;}',
+    'r.hidden=!ok;',
+    'if(ok){shown++;}',
+    '}',
+    'for(var d=0;d<devs.length;d++){',
+    'var any=false,n=devs[d].nextElementSibling;',
+    'while(n&&n.classList.contains("case")){',
+    'if(!n.hidden){any=true;break;}',
+    'n=n.nextElementSibling;}',
+    'devs[d].hidden=!any;',
+    '}',
+    'for(var s=0;s<secs.length;s++){',
+    'var vis=false,cs=secs[s].querySelectorAll("tr.case");',
+    'for(var t=0;t<cs.length;t++){if(!cs[t].hidden){vis=true;break;}}',
+    'secs[s].hidden=!vis;',
+    '}',
+    'fN.innerHTML="顯示 <b>"+shown+"</b> / "+rows.length+" 件";',
+    '}',
+    'for(var i=0;i<rows.length;i++){',
+    'var r=rows[i],st=store[r.getAttribute("data-id")]||{};',
+    'var cks=r.querySelectorAll("input.tkc"),dt=r.querySelector("input.tkd");',
+    'for(var c=0;c<cks.length;c++){cks[c].checked=!!st[cks[c].getAttribute("data-k")];}',
+    'if(dt&&st.d){dt.value=st.d;}',
+    'syncDone(r);bind(r);',
+    '}',
+    'fKe.addEventListener("change",function(){fillDev();apply();});',
+    'fDev.addEventListener("change",apply);',
+    'fGrp.addEventListener("change",apply);',
+    'fSub.addEventListener("change",apply);',
+    'fUn.addEventListener("change",apply);',
+    'fQ.addEventListener("input",apply);',
+    'fClear.addEventListener("click",function(){',
+    'fQ.value="";fGrp.value="";fSub.value="";fUn.checked=false;fKe.value="";',
+    'fillDev();fDev.value="";apply();',
+    '});',
+    'if(fPr){fPr.addEventListener("click",function(){window.print();});}',
+    'if(fAll){fAll.addEventListener("click",function(){',
+    'if(!confirm("確定清除這台裝置上所有追蹤紀錄？")){return;}',
+    'store={};save();',
+    'for(var i=0;i<rows.length;i++){',
+    'var r=rows[i],cks=r.querySelectorAll("input.tkc"),dt=r.querySelector("input.tkd");',
+    'for(var c=0;c<cks.length;c++){cks[c].checked=false;}',
+    'if(dt){dt.value="";}',
+    'syncDone(r);}',
+    'apply();',
+    '});}',
+    'apply();',
+    '})();'
+  ].join('\n');
+
+  // v1.45.0：來源 Excel 有沒有聯絡窗口／電話（保留給其他呼叫端判斷）
   function keHasContact(recs){
     for(var i = 0; i < recs.length; i++){
       if(String(recs[i].win || '').trim() !== '' || String(recs[i].tel || '').trim() !== '') return true;
@@ -11038,112 +11276,177 @@ var state = {
     return false;
   }
 
+  // 洽談紀錄是否多行（有換行的都要原樣保留；預覽用）
+  function keTalkLines(rec){
+    var t = String(rec.talk || '').replace(/\r/g, '');
+    return t ? t.split('\n').filter(function(x){ return String(x).trim() !== ''; }) : [];
+  }
+
   function buildKeExportHtml(keFilter){
     var recs = keRecords(keFilter);
     if(!recs.length) return '';
-    var hasContact = keHasContact(recs);   // false → 不畫「窗口／電話」欄
     var byKe = {}, keOrder = [];
     for(var i = 0; i < recs.length; i++){
       if(!byKe[recs[i].ke]){ byKe[recs[i].ke] = []; keOrder.push(recs[i].ke); }
       byKe[recs[i].ke].push(recs[i]);
     }
-    var keCounts = {};
-    for(var k2 = 0; k2 < DR_KE_LAST.kes.length; k2++){
-      var kk = DR_KE_LAST.kes[k2];
-      keCounts[kk.ke] = kk;
+    // 篩選下拉的選項（去重、保持出現順序）
+    var optKe = [], optDev = [], optGrp = [], optSub = [];
+    var seenKe = {}, seenDev = {}, seenGrp = {}, seenSub = {};
+    for(var o = 0; o < recs.length; o++){
+      var rr = recs[o];
+      if(!seenKe[rr.ke]){ seenKe[rr.ke] = 1; optKe.push(rr.ke); }
+      if(rr.dev && !seenDev[rr.dev]){ seenDev[rr.dev] = 1; optDev.push(rr.dev); }
+      if(rr.group && !seenGrp[rr.group]){ seenGrp[rr.group] = 1; optGrp.push(rr.group); }
+      if(rr.sub && !seenSub[rr.sub]){ seenSub[rr.sub] = 1; optSub.push(rr.sub); }
+    }
+    function opts(list, allLabel){
+      var s = '<option value="">' + allLabel + '</option>';
+      for(var k = 0; k < list.length; k++){
+        s += '<option value="' + escHtml(list[k]) + '">' + escHtml(list[k]) + '</option>';
+      }
+      return s;
     }
 
     var H = [];
     H.push('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">');
-    H.push('<title>富昇物流｜各課未合作案件進度表 ' + escHtml(expDate(false)) + '</title>');
+    H.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+    H.push('<title>富昇物流｜各課未合作案件自我追蹤表 ' + escHtml(expDate(false)) + '</title>');
     H.push('<style>' + KE_EXPORT_CSS + '</style></head><body>');
+
+    // ── 篩選列
+    H.push('<div class="bar">');
+    H.push('<div class="bar-t">各課未合作案件自我追蹤表'
+      + '<small>富昇物流 CRM｜' + escHtml(expDate()) + '　共 ' + recs.length + ' 件・'
+      + optKe.length + ' 課　勾選與回訪日期會存在這台裝置的瀏覽器，下次開啟仍在；列印時自動變成空白方格</small></div>');
+    H.push('<div class="filters">');
+    H.push('<select id="fKe">' + opts(optKe, '全部課別') + '</select>');
+    H.push('<select id="fDev">' + opts(optDev, '全部業代') + '</select>');
+    H.push('<select id="fGrp">' + opts(optGrp, '四大分類') + '</select>');
+    H.push('<select id="fSub">' + opts(optSub, '全部原因') + '</select>');
+    H.push('<input type="search" id="fQ" placeholder="搜公司名／洽談內容／說明…">');
+    H.push('<label class="fChk"><input type="checkbox" id="fUn">只看未追蹤</label>');
+    H.push('<button type="button" id="fClear">重設</button>');
+    H.push('<button type="button" id="fPr">列印</button>');
+    H.push('<button type="button" id="fAll">清除紀錄</button>');
+    H.push('<span class="fN" id="fN"></span>');
+    H.push('</div></div>');
 
     for(var oi2 = 0; oi2 < keOrder.length; oi2++){
       var keName = keOrder[oi2];
       var list = byKe[keName];
-      var kd = keCounts[keName] || { counts: {}, total: list.length };
       var grp = keGroupByDev(list);
-      H.push('<section class="ke">');
-      H.push('<div class="kehd"><div><h1>' + escHtml(keName) + '　未合作案件進度表</h1>'
-        + '<div style="font-size:8pt;color:#666;margin-top:1mm">富昇物流 CRM｜供課主管逐筆盯進度，空白欄位現場手寫　'
+      var g1 = 0, g2 = 0, g3 = 0, g4 = 0;
+      for(var cg = 0; cg < list.length; cg++){
+        var gs = list[cg].group;
+        if(gs === drGroupShort('G1')) g1++;
+        else if(gs === drGroupShort('G2')) g2++;
+        else if(gs === drGroupShort('G3')) g3++;
+        else if(gs === drGroupShort('G4')) g4++;
+      }
+      H.push('<section class="ke" data-ke-sec="' + escHtml(keName) + '">');
+      H.push('<div class="kehd"><div><h1>' + escHtml(keName) + '　未合作案件追蹤表</h1>'
+        + '<div style="font-size:8pt;color:#666;margin-top:1mm">'
+        + '供課主管逐筆追蹤，洽談紀錄全文呈現　'
         + '<span style="color:#999">（列印：A4 直式、縮放 100%、關閉頁首頁尾）</span></div></div>'
         + '<div class="sub">產出：' + escHtml(expDate()) + '<br>資料來源：業務開發進度追蹤</div></div>');
       H.push('<div class="sum">'
         + '<span><span class="n">' + list.length + '</span>件未合作</span>'
-        + '<span>洽談跟進 <b>' + (kd.counts && kd.counts['G1'] || 0) + '</b></span>'
-        + '<span>機會對齊 <b>' + (kd.counts && kd.counts['G2'] || 0) + '</b></span>'
-        + '<span>政策邊界 <b>' + (kd.counts && kd.counts['G3'] || 0) + '</b></span>'
-        + '<span>非目標 <b>' + (kd.counts && kd.counts['G4'] || 0) + '</b></span>'
+        + '<span>洽談跟進 <b>' + g1 + '</b></span>'
+        + '<span>機會對齊 <b>' + g2 + '</b></span>'
+        + '<span>政策邊界 <b>' + g3 + '</b></span>'
+        + '<span>非目標 <b>' + g4 + '</b></span>'
         + '<span>業代 <b>' + grp.order.length + '</b> 人</span>'
         + '</div>');
-      // 沒有聯絡資料時，把窗口欄的 26mm 分給「公司名稱 +7」「卡在哪 +14」「下一步 +4」
-      //（A4 直式可用 194mm：有窗口 190mm、沒窗口 189mm，兩者都不溢出）
-      var w = hasContact
-        ? { no:'6mm', name:'33mm', cat:'11mm', reason:'24mm', talk:'38mm', act:'29mm', tel:'26mm', tk:'23mm' }
-        : { no:'6mm', name:'40mm', cat:'11mm', reason:'24mm', talk:'52mm', act:'33mm', tel:'0',     tk:'23mm' };
+      // 6 欄（移除窗口／電話、下一步）：#6 / 公司36 / 類型12 / 原因24 / 洽談82 / 追蹤30 = 190mm
       H.push('<table><colgroup>'
-        + '<col style="width:' + w.no + '"><col style="width:' + w.name + '">'
-        + '<col style="width:' + w.cat + '"><col style="width:' + w.reason + '">'
-        + '<col style="width:' + w.talk + '"><col style="width:' + w.act + '">'
-        + (hasContact ? '<col style="width:' + w.tel + '">' : '')
-        + '<col style="width:' + w.tk + '">'
+        + '<col style="width:6mm"><col style="width:36mm"><col style="width:12mm">'
+        + '<col style="width:24mm"><col style="width:82mm"><col style="width:30mm">'
         + '</colgroup><thead><tr>'
         + '<th>#</th><th>公司名稱</th><th>類型</th><th>原因／具體原因</th>'
-        + '<th>卡在哪（最近洽談）</th><th>下一步</th>'
-        + (hasContact ? '<th>窗口／電話</th>' : '')
-        + '<th>追蹤紀錄</th>'
+        + '<th>洽談紀錄（含說明與結案）</th><th>追蹤</th>'
         + '</tr></thead><tbody>');
       var seq = 0;
       for(var di = 0; di < grp.order.length; di++){
         var dev = grp.order[di];
         var arr = grp.map[dev];
-        H.push('<tr class="dev"><td colspan="' + (hasContact ? 8 : 7) + '">' + escHtml(dev)
+        H.push('<tr class="dev"><td colspan="6">' + escHtml(dev)
           + '<span class="cnt">' + arr.length + ' 件</span></td></tr>');
         for(var ri2 = 0; ri2 < arr.length; ri2++){
           var rec = arr[ri2];
           seq++;
-          var talk = flatText(rec.talk, 78) || flatText(rec.note, 78) || '（無洽談紀錄）';
-          H.push('<tr>'
-            + '<td class="no">' + seq + '</td>'
-            + '<td>' + escHtml(rec.name) + '</td>'
-            + '<td>' + escHtml(rec.cat) + '</td>'
-            + '<td>' + escHtml(rec.sub) + '<br><span style="color:#666">' + escHtml(rec.micro) + '</span></td>'
-            + '<td class="cm">' + escHtml(talk) + '</td>'
-            + '<td class="act">' + escHtml(rec.action) + '</td>'
-            + (hasContact ? ('<td class="tel">' + escHtml(rec.win)
-            + (rec.tel ? '<br>' + escHtml(rec.tel).replace(/\s+/g, '<br>') : '') + '</td>') : '')
-            + '<td class="tk">□ 已聯繫<br>□ 待回覆<br>回訪 ___/___</td>'
-            + '</tr>');
+          var rid = escHtml(rec.ke + '|' + rec.dev + '|' + rec.name + '|' + seq);
+          var talk = String(rec.talk || '');
+          var note = String(rec.note || '');
+          var endT = String(rec.end || '').replace(/\s+/g, ' ').trim();
+          var q = [rec.name, rec.dev, rec.ke, rec.cat, rec.sub, rec.micro,
+                   talk, note, endT].join(' ').replace(/"/g, '”');
+          H.push('<tr class="case" data-id="' + rid + '" data-ke="' + escHtml(rec.ke)
+            + '" data-dev="' + escHtml(rec.dev) + '" data-grp="' + escHtml(rec.group)
+            + '" data-sub="' + escHtml(rec.sub) + '" data-q="' + escHtml(q) + '" data-done="0">');
+          H.push('<td class="no">' + seq + '</td>');
+          H.push('<td class="nm" data-l="公司">' + escHtml(rec.name)
+            + (rec.date ? '<span class="meta">填單 ' + escHtml(rec.date) + '</span>' : '')
+            + '</td>');
+          H.push('<td class="tp" data-l="類型">' + escHtml(rec.cat) + '</td>');
+          H.push('<td class="rs" data-l="原因"><b>' + escHtml(rec.sub) + '</b>'
+            + '<span class="mg">' + escHtml(rec.micro) + '</span>'
+            + (endT ? '<span class="end">結案：' + escHtml(endT) + '</span>' : '')
+            + '</td>');
+          var ml = rec.miles || [];
+          var mlHtml = '';
+          if(ml.length){
+            var parts = [];
+            for(var mi2 = 0; mi2 < ml.length; mi2++){
+              parts.push('<span class="ms" title="' + escHtml(ml[mi2].full) + '">'
+                + escHtml(ml[mi2].label + ' ' + ml[mi2].date) + '</span>');
+            }
+            mlHtml = '<span class="mile">' + parts.join('<i>›</i>') + '</span>';
+          }
+          H.push('<td class="cm" data-l="洽談">' + mlHtml
+            + (note ? '<span class="note"><b>說明</b>：' + escHtml(note) + '</span>' : '')
+            + (talk ? '<span class="body">' + escHtml(talk) + '</span>'
+                    : '<span class="body empty">（無洽談紀錄）</span>')
+            + '</td>');
+          H.push('<td class="tk" data-l="追蹤">'
+            + '<label><input type="checkbox" class="tkc" data-k="c1"><span class="pk">□</span>已聯繫</label>'
+            + '<label><input type="checkbox" class="tkc" data-k="c2"><span class="pk">□</span>待回覆</label>'
+            + '<label><input type="checkbox" class="tkc" data-k="c3"><span class="pk">□</span>回訪'
+            + '<input type="date" class="tkd"><span class="pd">___/___</span></label>'
+            + '</td>');
+          H.push('</tr>');
         }
       }
       H.push('</tbody>');
-      H.push('<tfoot><tr><td colspan="' + (hasContact ? 8 : 7) + '">本課合計 <b>' + list.length + '</b> 件　｜　'
+      H.push('<tfoot><tr><td colspan="6">本課合計 <b>' + list.length + '</b> 件　｜　'
         + '已聯繫 ______ 件　待回覆 ______ 件　本週應追 ______ 件　'
         + '<span style="font-weight:400;color:#666">（課長填寫）</span></td></tr></tfoot>');
       H.push('</table>');
       H.push('<div class="ft"><span>第 ' + (oi2 + 1) + ' 課／共 ' + keOrder.length + ' 課</span>'
-        + '<span>CRM 報表工具 v' + escHtml(typeof APP_VERSION === 'string' ? APP_VERSION : '') + '　' + escHtml(expDate()) + '</span></div>');
+        + '<span>CRM 報表工具 v' + escHtml(typeof APP_VERSION === 'string' ? APP_VERSION : '')
+        + '　' + escHtml(expDate()) + '</span></div>');
       H.push('</section>');
     }
+    H.push('<script>' + KE_EXPORT_JS + '<\/script>');
     H.push('</body></html>');
     return H.join('');
   }
 
   function keCsvText(keFilter){
     var recs = keRecords(keFilter);
-    // v1.45.0：與列印版同一條規則——整份都沒有窗口／電話就不輸出這兩欄，
-    //   避免匯出檔帶兩個永遠空白的欄位（樞紐時還要手動刪）。
-    var hasContact = keHasContact(recs);
-    var head = ['課別', '開發者', '公司名稱', '客戶類型', '大類', '原因', '具體原因', '下一步'];
-    if(hasContact) head = head.concat(['聯絡窗口', '聯絡電話']);
-    head = head.concat(['追蹤狀態（現場填）', '下次回訪（現場填）', '備註（現場填）', '說明', '洽談內容']);
+    // v1.46.0：移除「窗口／電話」與「下一步」；補齊 填單日期／結案／說明／全文洽談
+    var head = ['課別', '開發者', '公司名稱', '客戶類型', '大類', '原因', '具體原因',
+                '填單日期', '里程碑', '結案', '說明', '洽談內容',
+                '追蹤狀態（現場填）', '下次回訪（現場填）', '備註（現場填）'];
     var lines = [head.map(csvCell).join(',')];
     for(var i = 0; i < recs.length; i++){
       var r = recs[i];
-      var row = [r.ke, r.dev, r.name, r.cat, r.group, r.sub, r.micro, r.action];
-      if(hasContact) row = row.concat([r.win, r.tel]);
-      row = row.concat(['', '', '', r.note, r.talk]);
-      lines.push(row.map(csvCell).join(','));
+      var mls = [];
+      for(var mi = 0; mi < (r.miles || []).length; mi++){
+        mls.push(r.miles[mi].full + ' ' + r.miles[mi].date);
+      }
+      lines.push([r.ke, r.dev, r.name, r.cat, r.group, r.sub, r.micro,
+                  r.date, mls.join(' → '), r.end, r.note, r.talk, '', '', ''].map(csvCell).join(','));
     }
     return '\ufeff' + lines.join('\r\n');
   }
