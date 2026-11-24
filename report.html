@@ -1796,7 +1796,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.47.0';   // 1.47.0：案件卡加「開發者」（課別・開發者・填單日期）
+  var APP_VERSION = '1.48.0';   // 1.48.0：匯出追蹤表的案件列也標開發者（跨頁翻看不失主）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -11090,6 +11090,8 @@ var state = {
     + '.no{text-align:center;color:#888;font-size:7.5pt}'
     + '.nm{font-weight:700;font-size:8.4pt;line-height:1.35}'
     + '.nm .meta{display:block;font-weight:400;color:#8a8a92;font-size:6.9pt;margin-top:.6mm}'
+    + '.nm .meta .mdev{font-weight:800;color:#1b1b1f}'
+    + '.nm .meta .msep{font-style:normal;color:#c2c8cf;margin:0 .6mm}'
     + '.rs{line-height:1.4}'
     + '.rs b{font-weight:800;font-size:8pt}'
     + '.rs .mg{display:block;color:#0b5f8a;font-size:7.2pt;font-weight:700;margin-top:.5mm}'
@@ -11158,6 +11160,7 @@ var state = {
     + 'tr.case td.nm{font-size:12.5pt;font-weight:800;padding:0 0 1.5mm;line-height:1.35}'
     + 'tr.case td.nm::before{display:none !important}'
     + 'tr.case td.nm .meta{font-size:8.8pt;margin-top:1mm}'
+    + 'tr.case td.nm .meta .mdev{font-weight:800}'
     + 'tr.case td.rs b{font-size:10pt}'
     + 'tr.case td.rs .mg{font-size:9.5pt;margin-top:1mm}'
     + 'tr.case td.rs .end{font-size:9pt;margin-top:1.5mm;padding-top:1.5mm}'
@@ -11405,8 +11408,13 @@ var state = {
             + '" data-dev="' + escHtml(rec.dev) + '" data-grp="' + escHtml(rec.group)
             + '" data-sub="' + escHtml(rec.sub) + '" data-q="' + escHtml(q) + '" data-done="0">');
           H.push('<td class="no">' + seq + '</td>');
+          // v1.48.0：案件列也標一次開發者。業代分組列在跨頁時不會重複（thead 只重複欄位標題），
+          //   紙本翻到第二頁常看不出這幾筆是誰的；CSV 已有「開發者」欄，這裡只補畫面與列印。
           H.push('<td class="nm" data-l="公司">' + escHtml(rec.name)
-            + (rec.date ? '<span class="meta">填單 ' + escHtml(rec.date) + '</span>' : '')
+            + '<span class="meta">' + (rec.dev ? '<b class="mdev">' + escHtml(rec.dev) + '</b>' : '')
+            + (rec.dev && rec.date ? '<i class="msep">・</i>' : '')
+            + (rec.date ? '填單 ' + escHtml(rec.date) : '')
+            + '</span>'
             + '</td>');
           H.push('<td class="tp" data-l="類型">' + escHtml(rec.cat) + '</td>');
           H.push('<td class="rs" data-l="原因"><b>' + escHtml(rec.sub) + '</b>'
