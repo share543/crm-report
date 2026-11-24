@@ -1796,7 +1796,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.48.0';   // 1.48.0：匯出追蹤表的案件列也標開發者（跨頁翻看不失主）
+  var APP_VERSION = '1.49.0';   // 1.49.0：停用「目前宅配價」欄（全空且無程式引用，入口直接丟棄）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -1821,6 +1821,15 @@ var state = {
 
   // 里程碑日期欄（Excel 序號 → YYYY-MM-DD）
   var DATE_COLS = new Set(['填單日期','初步接洽','需求確認','報價','簽約','導入']);
+
+  // v1.49.0：停用欄位（載入時直接丟棄，不進 headers、不進 _raw、不進 localStorage、不進 CSV）
+  //   `目前宅配價` 在 2026-11-03 基準的 324 列裡填充率 0.0%（全表唯一全空欄），
+  //   程式裡也 0 處硬引用——它只透過「自動列舉 headers」的三條路徑外流：
+  //   ①原始資料預覽 ②巨集 CSV ③localStorage / 存檔副本。
+  //   使用者定案：「先移除以後再看狀況是否使用該欄位」。
+  //   ⇒ 在 buildModel 這個唯一入口攔掉，比在三處輸出各自過濾可靠（少一處就漏）。
+  //   ⚠ 新增停用欄位時務必同步 README「匯入資料欄位說明」，否則使用者照文件填了卻看不到。
+  var DROPPED_COLS = new Set(['目前宅配價']);
 
   // ---------------------------------------------------------------------------
   // 純函式：日期轉換（無 DOM 依賴，可於 Node 測試）
@@ -3806,6 +3815,30 @@ var state = {
 
   // headers：欄名陣列；matrix：資料列（每列為 欄 index→字串）
   function buildModel(headers, matrix, sheetName){
+    // v1.49.0：停用欄位在入口就切掉——headers 不含它，後面所有「自動列舉欄位」的地方
+    //   （原始預覽／CSV／localStorage）自然都不會看到它，不必逐一補過濾。
+    if(headers && headers.length){
+      var kept = [];
+      for(var hi = 0; hi < headers.length; hi++){
+        if(!DROPPED_COLS.has(headers[hi])) kept.push(headers[hi]);
+      }
+      if(kept.length !== headers.length){
+        // 重建 matrix：只留保留欄，避免欄位索引錯位（矩陣是 index 對應 headers）
+        var idxKeep = [];
+        for(var hj = 0; hj < headers.length; hj++){
+          if(!DROPPED_COLS.has(headers[hj])) idxKeep.push(hj);
+        }
+        var nm = [];
+        for(var ri = 0; ri < matrix.length; ri++){
+          var src = matrix[ri] || [];
+          var dst = [];
+          for(var ki = 0; ki < idxKeep.length; ki++) dst.push(src[idxKeep[ki]]);
+          nm.push(dst);
+        }
+        headers = kept;
+        matrix = nm;
+      }
+    }
     var hlen = headers.length;
     var rows = [];
     for(var r = 0; r < matrix.length; r++){
