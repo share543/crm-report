@@ -460,6 +460,10 @@
   .dr-case .dr-cat.c1 i{ background:var(--ok); }
   .dr-case .dr-cat.c2 i{ background:var(--warning); }
   .dr-case .dr-cat.c3 i{ background:var(--muted); }
+  /* 案件卡的課別・開發者・日期（v1.47.0）：開發者是正文色加粗，其餘維持 muted */
+  .dr-case-meta{ display:inline-flex; align-items:baseline; gap:0; flex-wrap:wrap; }
+  .dr-case-meta-sep{ color:var(--border); margin:0 4px; }
+  .dr-case-dev{ color:var(--text); font-weight:650; }
   @media (max-width:720px){
     .drk-cases-head{ position:static; }          /* 手機上方已有 sticky topbar，會互相遮住 */
     .drk-sub-body{ padding-left:12px; }
@@ -1792,7 +1796,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.46.0';   // 1.46.0：業代追蹤表移除窗口電話與下一步、洽談全文＋里程碑鏈、加篩選與可勾選追蹤、手機卡片版
+  var APP_VERSION = '1.47.0';   // 1.47.0：案件卡加「開發者」（課別・開發者・填單日期）
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -10721,15 +10725,31 @@ var state = {
     name.title = name.textContent;
     head.appendChild(name);
 
+    // 課別・開發者・填單日期（v1.47.0 加開發者：會議上要知道「這家是誰在跟」）
+    // 三段用 span 分開，開發者用正文色加粗——它是人名，不是時間戳，跟課別日期同色會被忽略。
     var meta = document.createElement('span');
-    meta.className = 'ns-date';
-    // 類別改放在卡片最左邊的 chip（v1.32.0），這裡只留課別與填單日期
-    var metaParts = [
-      fieldStr(r, '課別') || blankLabel('課別'),
-      drDate(fieldStr(r, '填單日期')) || blankLabel('填單日期')
-    ];
-    meta.textContent = metaParts.join('・');
-    meta.title = meta.textContent;
+    meta.className = 'ns-date dr-case-meta';
+    var keTxt = fieldStr(r, '課別') || blankLabel('課別');
+    var devTxt = fieldStr(r, '開發者') || blankLabel('開發者');
+    var dateTxt = drDate(fieldStr(r, '填單日期')) || blankLabel('填單日期');
+    function metaSeg(txt, cls){
+      var sp = document.createElement('span');
+      if(cls) sp.className = cls;
+      sp.textContent = txt;
+      return sp;
+    }
+    function metaSep(){
+      var sp = document.createElement('span');
+      sp.className = 'dr-case-meta-sep';
+      sp.textContent = '・';
+      return sp;
+    }
+    meta.appendChild(metaSeg(keTxt));
+    meta.appendChild(metaSep());
+    meta.appendChild(metaSeg(devTxt, 'dr-case-dev'));
+    meta.appendChild(metaSep());
+    meta.appendChild(metaSeg(dateTxt));
+    meta.title = keTxt + '・開發者：' + devTxt + '・填單：' + dateTxt;
     head.appendChild(meta);
     item.appendChild(head);
 
