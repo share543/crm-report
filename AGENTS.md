@@ -716,6 +716,67 @@ localStorage 以 id 為 key、列印與存圖跟 DOM 走）。
   婉拒 35→34 須顯示 −1、重載去重、切基準、三種寬度、列印、重整後仍在）。E2E 需要
   `clean-1027.xlsx`、`clean-1103.xlsx` 複製到 `crm-report/` 才跑得動。
 
+### 支援「開啟密碼」的 xlsx（v1.50.0，2026-11-24）
+
+使用者問：「如果 excel 有設定密碼，導入時可否詢問密碼然後進行導入數據？」→ 選 A2（完整支援）＋允許存檔含資料。
+
+#### 先分清三種密碼（實測）
+
+| 類型 | 檔案結構 | 舊版行為 |
+|---|---|---|
+| 工作表保護 | 仍是 ZIP（`504b0304`） | **本來就能讀**（273 筆 29 欄） |
+| 活頁簿結構保護 | 仍是 ZIP | **本來就能讀** |
+| **開啟密碼** | 變成 OLE2/CFB（`d0cf11e0`） | 拋「無法找到 zip EOCD（檔案可能損毀）」← **誤導** |
+
+只有第三種要處理。修掉那句誤導訊息本身就是一半價值——使用者會以為檔案下載壞掉而重跑流程。
+
+#### 實作：ECMA-376 Agile Encryption（純前端、零依賴）
+
+`AgileXlsx` 模組（掛 `window`）三段：`inspect()` 判型別、`parseCfb()` 拆 OLE2、`decrypt()` 解密。
+
+**關鍵技術點 1：CFB/OLE2 兩條資料路徑**
+`EncryptionInfo` 通常 < 4096 → **mini stream + miniFAT**；`EncryptedPackage` → 一般 FAT。
+只實作一般 FAT 會找不到參數。
+
+**關鍵技術點 2：WebCrypto AES-CBC 強制 PKCS#7 padding**
+Excel 密文長度都是 16 倍數且**不帶 padding**，直接 `crypto.subtle.decrypt` 會被當成 padding 削掉最後一塊。
+解法＝自補一個「保證合法」的區塊接在尾端：
+
+```js
+X = encrypt({iv: lastCT}, key, 0x10×16).slice(0,16)   // E(pad XOR lastCT)
+C' = C ‖ X  →  用原 IV 解密 → 前 n 塊正確，X 被當 padding 削掉
+```
+
+得到「無 padding 的原始 CBC 解密」。這是通用做法，不只用在 xlsx。
+
+**效能實測**：10 萬次 SHA-512 ＝ **354ms**（單次 3.5µs）；`file://` 下 `crypto.subtle` 可用
+（`isSecureContext: true`，digest 回 64 bytes）。整個解密約 **0.4 秒**。
+
+**驗證要驗雜湊，不是驗「能開啟」**：解密結果 sha256 必須等於原始 xlsx 的 sha256
+（`c117fc07a12131a83d0cb581b5061ad4`），再比 analysis 四大分類 103/41/16/7。
+只驗「parseXlsx 沒拋錯」可能解出半個檔案也能過。
+
+#### 安全配套
+
+- 密碼只存記憶體，不寫 localStorage、不上傳。
+- 加密來源**不自動記憶**：`applyModel` 內 `if(encryptedSource) clearStoredData() else persistData()`，
+  檔名標「已解密・未自動記憶」、`memoryRow` 隱藏。
+- 存檔含資料「允許」但先 `confirm()` 講明白：副本是明文、免密碼即可開。
+  **不要自作主張改成預設禁止**——使用者明確選了允許；但一定要在存檔當下講清楚。
+
+#### 兩個 UI 坑（實測抓到）
+
+- **`flex:1 1 200px` 在 `flex-direction:column` 下，200px 變成高度** → 輸入框被拉成 200px 高。
+  手機版要 `flex:0 0 auto` ＋ 明確 `height:44px`。
+- 錯誤訊息若放在按鈕後面，手機直排時會跑到最下面。要把 `input` 與 `#pwErr` 包進同一個
+  `.pw-field`（`flex-direction:column`），錯誤永遠緊貼輸入框下方。
+- 手機 `input` 字級 < 16px 時 **iOS Safari 會自動放大整頁**。
+
+#### 驗證
+
+`v150_test.py` 24 項（正確密碼／錯密碼重試／取消／一般檔回歸／工作表保護不誤判／
+分析結果一致／手機 390px）。`verify-v1290` 的 `ALLOW` 要加 `loadCard`（多了密碼框 DOM，160→287 字）。
+
 ### 停用「目前宅配價」欄（v1.49.0，2026-11-24）
 
 使用者原話：「先移除以後再看狀況是否使用該欄位」。
