@@ -1533,6 +1533,31 @@
     /* 手機版型的 h2 收合箭頭不可進入列印 */
     body.mobile section h2::after{ content:none !important; }
   }
+  /* v1.50.0：開啟密碼對話框（沿用既有主題變數，不新增顏色） */
+  .pw-box{ margin-top:10px; padding:12px 14px; border:1px solid var(--border);
+           border-left:3px solid var(--accent); border-radius:8px; background:var(--card); }
+  .pw-box[hidden]{ display:none; }
+  .pw-title{ margin:0 0 4px; font-weight:700; font-size:14px; }
+  .pw-hint{ margin:0 0 8px; color:var(--muted); font-size:12px; }
+  .pw-row{ display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+  /* 輸入框與錯誤訊息綁成一欄：錯誤一定緊貼在輸入框下方（不要跑到按鈕後面） */
+  .pw-field{ flex:1 1 240px; min-width:180px; display:flex; flex-direction:column; gap:4px; }
+  #pwInput{ width:100%; box-sizing:border-box; height:36px; padding:0 10px; font-size:14px;
+            border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); }
+  #pwInput:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .pw-row .mini-btn{ height:36px; padding:0 14px; flex:0 0 auto; }
+  .pw-primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .pw-cancel{ border:1px solid var(--border); }
+  .pw-err{ margin:0; color:#d9534f; font-size:12.5px; line-height:1.35; }
+  .pw-err[hidden]{ display:none; }
+  .pw-note{ margin:8px 0 0; color:var(--muted); font-size:11.5px; }
+  /* 手機：一欄一列，觸控目標 44px（Apple HIG / Material 下限） */
+  @media(max-width:520px){
+    .pw-row{ flex-direction:column; align-items:stretch; gap:10px; }
+    .pw-field{ flex:0 0 auto; min-width:0; }
+    #pwInput{ height:44px; font-size:16px; }   /* 16px 可避免 iOS 自動放大 */
+    .pw-row .mini-btn{ width:100%; height:44px; font-size:14px; }
+  }
 </style>
 </head>
 <body>
@@ -1574,6 +1599,20 @@
       <p id="importProgressLabel" class="progress-label"></p>
     </div>
     <p id="errorBox" hidden role="alert"></p>
+    <div id="pwBox" class="pw-box" hidden>
+      <p class="pw-title">這個檔案有<strong>開啟密碼</strong></p>
+      <p class="pw-hint" id="pwFileName"></p>
+      <div class="pw-row">
+        <div class="pw-field">
+          <input type="password" id="pwInput" autocomplete="off" placeholder="請輸入檔案密碼"
+                 aria-label="檔案密碼" aria-describedby="pwErr">
+          <p class="pw-err" id="pwErr" role="alert" hidden></p>
+        </div>
+        <button type="button" id="pwOk" class="mini-btn pw-primary">解鎖並匯入</button>
+        <button type="button" id="pwCancel" class="mini-btn pw-cancel">取消</button>
+      </div>
+      <p class="pw-note">密碼只用在這台電腦的瀏覽器裡解密，不會上傳、不會儲存。</p>
+    </div>
   </section>
   <section class="card" id="periodCard" hidden>
     <h2>分析期間 <span class="muted">依「填單日期」定位</span></h2>
@@ -1796,7 +1835,7 @@ var state = {
   // 跳到案件清單的來源（'← 回到 ○○○' 用；只在本次瀏覽有效，不隨存檔保存）
   state.jumpFrom = null;   // { id, title } | null
   // ── 版本與版權：改版只要改這一行（頁腳、產生檔、測試都讀這裡）──
-  var APP_VERSION = '1.49.0';   // 1.49.0：停用「目前宅配價」欄（全空且無程式引用，入口直接丟棄）
+  var APP_VERSION = '1.50.0';   // 1.50.0：支援「開啟密碼」的 xlsx（瀏覽器內解密），加密來源不自動記憶
   var APP_VERSION_DATE = '2026-11-03';
   var APP_COPYRIGHT = '© 2026 Arthur Hu（富昇物流）';
   // 授權：使用者於 2026-10-08 指定採用 MIT（可自由使用、修改、再散布）。
@@ -14986,6 +15025,460 @@ var state = {
     }
   }
 
+/* ECMA-376 Agile Encryption 解密（瀏覽器端、零依賴）
+   目標：把有「開啟密碼」的 xlsx 在瀏覽器內解回原始 ZIP，再交給 parseXlsx。
+   ---------------------------------------------------------------
+   兩個關鍵技術點：
+   1. CFB(OLE2) 解析：加密後的 xlsx 不是 ZIP，是 OLE2 複合文件，
+      內含 EncryptionInfo（參數 XML）與 EncryptedPackage（密文）兩個 stream。
+      EncryptionInfo 通常 < 4096 → 走 mini stream；EncryptedPackage 走一般 FAT。
+   2. WebCrypto 的 AES-CBC「強制 PKCS#7 padding」：Excel 的密文長度都是 16 的倍數
+      且不帶 padding，直接 decrypt 會被當成 padding 削掉最後一塊。
+      解法：自己補一個「保證合法」的 padding 區塊接在密文尾端——
+         X = E_K(0x10×16 XOR 最後一個密文區塊)
+         C' = C ‖ X，用原 IV 解密 → 前 n 塊正確，最後一塊被當 padding 削掉。
+      這樣就得到「無 padding 的原始 CBC 解密」。
+*/
+(function (global) {
+  'use strict';
+
+  var CFB_SIG = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
+  // Agile 的 blockKey 常數（MS-OFFCRYPTO §2.3.4.13）
+  var BK_VERIFIER_INPUT = new Uint8Array([0xFE, 0xA7, 0xD2, 0x76, 0x3B, 0x4B, 0x9E, 0x79]);
+  var BK_VERIFIER_VALUE = new Uint8Array([0xD7, 0xAA, 0x0F, 0x6D, 0x30, 0x61, 0x34, 0x4E]);
+  var BK_ENCRYPTED_KEY  = new Uint8Array([0x14, 0x6E, 0x0B, 0xE7, 0xAB, 0xAC, 0xD0, 0xD6]);
+
+  function isCfb(buf) {
+    if (!buf || buf.length < 8) return false;
+    for (var i = 0; i < 8; i++) if (buf[i] !== CFB_SIG[i]) return false;
+    return true;
+  }
+
+  function b64ToBytes(s) {
+    var bin = atob(String(s).replace(/\s+/g, ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function utf16leBytes(str) {
+    var out = new Uint8Array(str.length * 2);
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      out[i * 2] = c & 0xff;
+      out[i * 2 + 1] = (c >> 8) & 0xff;
+    }
+    return out;
+  }
+
+  function u32le(n) {
+    var b = new Uint8Array(4);
+    new DataView(b.buffer).setUint32(0, n >>> 0, true);
+    return b;
+  }
+
+  function concatBytes(list) {
+    var total = 0, i;
+    for (i = 0; i < list.length; i++) total += list[i].length;
+    var out = new Uint8Array(total), off = 0;
+    for (i = 0; i < list.length; i++) { out.set(list[i], off); off += list[i].length; }
+    return out;
+  }
+
+  function sha512() {
+    var parts = Array.prototype.slice.call(arguments);
+    return crypto.subtle.digest('SHA-512', concatBytes(parts)).then(function (b) {
+      return new Uint8Array(b);
+    });
+  }
+
+  /* ---------- 無 padding 的 AES-CBC 解密 ---------- */
+  function aesCbcDecryptRaw(key, iv, ct) {
+    if (!ct.length) return Promise.resolve(new Uint8Array(0));
+    if (ct.length % 16 !== 0) ct = ct.subarray(0, ct.length - (ct.length % 16));
+    var n = ct.length / 16;
+    var lastCT = ct.subarray((n - 1) * 16, n * 16);
+    var padBlock = new Uint8Array(16);
+    for (var i = 0; i < 16; i++) padBlock[i] = 0x10;
+    // X = E(pad XOR lastCT)：以 lastCT 當 IV 加密一個 0x10 區塊，取前 16 bytes
+    return crypto.subtle.encrypt({ name: 'AES-CBC', iv: lastCT }, key, padBlock)
+      .then(function (enc) {
+        var withPad = new Uint8Array(ct.length + 16);
+        withPad.set(ct, 0);
+        withPad.set(new Uint8Array(enc).subarray(0, 16), ct.length);
+        return crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, key, withPad);
+      })
+      .then(function (out) {
+        return new Uint8Array(out).subarray(0, ct.length);
+      });
+  }
+
+  /* ---------- CFB / OLE2 解析 ---------- */
+  function parseCfb(buf) {
+    if (!isCfb(buf)) throw new Error('不是 OLE2 複合文件');
+    var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    var secSize = 1 << dv.getUint16(0x1E, true);
+    var miniSize = 1 << dv.getUint16(0x20, true);
+    var firstDirSect = dv.getUint32(0x30, true);
+    var miniCutoff = dv.getUint32(0x38, true);
+    var firstMiniFat = dv.getUint32(0x3C, true);
+    var numMiniFat = dv.getUint32(0x40, true);
+    var firstDifat = dv.getUint32(0x44, true);
+    var numDifat = dv.getUint32(0x48, true);
+
+    function secOff(s) { return (s + 1) * secSize; }
+
+    // FAT 所在 sector 清單（標頭 109 筆 + DIFAT 串鏈）
+    var fatSectors = [], i;
+    for (i = 0; i < 109; i++) {
+      var fs = dv.getUint32(0x4C + i * 4, true);
+      if (fs === 0xFFFFFFFF) break;
+      fatSectors.push(fs);
+    }
+    var perDifat = secSize / 4 - 1;
+    var d = firstDifat;
+    for (var k = 0; k < numDifat && d !== 0xFFFFFFFE && d !== 0xFFFFFFFF; k++) {
+      var o = secOff(d);
+      for (i = 0; i < perDifat; i++) {
+        var s2 = dv.getUint32(o + i * 4, true);
+        if (s2 !== 0xFFFFFFFF) fatSectors.push(s2);
+      }
+      d = dv.getUint32(o + perDifat * 4, true);
+    }
+
+    var FAT = [];
+    for (i = 0; i < fatSectors.length; i++) {
+      var fo = secOff(fatSectors[i]);
+      for (var j = 0; j < secSize / 4; j++) FAT.push(dv.getUint32(fo + j * 4, true));
+    }
+
+    function chain(start, table) {
+      var out = [], s = start, seen = {};
+      while (s !== 0xFFFFFFFE && s !== 0xFFFFFFFF && s < table.length) {
+        if (seen[s]) break;
+        seen[s] = 1;
+        out.push(s);
+        s = table[s];
+      }
+      return out;
+    }
+
+    function readBig(start, size) {
+      var secs = chain(start, FAT);
+      var all = new Uint8Array(secs.length * secSize);
+      for (var m = 0; m < secs.length; m++) {
+        all.set(buf.subarray(secOff(secs[m]), secOff(secs[m]) + secSize), m * secSize);
+      }
+      return size === undefined ? all : all.subarray(0, Math.min(size, all.length));
+    }
+
+    // 目錄
+    var dirBytes = readBig(firstDirSect);
+    var entries = [];
+    for (var e = 0; e + 128 <= dirBytes.length; e += 128) {
+      var ddv = new DataView(dirBytes.buffer, dirBytes.byteOffset + e, 128);
+      var nameLen = ddv.getUint16(0x40, true);
+      var type = dirBytes[e + 0x42];
+      if (type === 0) continue;
+      var nm = '';
+      for (var c = 0; c + 1 < nameLen; c += 2) {
+        nm += String.fromCharCode(ddv.getUint16(c, true));
+      }
+      entries.push({
+        name: nm.replace(/\u0000+$/, ''),
+        type: type,
+        start: ddv.getUint32(0x74, true),
+        size: ddv.getUint32(0x78, true)   // 低 32 位足夠（檔案 < 4GB）
+      });
+    }
+
+    var root = null;
+    for (i = 0; i < entries.length; i++) if (entries[i].type === 5) { root = entries[i]; break; }
+    if (!root) throw new Error('OLE2 找不到 root entry');
+
+    // mini stream（root 的資料）與 miniFAT
+    var miniStream = readBig(root.start, root.size);
+    var miniFat = [];
+    if (numMiniFat > 0) {
+      var mfBytes = readBig(firstMiniFat);
+      for (i = 0; i + 4 <= mfBytes.length; i += 4) {
+        miniFat.push(new DataView(mfBytes.buffer, mfBytes.byteOffset + i, 4).getUint32(0, true));
+      }
+    }
+
+    function readStream(name) {
+      var ent = null;
+      for (var q = 0; q < entries.length; q++) {
+        if (entries[q].name === name && entries[q].type === 2) { ent = entries[q]; break; }
+      }
+      if (!ent) return null;
+      if (ent.size < miniCutoff) {
+        var msecs = chain(ent.start, miniFat);
+        var mall = new Uint8Array(msecs.length * miniSize);
+        for (var m2 = 0; m2 < msecs.length; m2++) {
+          mall.set(miniStream.subarray(msecs[m2] * miniSize, (msecs[m2] + 1) * miniSize), m2 * miniSize);
+        }
+        return mall.subarray(0, Math.min(ent.size, mall.length));
+      }
+      return readBig(ent.start, ent.size);
+    }
+
+    return { read: readStream, entries: entries };
+  }
+
+  /* ---------- Agile 參數解析 ---------- */
+  function parseEncryptionInfo(bytes) {
+    var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var verMajor = dv.getUint16(0, true);
+    var verMinor = dv.getUint16(2, true);
+    var isXml = bytes.length > 8 && bytes[8] === 0x3C;  // '<'
+    if (!isXml) {
+      return {
+        version: verMajor + '.' + verMinor,
+        agile: false,
+        reason: '非 Agile 格式（版本 ' + verMajor + '.' + verMinor + '）'
+      };
+    }
+    var xml = '';
+    for (var i = 8; i < bytes.length; i++) xml += String.fromCharCode(bytes[i]);
+    // 用 DOMParser 解析（瀏覽器有；Node 沒有，但正常流程只在瀏覽器跑）
+    var doc = new DOMParser().parseFromString(xml, 'application/xml');
+    function attr(el, name) { return el ? el.getAttribute(name) : null; }
+    function tag(local) {
+      var list = doc.getElementsByTagName('*');
+      for (var k = 0; k < list.length; k++) {
+        if (list[k].localName === local) return list[k];
+      }
+      return null;
+    }
+    var keyData = tag('keyData');
+    var encKey = tag('encryptedKey');
+    if (!keyData || !encKey) throw new Error('EncryptionInfo 缺少 keyData / encryptedKey');
+    return {
+      version: verMajor + '.' + verMinor,
+      agile: true,
+      spinCount: parseInt(attr(encKey, 'spinCount') || '100000', 10),
+      keyBits: parseInt(attr(encKey, 'keyBits') || '256', 10),
+      hashAlgorithm: (attr(encKey, 'hashAlgorithm') || 'SHA512').toUpperCase(),
+      cipherAlgorithm: (attr(encKey, 'cipherAlgorithm') || 'AES').toUpperCase(),
+      keyDataSalt: b64ToBytes(attr(keyData, 'saltValue') || ''),
+      encSalt: b64ToBytes(attr(encKey, 'saltValue') || ''),
+      encVerifierInput: b64ToBytes(attr(encKey, 'encryptedVerifierHashInput') || ''),
+      encVerifierValue: b64ToBytes(attr(encKey, 'encryptedVerifierHashValue') || ''),
+      encKeyValue: b64ToBytes(attr(encKey, 'encryptedKeyValue') || '')
+    };
+  }
+
+  /* ---------- 密碼驗證 + 取 secret key ---------- */
+  function deriveHash(password, salt, spinCount, onProgress) {
+    var pw = utf16leBytes(password);
+    return sha512(salt, pw).then(function (h) {
+      // spinCount 次：h = SHA512(uint32le(i) ‖ h)
+      // 分批跑，每批之間讓 UI 有機會更新（否則主執行緒看起來像卡住）
+      var BATCH = 5000;
+      var i = 0;
+      function step() {
+        var end = Math.min(spinCount, i + BATCH);
+        var p = Promise.resolve(h);
+        for (var k = i; k < end; k++) {
+          (function (idx) {
+            p = p.then(function (cur) { return sha512(u32le(idx), cur); });
+          })(k);
+        }
+        return p.then(function (nh) {
+          h = nh;
+          i = end;
+          if (onProgress) onProgress(i / spinCount);
+          if (i < spinCount) return step();
+          return h;
+        });
+      }
+      return step();
+    });
+  }
+
+  function decryptAgile(cfb, info, password, onProgress) {
+    if (!info.agile) {
+      return Promise.reject(new Error(
+        '這個檔案的加密格式較舊（' + info.reason + '），瀏覽器端不支援。\n' +
+        '請用 Excel 開啟後「另存新檔」，在「工具→一般選項」重新設定密碼（會存成新版格式）再匯入。'
+      ));
+    }
+    if (info.hashAlgorithm !== 'SHA512') {
+      return Promise.reject(new Error('不支援的雜湊演算法：' + info.hashAlgorithm));
+    }
+    return deriveHash(password, info.encSalt, info.spinCount, onProgress).then(function (h) {
+      var keyBitsBytes = info.keyBits / 8;
+      function deriveKey(blockKey) {
+        return sha512(h, blockKey).then(function (hh) { return hh.subarray(0, keyBitsBytes); });
+      }
+      function importKey(raw) {
+        return crypto.subtle.importKey('raw', raw, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+      }
+      // ① 驗證密碼
+      return deriveKey(BK_VERIFIER_INPUT).then(function (k1raw) {
+        return importKey(k1raw).then(function (k1) {
+          return aesCbcDecryptRaw(k1, info.encSalt, info.encVerifierInput).then(function (verifier) {
+            return deriveKey(BK_VERIFIER_VALUE).then(function (k2raw) {
+              return importKey(k2raw).then(function (k2) {
+                return aesCbcDecryptRaw(k2, info.encSalt, info.encVerifierValue).then(function (expect) {
+                  return sha512(verifier).then(function (actual) {
+                    var n = Math.min(actual.length, expect.length);
+                    var same = true;
+                    for (var q = 0; q < n; q++) if (actual[q] !== expect[q]) { same = false; break; }
+                    if (!same) throw new Error('PASSWORD_WRONG');
+                    // ② 取 secret key
+                    return deriveKey(BK_ENCRYPTED_KEY).then(function (k3raw) {
+                      return importKey(k3raw).then(function (k3) {
+                        return aesCbcDecryptRaw(k3, info.encSalt, info.encKeyValue);
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    }).then(function (secretKeyRaw) {
+      // ③ 解密 package（4096 位元組一段）
+      var pkg = cfb.read('EncryptedPackage');
+      if (!pkg) throw new Error('OLE2 內找不到 EncryptedPackage');
+      var pdv = new DataView(pkg.buffer, pkg.byteOffset, pkg.byteLength);
+      var totalSize = pdv.getUint32(0, true);   // 低 32 位
+      var body = pkg.subarray(8);
+      var SEG = 4096;
+      return crypto.subtle.importKey('raw', secretKeyRaw, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt'])
+        .then(function (sk) {
+          var out = new Uint8Array(Math.ceil(body.length / SEG) * SEG);
+          var written = 0;
+          var segIdx = 0;
+          function next() {
+            if (written >= body.length) {
+              return out.subarray(0, totalSize);
+            }
+            var seg = body.subarray(segIdx * SEG, (segIdx + 1) * SEG);
+            var idx = segIdx;
+            return sha512(info.keyDataSalt, u32le(idx)).then(function (ivHash) {
+              var iv = ivHash.subarray(0, 16);
+              return aesCbcDecryptRaw(sk, iv, seg).then(function (plain) {
+                out.set(plain, written);
+                written += plain.length;
+                segIdx++;
+                return next();
+              });
+            });
+          }
+          return next();
+        });
+    });
+  }
+
+  /* ---------- 對外 API ---------- */
+  // 只讀 8 bytes 判斷是不是「被開啟密碼保護」的 Office 檔
+  function inspect(buf) {
+    if (!isCfb(buf)) return { encrypted: false, kind: 'zip' };
+    try {
+      var cfb = parseCfb(buf);
+      var ei = cfb.read('EncryptionInfo');
+      if (!ei) return { encrypted: false, kind: 'cfb-plain', note: '是 OLE2 但不是加密 Office 檔（可能是舊版 .xls）' };
+      var info = parseEncryptionInfo(ei);
+      return { encrypted: true, kind: 'agile', info: info };
+    } catch (e) {
+      return { encrypted: true, kind: 'unknown', error: String(e.message || e) };
+    }
+  }
+
+  // 解密 → 回傳原始 xlsx 的 Uint8Array
+  function decrypt(buf, password, onProgress) {
+    if (!isCfb(buf)) return Promise.resolve(buf);
+    var cfb = parseCfb(buf);
+    var ei = cfb.read('EncryptionInfo');
+    if (!ei) {
+      return Promise.reject(new Error('這是舊版 .xls 格式（OLE2 但沒有加密資訊），請先另存成 .xlsx'));
+    }
+    var info = parseEncryptionInfo(ei);
+    return decryptAgile(cfb, info, password, onProgress);
+  }
+
+  global.AgileXlsx = { inspect: inspect, decrypt: decrypt, isCfb: isCfb, _parseCfb: parseCfb };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+  // v1.50.0：開啟密碼對話框的狀態（只存在記憶體，不寫 localStorage）
+  var pwState = { resolve: null, reject: null };
+  // 若本次資料來自「有開啟密碼」的檔案，記下檔名：自動記憶要停用、存檔要警告
+  var encryptedSource = '';
+
+  function pwBoxEl(){ return document.getElementById('pwBox'); }
+
+  function pwShow(name, keepError){
+    var box = pwBoxEl();
+    if(!box) return Promise.reject(new Error('找不到密碼輸入框'));
+    if(!keepError){
+      document.getElementById('pwFileName').textContent = name;
+      var err0 = document.getElementById('pwErr');
+      if(err0){ err0.hidden = true; err0.textContent = ''; }
+    }
+    var inp = document.getElementById('pwInput');
+    if(inp){ inp.value = ''; inp.disabled = false; }
+    box.hidden = false;
+    if(inp){ try{ inp.focus(); }catch(e){} }
+    return new Promise(function(resolve, reject){
+      pwState.resolve = resolve;
+      pwState.reject = reject;
+    });
+  }
+
+  function pwHide(){
+    var box = pwBoxEl();
+    if(box) box.hidden = true;
+    pwState.resolve = null;
+    pwState.reject = null;
+  }
+
+  function pwFail(msg){
+    var err = document.getElementById('pwErr');
+    if(err){ err.textContent = msg; err.hidden = false; }
+    var inp = document.getElementById('pwInput');
+    if(inp){ inp.disabled = false; try{ inp.focus(); inp.select(); }catch(e){} }
+  }
+
+  function pwBusy(busy){
+    var inp = document.getElementById('pwInput');
+    var ok = document.getElementById('pwOk');
+    if(inp) inp.disabled = !!busy;
+    if(ok){ ok.disabled = !!busy; ok.textContent = busy ? '解密中…' : '解鎖並匯入'; }
+  }
+
+  function initPasswordBox(){
+    var ok = document.getElementById('pwOk');
+    var cancel = document.getElementById('pwCancel');
+    var inp = document.getElementById('pwInput');
+    if(ok && !ok._bound){
+      ok._bound = true;
+      ok.addEventListener('click', function(){
+        var v = inp ? inp.value : '';
+        if(!v){ pwFail('請先輸入密碼'); return; }
+        if(pwState.resolve){ var r = pwState.resolve; pwState.resolve = null; pwState.reject = null; r(v); }
+      });
+    }
+    if(cancel && !cancel._bound){
+      cancel._bound = true;
+      cancel.addEventListener('click', function(){
+        if(pwState.reject){ var rj = pwState.reject; pwState.reject = null; pwState.resolve = null; pwHide(); rj(new Error('IMPORT_CANCELLED')); }
+        else pwHide();
+      });
+    }
+    if(inp && !inp._bound){
+      inp._bound = true;
+      inp.addEventListener('keydown', function(ev){
+        if(ev.key === 'Enter'){ ev.preventDefault(); if(ok) ok.click(); }
+        if(ev.key === 'Escape'){ ev.preventDefault(); if(cancel) cancel.click(); }
+      });
+    }
+  }
+
   async function handleFile(file){
     var name = (file && file.name) ? file.name : 'unknown';
     var fnEl = document.getElementById('fileName');
@@ -14998,6 +15491,51 @@ var state = {
       if(ext === 'xlsx' || ext === 'xlsm'){
         updateImportProgress(3, '讀取檔案');
         var ab = await file.arrayBuffer();
+        var ins = null;
+        try{ ins = (typeof AgileXlsx !== 'undefined') ? AgileXlsx.inspect(new Uint8Array(ab)) : null; }catch(e){}
+        if(ins && ins.encrypted){
+          clearError();
+          hideImportProgress();
+          var pw;
+          try{
+            pw = await pwShow(name, false);
+          }catch(e2){
+            if(String(e2 && e2.message) === 'IMPORT_CANCELLED'){
+              if(fnEl){ fnEl.className = ''; fnEl.textContent = '已取消匯入「' + name + '」'; }
+              return null;
+            }
+            throw e2;
+          }
+          pwBusy(true);
+          var plain = null;
+          try{
+            while(plain === null){
+              try{
+                plain = await AgileXlsx.decrypt(new Uint8Array(ab), pw, function(frac){
+                  updateImportProgress(Math.round(frac * 70), '解密中');
+                });
+              }catch(e3){
+                var msg3 = String(e3 && e3.message || e3);
+                if(msg3.indexOf('PASSWORD_WRONG') === -1) throw e3;
+                pwBusy(false);
+                pwFail('密碼不正確，請再試一次');
+                pw = await pwShow(name, true);
+                pwBusy(true);
+              }
+            }
+          }catch(e4){
+            pwHide();
+            pwBusy(false);
+            throw e4;
+          }
+          pwHide();
+          pwBusy(false);
+          updateImportProgress(85, '讀取解密後的資料');
+          ab = plain.buffer.slice(plain.byteOffset, plain.byteOffset + plain.byteLength);
+          encryptedSource = name;
+        } else {
+          encryptedSource = '';
+        }
         model = await parseXlsx(ab);
       } else if(ext === 'csv'){
         var text = await readFileText(file);
@@ -15233,7 +15771,12 @@ var state = {
     state.page = 1;
     clearError();
     if(csvWarning) showError(csvWarning, true);
-    persistData();
+    // v1.50.0：來源檔案有開啟密碼 → 不寫入 localStorage（否則等於把解鎖後的明文常駐在瀏覽器）
+    if(encryptedSource){
+      clearStoredData();   // 加密來源：不讓解鎖後的明文留在瀏覽器
+    } else {
+      persistData();
+    }
     var fn = document.getElementById('fileName');
     if(fn){
       fn.className = '';
@@ -15242,7 +15785,13 @@ var state = {
       fn.hidden = false;
     }
     var mr = document.getElementById('memoryRow');
-    if(mr) mr.hidden = false;
+    if(mr) mr.hidden = !!encryptedSource;
+    if(encryptedSource){
+      var fn2 = document.getElementById('fileName');
+      if(fn2){
+        fn2.textContent = '已載入：' + name + '（已解密・未自動記憶）';
+      }
+    }
     var pc = document.getElementById('periodCard');
     if(pc) pc.hidden = false;
     syncPeriodControls();
@@ -15298,6 +15847,19 @@ var state = {
   // ORIGINAL_SHELL 於 initApp 開始時捕捉（尚未渲染任何資料的原始外殼）。
   function saveSelfContained(){
     if(!state.model || !state.model.rows) return;
+    // v1.50.0：若資料來自加密檔，存檔副本是「明文」——先講清楚再存
+    if(encryptedSource){
+      var okGo = true;
+      try{
+        okGo = window.confirm(
+          '這份資料來自加密檔案「' + encryptedSource + '」。\n\n' +
+          '存檔後的 HTML 副本會包含完整明文資料，' +
+          '任何拿到這個檔案的人都能直接開啟，不需要密碼。\n\n' +
+          '要繼續存檔嗎？'
+        );
+      }catch(e){ okGo = true; }
+      if(!okGo) return;
+    }
     var html = buildEmbeddedHtml(ORIGINAL_SHELL, currentDataPayload());
     var blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
     var a = document.createElement('a');
@@ -16775,6 +17337,8 @@ var state = {
     if(forgetBtn){
       forgetBtn.addEventListener('click', clearStoredData);
     }
+    // v1.50.0：開啟密碼對話框的事件綁定
+    initPasswordBox();
     var editAgendaBtn = document.getElementById('editAgendaBtn');
     var openAgendaEditor = function(){
       var editor = document.getElementById('agendaEditor');
